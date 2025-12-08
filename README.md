@@ -69,6 +69,7 @@ graph LR
 ├── infra/bicep/             # Bicep templates
 └── docs/
     ├── adr/                 # Architecture decisions
+    ├── cost-estimates/      # Architecture decisions
     └── diagrams/            # Architecture diagrams
 ```
 
