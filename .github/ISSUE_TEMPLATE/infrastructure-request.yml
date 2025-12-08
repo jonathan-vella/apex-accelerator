@@ -1,0 +1,171 @@
+name: Infrastructure Request
+description: Request new Azure infrastructure or modifications to existing infrastructure
+title: "[Infra]: "
+labels: ["infrastructure", "bicep"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 🏗️ Infrastructure Request
+
+        Use this template to request new Azure infrastructure or changes to existing infrastructure.
+        This will be reviewed and implemented using the Agentic InfraOps workflow.
+
+        **Workflow:** `@plan` → `azure-principal-architect` → `bicep-plan` → `bicep-implement`
+
+  - type: dropdown
+    id: request-type
+    attributes:
+      label: Request Type
+      description: What type of infrastructure change is this?
+      options:
+        - New infrastructure deployment
+        - Modify existing infrastructure
+        - Add monitoring/alerting
+        - Security enhancement
+        - Cost optimization
+        - Disaster recovery/backup
+        - Networking changes
+    validations:
+      required: true
+
+  - type: textarea
+    id: business-context
+    attributes:
+      label: Business Context
+      description: What is the business need driving this request? Why is this infrastructure needed?
+      placeholder: |
+        Example: We need a patient portal to allow secure access to medical records.
+        The portal must comply with HIPAA regulations and support 10,000 concurrent users.
+    validations:
+      required: true
+
+  - type: textarea
+    id: requirements
+    attributes:
+      label: Technical Requirements
+      description: What are the specific technical requirements?
+      placeholder: |
+        **Compute:**
+        - App Service with auto-scaling (2-10 instances)
+        - Premium tier for zone redundancy
+
+        **Data:**
+        - Azure SQL Database (General Purpose, 4 vCores)
+        - Geo-redundant backups
+
+        **Security:**
+        - Private endpoints for all PaaS services
+        - Azure AD authentication
+        - Key Vault for secrets
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Target Environment
+      description: Which environment is this for?
+      options:
+        - dev
+        - staging
+        - prod
+        - demo
+    validations:
+      required: true
+
+  - type: dropdown
+    id: region
+    attributes:
+      label: Azure Region
+      description: Which Azure region should be used?
+      options:
+        - swedencentral (default - sustainable)
+        - germanywestcentral (alternative)
+        - northeurope
+        - westeurope
+        - eastus
+        - westus2
+        - Other (specify in requirements)
+      default: 0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: compliance
+    attributes:
+      label: Compliance Requirements
+      description: Are there specific compliance requirements?
+      multiple: true
+      options:
+        - None
+        - HIPAA
+        - PCI-DSS
+        - SOC 2
+        - ISO 27001
+        - GDPR
+        - Azure Well-Architected Framework
+    validations:
+      required: true
+
+  - type: textarea
+    id: existing-resources
+    attributes:
+      label: Existing Resources
+      description: Are there existing resources this should integrate with?
+      placeholder: |
+        - Existing VNet: vnet-prod-001 in rg-networking
+        - Log Analytics Workspace: log-central-001
+        - Key Vault: kv-secrets-prod
+    validations:
+      required: false
+
+  - type: textarea
+    id: cost-constraints
+    attributes:
+      label: Cost Constraints
+      description: Any budget or cost constraints to consider?
+      placeholder: |
+        - Monthly budget: $500-1000
+        - Use reserved instances if available
+        - Dev/Test pricing if applicable
+    validations:
+      required: false
+
+  - type: textarea
+    id: timeline
+    attributes:
+      label: Timeline
+      description: When is this needed? Any critical deadlines?
+      placeholder: |
+        - Needed by: Q1 2024
+        - Go-live date: March 15, 2024
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: How will we know this is complete?
+      placeholder: |
+        - [ ] Infrastructure deployed successfully
+        - [ ] All resources pass Azure Policy compliance
+        - [ ] Monitoring and alerting configured
+        - [ ] Documentation updated
+        - [ ] Cost estimate reviewed and approved
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      options:
+        - label: I've reviewed similar existing infrastructure in this repository
+          required: false
+        - label: I've considered Well-Architected Framework pillars (Reliability, Security, Cost, Operations, Performance)
+          required: true
+        - label: I understand this will go through the 4-step agent workflow for review
+          required: true

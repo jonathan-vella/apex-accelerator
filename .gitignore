@@ -1,0 +1,70 @@
+# Azure
+*.azureauth
+*.publishsettings
+.azure/
+local.settings.json
+
+# Bicep
+*.bin
+
+# PowerShell
+*.ps1xml
+
+# Terraform
+*.tfstate
+*.tfstate.backup
+.terraform/
+*.tfvars
+
+# VS Code - keep .vscode for mcp.json but ignore settings
+.vscode/settings.json
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+.env.local
+*.env
+
+# Secrets
+secrets/
+*.secret
+*.key
+*.pem
+*.pfx
+
+# Temporary
+tmp/
+temp/
+*.tmp
+
+# Build outputs
+bin/
+obj/
+dist/
+build/
+
+# Node
+node_modules/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Test results
+TestResults/
+*.trx
+
+# Personal notes
+NOTES.md
+TODO.md
+scratch/

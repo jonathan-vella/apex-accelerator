@@ -1,0 +1,111 @@
+{
+  "name": "Agentic Workflow Project",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+
+  "features": {
+    "ghcr.io/devcontainers/features/terraform:1": {
+      "installTFsec": true,
+      "installTerragrunt": false
+    },
+    "ghcr.io/devcontainers/features/azure-cli:1": {
+      "installBicep": true,
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/powershell:1": {
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.12"
+    },
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "lts"
+    },
+    "ghcr.io/devcontainers/features/go:1": {
+      "version": "latest"
+    }
+  },
+
+  "postCreateCommand": "set -e; sudo apt-get update; sudo apt-get install -y graphviz dos2unix; npm install; npm install -g markdownlint-cli2; az config set auto-upgrade.enable=no --only-show-errors 2>/dev/null || true; az extension add --name azure-devops --only-show-errors 2>/dev/null || true; bash .devcontainer/post-create.sh",
+
+  "remoteEnv": {
+    "AZURE_DEFAULTS_LOCATION": "swedencentral"
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "GitHub.copilot",
+        "GitHub.copilot-chat",
+        "ms-vscode.vscode-node-azure-pack",
+        "ms-azuretools.vscode-azureresourcegroups",
+        "ms-azuretools.vscode-bicep",
+        "HashiCorp.terraform",
+        "ms-vscode.powershell",
+        "bierner.markdown-mermaid",
+        "bierner.markdown-preview-github-styles",
+        "davidanson.vscode-markdownlint",
+        "ms-vscode.copilot-mermaid-diagram",
+        "ms-vscode.azurecli",
+        "ms-azuretools.vscode-azurecontainerapps",
+        "ms-azuretools.vscode-azurestaticwebapps",
+        "ms-azuretools.vscode-azureterraform",
+        "ms-azuretools.azure-dev",
+        "ms-azuretools.vscode-docker",
+        "ms-kubernetes-tools.vscode-kubernetes-tools",
+        "ms-kubernetes-tools.vscode-aks-tools",
+        "github.vscode-github-actions",
+        "github.vscode-pull-request-github",
+        "ms-azuretools.vscode-azure-github-copilot",
+        "ms-vscode.vscode-websearchforcopilot",
+        "teamsdevapp.vscode-ai-foundry",
+        "ms-windows-ai-studio.windows-ai-studio",
+        "esbenp.prettier-vscode",
+        "mechatroner.rainbow-csv",
+        "redhat.vscode-yaml"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.rulers": [120],
+        "editor.wordWrap": "wordWrapColumn",
+        "editor.wordWrapColumn": 120,
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "files.eol": "\n",
+        "editor.tabSize": 2,
+        "[markdown]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode",
+          "editor.rulers": [120],
+          "editor.wordWrap": "wordWrapColumn",
+          "editor.wordWrapColumn": 120
+        },
+        "[bicep]": {
+          "editor.tabSize": 2
+        },
+        "[terraform]": {
+          "editor.tabSize": 2
+        },
+        "[powershell]": {
+          "editor.tabSize": 4
+        },
+        "markdownlint.config": {
+          "extends": "${workspaceFolder}/.markdownlint.json"
+        },
+        "markdownlint.run": "onSave"
+      }
+    }
+  },
+
+  "mounts": [
+    {
+      "source": "${localEnv:USERPROFILE}${localEnv:HOME}/.azure",
+      "target": "/home/vscode/.azure",
+      "type": "bind"
+    }
+  ],
+
+  "remoteUser": "vscode",
+
+  "containerEnv": {
+    "TF_PLUGIN_CACHE_DIR": "/home/vscode/.terraform-cache"
+  }
+}

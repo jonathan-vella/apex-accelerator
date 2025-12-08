@@ -1,0 +1,30 @@
+{
+  "name": "agentic-workflow-project",
+  "version": "1.0.0",
+  "description": "Azure infrastructure project using agentic workflow with GitHub Copilot",
+  "private": true,
+  "scripts": {
+    "prepare": "husky",
+    "lint:md": "markdownlint-cli2 '**/*.md' '#node_modules'",
+    "lint:md:fix": "markdownlint-cli2 --fix '**/*.md' '#node_modules'"
+  },
+  "devDependencies": {
+    "husky": "^9.0.0",
+    "markdownlint-cli2": "^0.17.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YOUR-ORG/YOUR-PROJECT.git"
+  },
+  "keywords": [
+    "azure",
+    "bicep",
+    "terraform",
+    "github-copilot",
+    "infrastructure-as-code",
+    "agents",
+    "agentic"
+  ],
+  "author": "YOUR NAME",
+  "license": "MIT"
+}

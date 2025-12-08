@@ -1,0 +1,16 @@
+# Ignore node_modules
+
+node_modules/
+
+# Ignore virtual environments
+
+.venv/
+venv/
+**/venv/
+**/.venv/
+
+# Ignore build outputs
+
+dist/
+build/
+\*.egg-info/
