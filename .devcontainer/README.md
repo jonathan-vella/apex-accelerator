@@ -1,58 +1,143 @@
-# Development Container
+# Development Container for Agentic InfraOps
 
-This devcontainer provides a complete, pre-configured development environment for agentic workflow projects.
+> **Version 3.1.0** | Last Updated: December 3, 2025
+
+This devcontainer provides a **complete, pre-configured development environment** for Agentic InfraOps.
+It includes all required tools, extensions, and configurations to build Azure infrastructure with AI agents.
 
 **Base Image:** `mcr.microsoft.com/devcontainers/base:ubuntu-24.04`
 
-## What's Included
+## 🎯 What's Included
 
 ### Infrastructure as Code Tools
 
 - **Terraform CLI** (latest) with tfsec pre-installed
 - **Azure CLI** (latest) with Bicep CLI
 - **Checkov** - Infrastructure security scanner
+- **Bicep** for Azure infrastructure
 
 ### Scripting & Automation
 
-- **PowerShell 7+** with Az modules
+- **PowerShell 7+** (via devcontainer feature) with Az modules (Accounts, Resources, Storage, Network, KeyVault, Websites)
 - **Python 3.12** with pip
 - **Node.js LTS** with npm
-- **Go** (latest) for Terratest
+- **Bash** with common utilities
+
+### Development Tools
+
+- **Go** (latest) for Terratest infrastructure testing
+- **Git** with Git LFS
+- **GitHub CLI** (gh)
+- **jq**, **tree**, **graphviz**, **dos2unix**
 
 ### VS Code Extensions (27 Pre-installed)
 
-- GitHub Copilot + Chat + Mermaid Diagrams
-- Azure Tools (Bicep, Resource Groups, Container Apps, etc.)
-- HashiCorp Terraform
-- Markdown (Mermaid, GitHub preview, linting)
+- ✅ **GitHub Copilot** + Copilot Chat + Mermaid Diagrams
+- ✅ **Azure Tools** (Bicep, Resource Groups, Container Apps, Static Web Apps, Terraform, CLI)
+- ✅ **HashiCorp Terraform** language support
+- ✅ **PowerShell** language support
+- ✅ **Markdown** (Mermaid diagrams, GitHub preview, linting, Prettier formatting)
+- ✅ **Kubernetes & Docker** tools (AKS, Docker)
+- ✅ **GitHub** (Actions, Pull Requests, Azure Copilot)
+- ✅ **AI Foundry** + AI Toolkit extensions
 
-## Quick Start
+## 🚀 Quick Start
+
+### Prerequisites
+
+- **Docker Desktop** installed and running
+- **VS Code** with **Dev Containers** extension (`ms-vscode-remote.remote-containers`)
+- **4GB RAM** minimum allocated to Docker
+- **10GB disk space** for container image and tools
+
+### Opening the Devcontainer
+
+**Option 1: Command Palette** (Recommended)
 
 1. Open VS Code in this repository folder
-2. Press `F1` → `Dev Containers: Reopen in Container`
-3. Wait 3-5 minutes for initial build
+2. Press `F1` or `Ctrl+Shift+P`
+3. Type and select: `Dev Containers: Reopen in Container`
+4. Wait 3-5 minutes for initial build (subsequent opens are ~30 seconds)
 
-### First-Time Setup
+**Option 2: Notification Prompt**
+
+1. Open VS Code in this repository folder
+2. Click "Reopen in Container" when prompted
+
+### First-Time Setup (Inside Container)
 
 ```bash
-# Authenticate with Azure
+# 1. Authenticate with Azure
 az login
 
-# Set your default subscription
+# 2. Set your default subscription
 az account set --subscription "<your-subscription-id>"
 
-# Verify tools
+# 3. Verify tools are installed (auto-displayed after setup)
 terraform version && az bicep version && pwsh --version
+
+# 4. Explore demos and infrastructure
+cd scenarios/ && ls -la
+cd ../infra/bicep/ && tree -L 2
 ```
 
-## Environment Configuration
+## 📁 Environment Configuration
 
-| Variable                  | Value                           | Purpose                  |
-| ------------------------- | ------------------------------- | ------------------------ |
-| `TF_PLUGIN_CACHE_DIR`     | `/home/vscode/.terraform-cache` | Terraform provider cache |
-| `AZURE_DEFAULTS_LOCATION` | `swedencentral`                 | Default Azure region     |
+### Pre-configured Environment Variables
 
-## Troubleshooting
+| Variable                  | Value                           | Purpose                                        |
+| ------------------------- | ------------------------------- | ---------------------------------------------- |
+| `TF_PLUGIN_CACHE_DIR`     | `/home/vscode/.terraform-cache` | Speeds up Terraform provider downloads         |
+| `AZURE_DEFAULTS_LOCATION` | `swedencentral`                 | Default Azure region (matches repo guidelines) |
+
+### Azure Credentials Mount
+
+Your host machine's `~/.azure` credentials are automatically mounted into the container,
+so you only need to `az login` once on your host machine.
+
+### PowerShell Modules (Auto-installed)
+
+- Az.Accounts, Az.Resources, Az.Storage
+- Az.Network, Az.KeyVault, Az.Websites
+
+## 🧪 Testing the Environment
+
+```bash
+# Test Bicep compilation
+bicep build infra/bicep/ecommerce/main.bicep
+
+# Test Terraform validation (if Terraform files exist)
+terraform --version
+
+# Test security scanners
+tfsec --version && checkov --version
+
+# Test PowerShell modules
+pwsh -Command "Get-Module -ListAvailable Az.*"
+```
+
+## 🔄 Updating Tools
+
+### Update All Tools
+
+```bash
+bash .devcontainer/update-tools.sh
+```
+
+This updates: Azure CLI, Bicep, PowerShell Az modules, Checkov, diagrams, markdownlint, Terratest
+
+### Update Specific Tools
+
+```bash
+az upgrade                                    # Azure CLI
+az bicep upgrade                              # Bicep
+pip3 install --upgrade checkov diagrams       # Python packages
+sudo npm update -g markdownlint-cli           # markdownlint
+```
+
+## 🐛 Troubleshooting
+
+### Quick Fixes
 
 | Issue                 | Solution                                                 |
 | --------------------- | -------------------------------------------------------- |
@@ -60,3 +145,32 @@ terraform version && az bicep version && pwsh --version
 | Tool not found        | Run `bash .devcontainer/post-create.sh`                  |
 | Azure auth fails      | Use `az login --use-device-code`                         |
 | Rebuild needed        | `F1` → `Dev Containers: Rebuild Container Without Cache` |
+
+📖 **Full troubleshooting guide:** [docs/guides/troubleshooting.md](../docs/guides/troubleshooting.md)
+
+## 📊 Resource Usage
+
+| Metric                 | Value   |
+| ---------------------- | ------- |
+| **Container Image**    | ~1.5 GB |
+| **Memory (idle)**      | ~1 GB   |
+| **Memory (active)**    | ~2-3 GB |
+| **Disk (with caches)** | ~4-6 GB |
+
+## 🔒 Security Notes
+
+- Azure credentials persist in `~/.azure/` (mounted volume)
+- Never commit `.azure/` to Git (already in `.gitignore`)
+- Use Azure Key Vault for production secrets
+- Use service principals for CI/CD environments
+
+## 📚 Related Documentation
+
+- [Workflow Guide](../docs/workflow/WORKFLOW.md)
+- [Scenario Prompts](../scenarios/S11-quick-demos/ecommerce-prompts.md)
+- [Copilot Instructions](../.github/copilot-instructions.md)
+- [Repository README](../README.md)
+
+---
+
+**Ready?** Press `F1` → `Dev Containers: Reopen in Container` 🚀

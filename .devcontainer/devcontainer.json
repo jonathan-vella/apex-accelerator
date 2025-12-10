@@ -1,5 +1,5 @@
 {
-  "name": "Agentic Workflow Project",
+  "name": "Agentic InfraOps",
   "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
 
   "features": {
@@ -25,7 +25,7 @@
     }
   },
 
-  "postCreateCommand": "set -e; sudo apt-get update; sudo apt-get install -y graphviz dos2unix; npm install; npm install -g markdownlint-cli2; az config set auto-upgrade.enable=no --only-show-errors 2>/dev/null || true; az extension add --name azure-devops --only-show-errors 2>/dev/null || true; bash .devcontainer/post-create.sh",
+  "postCreateCommand": "set -e; sudo apt-get update; sudo apt-get install -y graphviz dos2unix; pip install --user diagrams; npm install; npm install -g markdownlint-cli2; az config set auto-upgrade.enable=no --only-show-errors 2>/dev/null || true; az extension add --name azure-devops --only-show-errors 2>/dev/null || true; bash .devcontainer/post-create.sh",
 
   "remoteEnv": {
     "AZURE_DEFAULTS_LOCATION": "swedencentral"
