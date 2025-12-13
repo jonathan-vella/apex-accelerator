@@ -107,6 +107,11 @@ cd infra/bicep/{project}
 3. Run `npm run lint:md` to validate markdown
 4. Submit a pull request
 
+## Additional Resources
+
+For advanced usage, reference implementations, or additional documentation, see the main repository:
+[azure-agentic-infraops](https://github.com/jonathan-vella/azure-agentic-infraops)
+
 ## License
 
 [MIT](LICENSE)

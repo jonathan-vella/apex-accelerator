@@ -42,6 +42,8 @@
     "**/venv/**",
     "**/.venv/**",
     "dist/**",
-    "build/**"
+    "build/**",
+    ".archive/**",
+    "**/.archive/**"
   ]
 }
