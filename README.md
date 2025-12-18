@@ -38,22 +38,78 @@ terraform version && az bicep version && pwsh --version
 
 ## Agent Workflow
 
-This project uses GitHub Copilot agents for Azure infrastructure development:
-
 ```mermaid
 %%{init: {'theme':'neutral'}}%%
-graph LR
-    P["@plan"] --> A[azure-principal-architect]
-    A --> B[bicep-plan]
-    B --> I[bicep-implement]
+graph TB
+    subgraph "Step 1: Requirements"
+        P["@plan<br/>(built-in)"]
+    end
+
+    subgraph "Step 2: Architecture"
+        A["azure-principal-architect<br/>(NO CODE)"]
+        MCP["💰 Azure Pricing MCP"]
+    end
+
+    subgraph "Step 3: Design Artifacts"
+        D["📊 diagram-generator<br/>(-des suffix)"]
+        ADR1["📝 adr-generator<br/>(-des suffix)"]
+    end
+
+    subgraph "Step 4: Planning"
+        B["bicep-plan<br/>(governance discovery)"]
+    end
+
+    subgraph "Step 5: Implementation"
+        I["bicep-implement<br/>(code generation)"]
+    end
+
+    subgraph "Step 6: Deploy"
+        DEP["🚀 Deploy to Azure<br/>(PowerShell/CLI)"]
+    end
+
+    subgraph "Step 7: As-Built Artifacts"
+        D2["📊 diagram-generator<br/>(-ab suffix)"]
+        ADR2["📝 adr-generator<br/>(-ab suffix)"]
+        WL["📚 workload-documentation"]
+    end
+
+    P -->|"requirements"| A
+    MCP -.->|"pricing data"| A
+    A -->|"architecture"| D
+    A -->|"architecture"| ADR1
+    D --> B
+    ADR1 --> B
+    A -->|"skip artifacts"| B
+    B -->|"plan"| I
+    I -->|"code complete"| DEP
+    DEP -->|"deployed"| D2
+    DEP -->|"deployed"| ADR2
+    DEP -->|"deployed"| WL
+
+    style P fill:#e1f5fe
+    style A fill:#fff3e0
+    style MCP fill:#fff9c4
+    style D fill:#f3e5f5
+    style ADR1 fill:#e8eaf6
+    style B fill:#e8f5e9
+    style I fill:#fce4ec
+    style DEP fill:#c8e6c9
+    style D2 fill:#f3e5f5
+    style ADR2 fill:#e8eaf6
+    style WL fill:#e3f2fd
 ```
 
-| Step | Agent                       | Purpose                    |
-| ---- | --------------------------- | -------------------------- |
-| 1    | `@plan`                     | Create implementation plan |
-| 2    | `azure-principal-architect` | Architecture guidance      |
-| 3    | `bicep-plan`                | Infrastructure planning    |
-| 4    | `bicep-implement`           | Bicep code generation      |
+## Workflow Steps
+
+| Step | Agent/Phase                 | Purpose                              | Creates                                   | Required |
+| ---- | --------------------------- | ------------------------------------ | ----------------------------------------- | -------- |
+| 1    | `@plan` (built-in)          | Gather requirements                  | `01-requirements.md`                      | ✅ Yes   |
+| 2    | `azure-principal-architect` | WAF assessment                       | `02-architecture-assessment.md`           | ✅ Yes   |
+| 3    | Design Artifacts            | Visualize design, document decisions | `03-des-*` diagrams + cost + ADRs         | Optional |
+| 4    | `bicep-plan`                | Implementation planning + governance | `04-*` plan + governance constraints      | ✅ Yes   |
+| 5    | `bicep-implement`           | Code generation                      | Bicep templates + `05-*` reference        | ✅ Yes   |
+| 6    | Deploy                      | Deploy to Azure                      | `06-deployment-summary.md`                | ✅ Yes   |
+| 7    | As-Built Artifacts          | Document final state                 | `07-ab-*` diagrams + ADRs + workload docs | Optional |
 
 **Usage:** Press `Ctrl+Shift+A` in VS Code to select an agent.
 
