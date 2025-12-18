@@ -48,9 +48,18 @@
 *.so binary
 *.dylib binary
 
-# Font files
-*.ttf binary
-*.otf binary
-*.woff binary
-*.woff2 binary
-*.eot binary
+# GitHub specific files
+.gitattributes text eol=lf
+.gitignore text eol=lf
+.editorconfig text eol=lf
+
+# Docker files
+Dockerfile text eol=lf
+docker-compose*.yml text eol=lf
+
+# CI/CD files
+.github/** text eol=lf
+azure-pipelines*.yml text eol=lf
+
+# Git hooks (husky)
+.husky/* text eol=lf

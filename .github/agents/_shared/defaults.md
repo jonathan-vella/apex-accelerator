@@ -19,7 +19,6 @@ This file contains shared configuration values that all agents should reference 
 - **Swiss banking/healthcare**: Use `switzerlandnorth`
 - **UK GDPR requirements**: Use `uksouth`
 - **APAC latency optimization**: Use `southeastasia`
-- **Preview feature access**: Use `eastus` or `westeurope`
 
 ## Required Tags
 

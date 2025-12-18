@@ -1,6 +1,6 @@
 # Development Container for Agentic InfraOps
 
-> **Version 3.1.0** | Last Updated: December 3, 2025
+> **Version 3.6.0**
 
 This devcontainer provides a **complete, pre-configured development environment** for Agentic InfraOps.
 It includes all required tools, extensions, and configurations to build Azure infrastructure with AI agents.

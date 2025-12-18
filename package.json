@@ -1,7 +1,7 @@
 {
-  "name": "agentic-workflow-project",
-  "version": "1.0.0",
-  "description": "Azure infrastructure project using agentic workflow with GitHub Copilot",
+  "name": "azure-agentic-infraops",
+  "version": "3.7.8",
+  "description": "Agentic InfraOps - Azure infrastructure engineered by agents. Verified. Well-Architected. Deployable.",
   "private": true,
   "scripts": {
     "prepare": "husky",
@@ -9,12 +9,14 @@
     "lint:md:fix": "markdownlint-cli2 --fix '**/*.md' '#node_modules'"
   },
   "devDependencies": {
+    "@commitlint/cli": "^19.0.0",
+    "@commitlint/config-conventional": "^19.0.0",
     "husky": "^9.0.0",
     "markdownlint-cli2": "^0.17.0"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/YOUR-ORG/YOUR-PROJECT.git"
+    "url": "https://github.com/jonathan-vella/azure-agentic-infraops.git"
   },
   "keywords": [
     "azure",
@@ -23,8 +25,10 @@
     "github-copilot",
     "infrastructure-as-code",
     "agents",
-    "agentic"
+    "agentic",
+    "well-architected",
+    "azure-verified-modules"
   ],
-  "author": "YOUR NAME",
+  "author": "Jonathan Vella",
   "license": "MIT"
 }

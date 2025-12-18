@@ -37,13 +37,30 @@
   "ignores": [
     "node_modules/**",
     "**/node_modules/**",
+    "mcp/azure-pricing-mcp/.archive/**",
     ".venv/**",
     "venv/**",
     "**/venv/**",
     "**/.venv/**",
     "dist/**",
     "build/**",
-    ".archive/**",
-    "**/.archive/**"
+    "**/*.egg-info/**",
+    "__pycache__/**",
+    ".pytest_cache/**",
+    "coverage/**",
+    ".bicep-planning-files/**",
+    "docs/audit-checklists/**",
+    "docs/presenter/**",
+    "scenarios/scenario-output/**",
+    "scenarios/**/solution/**",
+    "scenarios/**/examples/**",
+    "scenarios/**/sample-app/**",
+    "scenarios/**/prompts/**",
+    "scenarios/**/templates/**",
+    "scenarios/**/scenario/**",
+    "scenarios/**/agents/**",
+    "scenarios/**/validation/**",
+    "scenarios/**/DEMO-SCRIPT.md",
+    "scenarios/S08-sbom-generator/README.md"
   ]
 }

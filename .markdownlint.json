@@ -31,5 +31,11 @@
   "MD051": false,
   "MD058": false,
   "MD060": false,
-  "ignores": ["**/.venv/**", "**/node_modules/**"]
+  "ignores": [
+    "**/.venv/**",
+    "scenarios/scenario-output/**",
+    "scenarios/**/solution/outputs/**",
+    "scenarios/**/examples/**",
+    "scenarios/**/sample-app/**"
+  ]
 }

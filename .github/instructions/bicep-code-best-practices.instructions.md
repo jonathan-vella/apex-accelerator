@@ -5,495 +5,141 @@ applyTo: "**/*.bicep"
 
 # Bicep Development Best Practices
 
-Guidelines for writing high-quality, secure, and maintainable Bicep infrastructure-as-code
-templates for Azure deployments. Follow these standards to ensure consistency across the repository.
+## Quick Reference
 
-## General Instructions
-
-- Use latest stable API versions for all Azure resources
-- Default to `swedencentral` region (alternative: `germanywestcentral` for quota issues)
-- Generate unique resource name suffixes in main.bicep: `var uniqueSuffix = uniqueString(resourceGroup().id)`
-- Pass `uniqueSuffix` parameter to ALL modules for consistent naming
+| Rule | Standard |
+|------|----------|
+| Region | `swedencentral` (alt: `germanywestcentral`) |
+| Unique suffix | `var uniqueSuffix = uniqueString(resourceGroup().id)` in main.bicep |
+| AVM first | Use Azure Verified Modules when available |
+| Tags | Environment, ManagedBy, Project, Owner on ALL resources |
 
 ## Naming Conventions
 
-Use lowerCamelCase for all Bicep identifiers:
+### Resource Patterns
 
-| Element    | Convention                  | Example                                  |
-| ---------- | --------------------------- | ---------------------------------------- |
-| Parameters | lowerCamelCase, descriptive | `storageAccountName`, `environment`      |
-| Variables  | lowerCamelCase              | `uniqueSuffix`, `resourceNamePrefix`     |
-| Resources  | Descriptive symbolic name   | `storageAccount` (not `sa` or `storage`) |
-| Modules    | lowerCamelCase              | `networkModule`, `keyVaultModule`        |
+| Resource | Max | Pattern | Example |
+|----------|-----|---------|---------|
+| Storage | 24 | `st{project}{env}{suffix}` | `stcontosodev7xk2` |
+| Key Vault | 24 | `kv-{project}-{env}-{suffix}` | `kv-contoso-dev-abc123` |
+| SQL Server | 63 | `sql-{project}-{env}-{suffix}` | `sql-contoso-dev-abc123` |
 
-### Resource Naming Patterns
+### Identifiers
 
-| Resource Type   | Max Length | Pattern                        | Example                  |
-| --------------- | ---------- | ------------------------------ | ------------------------ |
-| Storage Account | 24 chars   | `st{project}{env}{suffix}`     | `stcontosodev7xk2`       |
-| Key Vault       | 24 chars   | `kv-{project}-{env}-{suffix}`  | `kv-contoso-dev-abc123`  |
-| SQL Server      | 63 chars   | `sql-{project}-{env}-{suffix}` | `sql-contoso-dev-abc123` |
-| App Service     | 60 chars   | `app-{project}-{env}-{suffix}` | `app-contoso-dev-abc123` |
+Use lowerCamelCase for parameters, variables, resources, modules.
 
-### Good Example - Resource naming with unique suffix
+## Unique Names (CRITICAL)
 
 ```bicep
-// main.bicep - Generate suffix once, pass to all modules
+// main.bicep - Generate once, pass to ALL modules
 var uniqueSuffix = uniqueString(resourceGroup().id)
 
 module keyVault 'modules/key-vault.bicep' = {
-  name: 'keyVaultDeployment'
-  params: {
-    uniqueSuffix: uniqueSuffix
-    environment: environment
-  }
+  params: { uniqueSuffix: uniqueSuffix }
 }
+
+// Every module must accept uniqueSuffix and use it in resource names
+var kvName = 'kv-${take(projectName, 10)}-${environment}-${take(uniqueSuffix, 6)}'
 ```
 
-### Bad Example - Hardcoded or missing unique names
+## Parameters
 
 ```bicep
-// Avoid: Hardcoded names cause deployment collisions
-resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
-  name: 'mykeyvault'  // Will fail if name already exists globally
-}
-```
-
-## Code Standards
-
-### Parameters
-
-- Declare all parameters at the top of files
-- Add `@description()` decorator for every parameter
-- Use `@allowed()` sparingly to avoid blocking valid deployments
-- Set safe default values for test environments (low-cost tiers)
-
-### Good Example - Well-documented parameters
-
-```bicep
-@description('Azure region for all resources. Defaults to Sweden Central for sustainability.')
-@allowed([
-  'swedencentral'
-  'germanywestcentral'
-  'northeurope'
-])
+@description('Azure region for all resources.')
+@allowed(['swedencentral', 'germanywestcentral', 'northeurope'])
 param location string = 'swedencentral'
 
-@description('Environment name used in resource naming.')
-@allowed(['dev', 'staging', 'prod'])
-param environment string = 'dev'
-
-@description('Unique suffix for resource naming. Generate with uniqueString(resourceGroup().id).')
+@description('Unique suffix for resource naming.')
 @minLength(5)
-@maxLength(13)
 param uniqueSuffix string
 ```
 
-### Bad Example - Missing decorators and validation
+## Security Defaults (MANDATORY)
 
 ```bicep
-// Avoid: No documentation, no validation
-param location string
-param env string
-param suffix string
+// Storage
+supportsHttpsTrafficOnly: true
+minimumTlsVersion: 'TLS1_2'
+allowBlobPublicAccess: false
+allowSharedKeyAccess: false  // Policy may require this
+
+// SQL
+azureADOnlyAuthentication: true
+minimalTlsVersion: '1.2'
+publicNetworkAccess: 'Disabled'
 ```
 
-### Variables
-
-- Use variables for complex expressions to improve readability
-- Variables automatically infer types from resolved values
-- Combine related values into structured variables
+## Diagnostic Settings Pattern
 
 ```bicep
-var resourceTags = {
-  Environment: environment
-  ManagedBy: 'Bicep'
-  Project: projectName
+// Pass NAMES not IDs to diagnostic modules
+module diagnostics 'modules/diagnostics.bicep' = {
+  params: { appServiceName: appModule.outputs.appServiceName }
 }
 
-var keyVaultName = 'kv-${take(projectName, 10)}-${environment}-${take(uniqueSuffix, 6)}'
-```
-
-### Resource References
-
-- Use symbolic names for resource references (not `reference()` or `resourceId()`)
-- Create dependencies through symbolic names (`resourceA.id`) not explicit `dependsOn`
-- Use `existing` keyword to reference resources defined elsewhere
-
-### Good Example - Symbolic references
-
-```bicep
-resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
-  name: storageAccountName
-  // ...
-}
-
-resource appService 'Microsoft.Web/sites@2023-01-01' = {
-  name: appServiceName
-  properties: {
-    // Implicit dependency through symbolic reference
-    siteConfig: {
-      appSettings: [
-        {
-          name: 'STORAGE_CONNECTION'
-          value: storageAccount.properties.primaryEndpoints.blob
-        }
-      ]
-    }
-  }
-}
-```
-
-### Good Example - Referencing existing resources for diagnostic settings
-
-When creating diagnostic settings or other extension resources that need a `scope`, use the `existing`
-keyword to reference resources by name, not by resource ID string:
-
-```bicep
-// ✅ CORRECT: Use existing keyword to reference resources
-param appServiceName string
-param logAnalyticsWorkspaceId string
-
+// In module - use existing keyword
 resource appService 'Microsoft.Web/sites@2023-12-01' existing = {
   name: appServiceName
 }
-
-resource diagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
-  name: 'diag-appservice'
-  scope: appService  // Symbolic reference to existing resource
-  properties: {
-    workspaceId: logAnalyticsWorkspaceId
-    logs: [
-      { category: 'AppServiceHTTPLogs', enabled: true }
-    ]
-  }
+resource diag 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  scope: appService  // ✅ Symbolic reference works
 }
 ```
 
-### Bad Example - Using resource ID strings for scope
+## Module Outputs (MANDATORY)
 
 ```bicep
-// ❌ WRONG: Causes BCP036 error - scope expects resource type, not string
-param appServiceId string
-
-resource diagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
-  name: 'diag-appservice'
-  scope: resourceId('Microsoft.Web/sites', last(split(appServiceId, '/')))  // ERROR!
-  properties: { ... }
-}
+// Every module must output BOTH ID and Name
+output resourceId string = resource.id
+output resourceName string = resource.name
+output principalId string = resource.identity.principalId
 ```
 
-### Bad Example - Explicit dependsOn and reference functions
+## Azure Verified Modules (AVM)
 
 ```bicep
-// Avoid: Unnecessary explicit dependencies
-resource appService 'Microsoft.Web/sites@2023-01-01' = {
-  name: appServiceName
-  dependsOn: [storageAccount]  // Unnecessary if already referencing
-  properties: {
-    siteConfig: {
-      appSettings: [
-        {
-          name: 'STORAGE_CONNECTION'
-          value: reference(storageAccount.id).primaryEndpoints.blob  // Use symbolic name instead
-        }
-      ]
-    }
-  }
-}
-```
-
-## Security Best Practices
-
-- Enable HTTPS-only traffic: `supportsHttpsTrafficOnly: true`
-- Require TLS 1.2 minimum: `minimumTlsVersion: 'TLS1_2'`
-- Disable public blob access: `allowBlobPublicAccess: false`
-- Use Azure AD authentication for SQL Server (Azure AD-only auth)
-- Never include secrets or keys in outputs
-- Use managed identities instead of connection strings
-
-```bicep
-resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
-  name: storageAccountName
-  properties: {
-    supportsHttpsTrafficOnly: true
-    minimumTlsVersion: 'TLS1_2'
-    allowBlobPublicAccess: false
-    encryption: {
-      services: {
-        blob: { enabled: true }
-        file: { enabled: true }
-      }
-      keySource: 'Microsoft.Storage'
-    }
-  }
-}
-```
-
-## Common Patterns
-
-### Child Resources
-
-- Use `parent` property or nesting instead of constructing resource names
-- Avoid excessive nesting depth (max 2 levels)
-
-### Good Example - Parent property
-
-```bicep
-resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
-  name: storageAccountName
-  // ...
+// ✅ Use AVM
+module keyVault 'br/public:avm/res/key-vault/vault:0.11.0' = {
+  params: { name: kvName, location: location, tags: tags }
 }
 
-resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-01-01' = {
-  parent: storageAccount
-  name: 'default'
-}
-```
-
-### Bad Example - Constructed names
-
-```bicep
-// Avoid: Manual name construction
-resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-01-01' = {
-  name: '${storageAccountName}/default'  // Use parent property instead
-}
+// ❌ Only use raw resources if no AVM exists (document why)
 ```
 
 ## Patterns to Avoid
 
-| Anti-Pattern                              | Problem                      | Solution                                                |
-| ----------------------------------------- | ---------------------------- | ------------------------------------------------------- |
-| Hardcoded resource names                  | Deployment collisions        | Use `uniqueString()` suffix                             |
-| Missing `@description`                    | Poor maintainability         | Document all parameters                                 |
-| Explicit `dependsOn`                      | Unnecessary complexity       | Use symbolic references                                 |
-| Secrets in outputs                        | Security vulnerability       | Use Key Vault references                                |
-| S1 SKU for zone redundancy                | Policy violation             | Use P1v4 or higher                                      |
-| Old API versions                          | Missing features             | Use latest stable versions                              |
-| Resource ID strings for scope             | BCP036 type error            | Use `existing` resource references                      |
-| Passing resource IDs to modules for scope | Scope requires resource type | Pass resource names and use `existing` keyword          |
-| WAF `RequestHeaders` matchVariable        | ARM EnumerationOutOfRange    | Use `RequestHeader` (singular) - see valid values below |
-| `allowSharedKeyAccess: true`              | Azure Policy may block       | Use identity-based storage connections                  |
-| SQL `SQLSecurityAuditEvents` diagnostic   | Category not supported       | Use `auditingSettings` resource instead                 |
-| WAF policy names with hyphens             | Naming validation fails      | Use alphanumeric only: `wafpolicy{name}`                |
+| Anti-Pattern | Problem | Solution |
+|--------------|---------|----------|
+| Hardcoded names | Collisions | Use `uniqueString()` suffix |
+| Missing `@description` | Poor docs | Document all parameters |
+| Explicit `dependsOn` | Unnecessary | Use symbolic references |
+| Resource ID for scope | BCP036 error | Use `existing` + names |
+| S1 for zone redundancy | Policy blocks | Use P1v3+ |
+| `RequestHeaders` | ARM error | Use `RequestHeader` (singular) |
+| WAF policy hyphens | Validation fails | `wafpolicy{name}` alphanumeric only |
 
-### WAF Policy matchVariable Valid Values
+## Zone Redundancy SKUs
 
-When creating WAF custom rules, use only these valid `matchVariable` values:
-
-- `RemoteAddr` - Client IP address
-- `RequestMethod` - HTTP method (GET, POST, etc.)
-- `QueryString` - URL query string
-- `PostArgs` - POST request body arguments
-- `RequestUri` - Request URI path
-- `RequestHeader` - HTTP request header (requires `selector` for header name)
-- `RequestBody` - Request body content
-- `Cookies` - HTTP cookies
-- `SocketAddr` - Socket address
-
-**Common Mistake**: Using `RequestHeaders` (plural) instead of `RequestHeader` (singular).
-
-## Azure Policy Compliance
-
-Many Azure subscriptions have policies that block certain configurations. Plan for these common blockers:
-
-### Storage Account Policies
-
-**Problem**: Azure Policy may enforce `allowSharedKeyAccess: false`, breaking connection strings.
-
-**Solution**: Use identity-based storage connections for Azure Functions:
-
-```bicep
-// Storage account with identity-based access (Azure Policy compliant)
-resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
-  name: storageAccountName
-  properties: {
-    allowSharedKeyAccess: false // Azure Policy requires false
-    // ... other properties
-  }
-}
-
-// Function App with identity-based storage connection
-resource functionApp 'Microsoft.Web/sites@2023-12-01' = {
-  identity: { type: 'SystemAssigned' }
-  properties: {
-    siteConfig: {
-      appSettings: [
-        { name: 'AzureWebJobsStorage__accountName', value: storageAccount.name }
-        { name: 'WEBSITE_RUN_FROM_PACKAGE', value: '1' }
-        { name: 'FUNCTIONS_EXTENSION_VERSION', value: '~4' }
-      ]
-    }
-  }
-}
-
-// Required RBAC roles for identity-based storage
-resource storageBlobDataOwner 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  scope: storageAccount
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b')
-    principalId: functionApp.identity.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-// Also grant: Storage Queue Data Contributor, Storage Table Data Contributor
-```
-
-### SQL Server Policies
-
-- **Azure AD-only authentication**: Use `azureADOnlyAuthentication: true`
-- **Diagnostic settings**: SQL Server itself doesn't support `SQLSecurityAuditEvents` category
-  - Use `Microsoft.Sql/servers/auditingSettings` resource for auditing
-  - Don't create diagnostic settings for SQL Server (only for databases)
-
-### WAF Policy Naming
-
-WAF policy names have strict validation rules:
-
-- Must start with a letter
-- Only alphanumeric characters allowed (NO hyphens, underscores, or special chars)
-- Pattern: `wafpolicy{project}{env}001`
-
-```bicep
-// ✅ CORRECT: Alphanumeric only
-var wafPolicyName = 'wafpolicy${replace(projectName, '-', '')}${environment}001'
-// Result: "wafpolicyecommerceprod001"
-
-// ❌ WRONG: Hyphens cause validation failure
-var wafPolicyName = 'waf-${projectName}-${environment}-001'
-// Result: "waf-ecommerce-prod-001" - FAILS!
-```
-
-### App Service Plan Zone Redundancy
-
-Zone redundancy requires Premium v3 or v4 SKU:
-
-| SKU Tier  | Zone Redundancy  | Use Case            |
-| --------- | ---------------- | ------------------- |
-| S1/S2/S3  | ❌ Not supported | Dev/test only       |
-| P1v2/P2v2 | ❌ Not supported | Legacy Premium      |
-| P1v3/P2v3 | ✅ Supported     | Production          |
-| P1v4/P2v4 | ✅ Supported     | Production (latest) |
-
-```bicep
-// P1v4 with zone redundancy enabled
-resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = {
-  sku: {
-    name: 'P1v4'
-    tier: 'PremiumV4'
-  }
-  properties: {
-    zoneRedundant: true // Only works with P1v3/P1v4 or higher
-  }
-}
-```
-
-## Validation
-
-Run these commands before committing Bicep code:
-
-```bash
-# Build - Compile Bicep to ARM template
-bicep build main.bicep
-
-# Lint - Check for best practice violations
-bicep lint main.bicep
-
-# What-If - Preview deployment changes
-az deployment group what-if \
-  --resource-group rg-example \
-  --template-file main.bicep \
-  --parameters @parameters.json
-```
+| SKU | Zone Redundancy | Use Case |
+|-----|-----------------|----------|
+| S1/S2 | ❌ Not supported | Dev/test |
+| P1v3/P2v3 | ✅ Supported | Production |
+| P1v4/P2v4 | ✅ Supported | Production (latest) |
 
 ## Deployment Scripts
 
-Every Bicep project should include a `deploy.ps1` PowerShell deployment script with:
+`deploy.ps1` must include:
 
-### Required Features
+- `[CmdletBinding(SupportsShouldProcess)]` for WhatIf
+- Pre-flight checks (Azure CLI, Bicep CLI)
+- `bicep build` and `bicep lint` validation
+- What-if with change summary
+- User confirmation before deploy
 
-- **CmdletBinding with SupportsShouldProcess**: Enable `-WhatIf` mode automatically
-- **Parameter validation**: Use `[ValidateSet()]` and `[ValidateNotNullOrEmpty()]`
-- **Pre-flight checks**: Verify Azure CLI, Bicep CLI, and authentication
-- **Auto-detect SQL admin**: Use current user if `SqlAdminGroupObjectId` not provided
-- **Template validation**: Run `bicep build` and `bicep lint` before deployment
-- **What-if analysis**: Show planned changes with summary counts
-- **User confirmation**: Require explicit "yes" before deploying
-- **Formatted output**: Use colors, boxes, and progress indicators
+## Validation Commands
 
-### Script Structure
-
-```powershell
-[CmdletBinding(SupportsShouldProcess)]
-param(
-    [Parameter(Mandatory = $true)]
-    [ValidateNotNullOrEmpty()]
-    [string]$ResourceGroupName,
-
-    [Parameter(Mandatory = $false)]
-    [ValidateSet('swedencentral', 'germanywestcentral')]
-    [string]$Location = 'swedencentral',
-
-    [Parameter(Mandatory = $false)]
-    [string]$SqlAdminGroupObjectId  # Auto-detects current user if not provided
-)
-
-# Use $WhatIfPreference (NOT explicit $WhatIf param) for what-if mode
-if ($WhatIfPreference) {
-    Write-Host "What-If mode - no changes made"
-    exit 0
-}
+```bash
+bicep build main.bicep
+bicep lint main.bicep
+az deployment group what-if --resource-group rg-example --template-file main.bicep
 ```
-
-### Output Formatting Best Practices
-
-Use visual formatting for better user experience:
-
-```powershell
-# ASCII art banner for branding
-Write-Host @"
-    ╔═══════════════════════════════════════════╗
-    ║   PROJECT NAME - Azure Deployment          ║
-    ╚═══════════════════════════════════════════╝
-"@ -ForegroundColor Cyan
-
-# Boxed sections for organization
-Write-Host "  ┌────────────────────────────────────────┐" -ForegroundColor DarkGray
-Write-Host "  │  DEPLOYMENT CONFIGURATION              │" -ForegroundColor DarkGray
-Write-Host "  └────────────────────────────────────────┘" -ForegroundColor DarkGray
-
-# Color-coded status messages
-Write-Host "  ✓ " -ForegroundColor Green -NoNewline; Write-Host "Success message"
-Write-Host "  ⚠ " -ForegroundColor Yellow -NoNewline; Write-Host "Warning message"
-Write-Host "  ✗ " -ForegroundColor Red -NoNewline; Write-Host "Error message"
-
-# Numbered progress steps
-Write-Host "  [1/3] " -ForegroundColor DarkGray -NoNewline; Write-Host "Step description"
-
-# Tree-style sub-steps
-Write-Host "      └─ Sub-step detail" -ForegroundColor Gray
-
-# Info items with labels
-Write-Host "      • Label: " -ForegroundColor DarkGray -NoNewline; Write-Host "Value" -ForegroundColor Cyan
-```
-
-### Change Summary Display
-
-Parse what-if output and display formatted summary:
-
-```powershell
-$whatIfText = $whatIfResult -join "`n"
-$createCount = [regex]::Matches($whatIfText, "(?m)^\s*\+\s").Count
-$modifyCount = [regex]::Matches($whatIfText, "(?m)^\s*~\s").Count
-$deleteCount = [regex]::Matches($whatIfText, "(?m)^\s*-\s").Count
-
-Write-Host "  │  + Create: $createCount resources" -ForegroundColor Green
-Write-Host "  │  ~ Modify: $modifyCount resources" -ForegroundColor Yellow
-Write-Host "  │  - Delete: $deleteCount resources" -ForegroundColor Red
-```
-
-## Documentation
-
-- Include `//` comments explaining complex logic
-- Add module-level comments describing purpose
-- Document outputs with descriptions

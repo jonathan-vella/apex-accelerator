@@ -16,8 +16,9 @@ local.settings.json
 .terraform/
 *.tfvars
 
-# VS Code - keep .vscode for mcp.json but ignore settings
-.vscode/settings.json
+# VS Code
+.vscode/
+*.code-workspace
 
 # OS
 .DS_Store
@@ -51,11 +52,10 @@ obj/
 dist/
 build/
 
-# Node
+# Node (if any demos use it)
 node_modules/
-package-lock.json
 
-# Python
+# Python (if any scripts)
 __pycache__/
 *.pyc
 .venv/

@@ -24,13 +24,15 @@ jobs:
           > url-sources.txt
 
           # Find all markdown files and extract URLs with their source
+          # Note: Pattern [^[:space:]")<>,]+ matches URL chars, stopping at closing delimiters
+          # This avoids truncation at 's' characters (e.g., 'answers', 'paths', 'rest')
           find docs/ -name "*.md" -type f | while read file; do
             # Extract learn.microsoft.com URLs
-            grep -oE 'https://learn\.microsoft\.com[^)"\s>]*' "$file" 2>/dev/null | while read url; do
+            grep -oE 'https://learn\.microsoft\.com/[^[:space:]")<>,]+' "$file" 2>/dev/null | while read url; do
               echo "$url|$file" >> url-sources.txt
             done
             # Extract legacy docs.microsoft.com URLs
-            grep -oE 'https://docs\.microsoft\.com[^)"\s>]*' "$file" 2>/dev/null | while read url; do
+            grep -oE 'https://docs\.microsoft\.com/[^[:space:]")<>,]+' "$file" 2>/dev/null | while read url; do
               echo "$url|$file" >> url-sources.txt
             done
           done

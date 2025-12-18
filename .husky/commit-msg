@@ -1,0 +1,36 @@
+#!/bin/sh
+
+# Commit message validation hook
+# Enforces Conventional Commits format for semantic versioning automation
+
+echo "🔍 Validating commit message format..."
+
+# Run commitlint on the commit message
+npx --no -- commitlint --edit "$1"
+
+if [ $? -ne 0 ]; then
+  echo ""
+  echo "❌ Commit message validation failed!"
+  echo ""
+  echo "📖 Conventional Commits format required:"
+  echo "   <type>[optional scope]: <description>"
+  echo ""
+  echo "   Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
+  echo ""
+  echo "   Examples:"
+  echo "     feat: add new diagram generator agent"
+  echo "     fix(bicep): correct resource naming"
+  echo "     docs: update quickstart guide"
+  echo "     feat!: redesign agent workflow (BREAKING CHANGE)"
+  echo ""
+  echo "   Version bump rules:"
+  echo "     • feat:  → minor version bump (e.g., 1.0.0 → 1.1.0)"
+  echo "     • fix:   → patch version bump (e.g., 1.0.0 → 1.0.1)"
+  echo "     • feat!: → major version bump (e.g., 1.0.0 → 2.0.0)"
+  echo "     • docs:, chore:, etc. → no version bump"
+  echo ""
+  echo "📚 Learn more: https://www.conventionalcommits.org/"
+  exit 1
+fi
+
+echo "✅ Commit message format valid"

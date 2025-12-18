@@ -25,7 +25,7 @@ Fixes #
 
 <!-- Which agent workflow was used to create these changes? -->
 
-- [ ] 4-step workflow: `@plan` → `azure-principal-architect` → `bicep-plan` → `bicep-implement`
+- [ ] 7-step workflow: `@plan` → `azure-principal-architect` → `bicep-plan` → `bicep-implement`
 - [ ] Direct implementation (simple change)
 - [ ] Copilot Coding Agent (autonomous)
 - [ ] Manual implementation
@@ -48,7 +48,7 @@ Fixes #
 
 - [ ] `bicep build` succeeds for all `.bicep` files
 - [ ] `bicep lint` passes with no errors
-- [ ] Deployed to Azure subscription (region: ****\_\_\_\_****)
+- [ ] Deployed to Azure subscription (region: \***\*\_\_\_\_\*\***)
 - [ ] All resources pass Azure Policy compliance
 - [ ] Resources cleaned up after testing
 

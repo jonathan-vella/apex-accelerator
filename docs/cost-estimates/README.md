@@ -1,60 +1,33 @@
 # Cost Estimates
 
-This folder contains Azure cost estimate documents for infrastructure projects.
+This folder contains Azure pricing examples generated for various infrastructure scenarios.
 
-## What is a Cost Estimate?
+## Available Estimates
 
-A cost estimate document provides financial planning information for Azure infrastructure, including:
+| Estimate                                               | Description                                       |
+| ------------------------------------------------------ | ------------------------------------------------- |
+| [E-Commerce Cost Estimate](ecommerce-cost-estimate.md) | PCI-DSS compliant retail platform (~$1,595/month) |
+
+## About Cost Estimates
+
+Cost estimates are generated using the Azure Pricing MCP server, which queries real-time Azure
+retail prices. These estimates provide:
 
 - Monthly and annual cost projections
-- Architecture context linking costs to design decisions
-- Business justification for technical choices
-- Optimization recommendations for cost savings
+- Cost breakdown by service category
+- Regional price comparisons
+- Savings opportunities with reservations
 
-## Creating Cost Estimates
+## Generating New Estimates
 
-Use the `@plan` agent in Copilot with cost estimation prompts:
+The `azure-principal-architect` agent can generate cost estimates as part of the architecture
+assessment. You can also use the Azure Pricing MCP tools directly:
 
-1. Press `Ctrl+Shift+A` in VS Code
-2. Select `@plan`
-3. Request a cost estimate for your architecture
+- `azure_price_get` - Get specific service pricing
+- `azure_region_recommend` - Compare regional costs
+- `azure_estimate_project` - Estimate multi-resource deployments
 
-## Cost Estimate Template
+## Related Documentation
 
-```markdown
-# Azure Cost Estimate: {Project Name}
-
-**Generated**: {YYYY-MM-DD}
-**Region**: {primary-region}
-**Environment**: {Production|Staging|Development}
-
-## 💰 Cost At-a-Glance
-
-| Metric           | Value        |
-| ---------------- | ------------ |
-| Monthly Estimate | $X,XXX       |
-| Annual Estimate  | $XX,XXX      |
-| Reserved Savings | XX%          |
-
-## Cost Breakdown by Category
-
-| Category   | Monthly Cost | % of Total |
-| ---------- | ------------ | ---------- |
-| Compute    | $XXX         | XX%        |
-| Storage    | $XXX         | XX%        |
-| Networking | $XXX         | XX%        |
-
-## Optimization Recommendations
-
-- 💡 [Recommendations for cost savings]
-```
-
-## Status Indicators
-
-| Status         | Indicator | Usage                    |
-| -------------- | --------- | ------------------------ |
-| Under budget   | ✅        | Budget utilization < 80% |
-| Near budget    | ⚠️        | Budget utilization 80-100% |
-| Over budget    | ❌        | Budget utilization > 100% |
-| Recommendation | 💡        | Optimization suggestions |
-| Savings        | 💰        | Money saved with commitments |
+- [Azure Pricing MCP](../../mcp/azure-pricing-mcp/) - Real-time pricing tools
+- [ROI Calculator](../presenter/roi-calculator.md) - Calculate time and cost savings

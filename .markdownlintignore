@@ -2,6 +2,10 @@
 
 node_modules/
 
+# Ignore archived documentation
+
+mcp/azure-pricing-mcp/.archive/
+
 # Ignore virtual environments
 
 .venv/
@@ -15,7 +19,8 @@ dist/
 build/
 \*.egg-info/
 
-# Ignore archive folders
+# Ignore test outputs
 
-.archive/
-**/.archive/
+**pycache**/
+.pytest_cache/
+coverage/
