@@ -12,7 +12,7 @@
     "@commitlint/cli": "^19.0.0",
     "@commitlint/config-conventional": "^19.0.0",
     "husky": "^9.0.0",
-    "markdownlint-cli2": "^0.17.0"
+    "markdownlint-cli2": "^0.20.0"
   },
   "repository": {
     "type": "git",
