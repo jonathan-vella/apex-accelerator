@@ -668,9 +668,9 @@ Quick lookup for common error messages:
 
 | Resource                                                  | Use For                        |
 | --------------------------------------------------------- | ------------------------------ |
-| [Getting Started Guide](getting-started-journey.md)       | End-to-end setup walkthrough   |
+| [Quick Start](quickstart.md)                              | Setup walkthrough              |
 | [Workflow Guide](../workflow/WORKFLOW.md)                 | Agent workflow documentation   |
-| [Scenario READMEs](../../scenarios/)                      | Scenario-specific guidance     |
+| [Reference Docs](../reference/)                           | Defaults, patterns, agents     |
 | [GitHub Copilot Docs](https://docs.github.com/en/copilot) | Official Copilot documentation |
 
 ### Community Support
@@ -689,19 +689,6 @@ When opening an issue, include:
 5. **Screenshots** if applicable
 
 **Create issue**: [GitHub Issues](https://github.com/jonathan-vella/azure-agentic-infraops/issues)
-
----
-
-## Scenario-Specific Troubleshooting
-
-Each scenario has unique troubleshooting content. For scenario-specific issues, see:
-
-- [S01: Bicep Baseline](../scenarios/S01-bicep-baseline/README.md#troubleshooting)
-- [S02: Terraform Baseline](../scenarios/S02-terraform-baseline/README.md#troubleshooting)
-- [S03: Agentic Workflow](../scenarios/S03-agentic-workflow/README.md#troubleshooting)
-- [S08: SBOM Generator](../../scenarios/S08-sbom-generator/README.md#troubleshooting)
-- [S09: Diagrams as Code](../../scenarios/S09-diagrams-as-code/README.md#troubleshooting)
-- [S10: Coding Agent](../../scenarios/S10-coding-agent/README.md#troubleshooting)
 
 ---
 

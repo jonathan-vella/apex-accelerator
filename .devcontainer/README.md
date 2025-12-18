@@ -167,8 +167,8 @@ sudo npm update -g markdownlint-cli           # markdownlint
 ## 📚 Related Documentation
 
 - [Workflow Guide](../docs/workflow/WORKFLOW.md)
-- [Scenario Prompts](../scenarios/S11-quick-demos/ecommerce-prompts.md)
 - [Copilot Instructions](../.github/copilot-instructions.md)
+- [Troubleshooting](../docs/guides/troubleshooting.md)
 - [Repository README](../README.md)
 
 ---

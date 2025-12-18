@@ -2,8 +2,8 @@
 
 > **10 minutes to your first AI-assisted infrastructure deployment.**
 >
-> This guide gets you running fast. For a comprehensive learning journey with phases and learning paths,
-> see [Getting Started Journey](getting-started-journey.md).
+> This guide gets you running fast. See the [Workflow Guide](../workflow/WORKFLOW.md) for the complete
+> seven-step agent workflow.
 
 ## Prerequisites
 
@@ -54,8 +54,6 @@ code azure-agentic-infraops
 ## Step 2: Open in Dev Container
 
 The Dev Container provides all required tools pre-configured.
-For detailed Docker setup, alternatives (Podman, Colima, Rancher Desktop),
-and troubleshooting, see the [Dev Containers Setup Guide](dev-containers-setup.md).
 
 1. Press `F1` to open the Command Palette
 2. Type **"Dev Containers: Reopen in Container"**
@@ -91,31 +89,11 @@ Press `Ctrl+Alt+I` (Windows/Linux) or `Cmd+Alt+I` (Mac) to open the Copilot Chat
 
 ---
 
-## Step 4: Choose a Demo Scenario
+## Step 4: Run Your First Workflow
 
-We have pre-built scenarios ready to run:
+Use the 7-step agent workflow to build Azure infrastructure:
 
-| Scenario               | Complexity   | Time   | Prompt File                                      |
-| ---------------------- | ------------ | ------ | ------------------------------------------------ |
-| **Static Website**     | Beginner     | 15 min | `scenarios/S11-quick-demos/static-site-demo.md`  |
-| **E-Commerce**         | Intermediate | 30 min | `scenarios/S11-quick-demos/ecommerce-prompts.md` |
-| **Healthcare Portal**  | Advanced     | 30 min | `scenarios/S11-quick-demos/healthcare-demo.md`   |
-| **Analytics Platform** | Intermediate | 30 min | `scenarios/S11-quick-demos/analytics-demo.md`    |
-
-**Recommended first scenario:** Static Website (simplest, fastest)
-
----
-
-## Step 5: Run Your First Workflow
-
-### Option A: Quick Start (Copy-Paste)
-
-1. Open `scenarios/S11-quick-demos/static-site-demo.md`
-2. Copy the Step 1 prompt
-3. In Copilot Chat, type `@plan` then paste the prompt
-4. Follow the workflow through all steps
-
-### Option B: Custom Infrastructure
+### Option A: Quick Start with @plan
 
 Type this in Copilot Chat:
 
@@ -260,7 +238,7 @@ After completing the quick start:
 
 - **Workflow issues:** Check [Workflow Guide](../workflow/WORKFLOW.md)
 - **Agent behavior:** Review agent files in `.github/agents/`
-- **Scenario prompts:** See files in `scenarios/` folder
+- **Troubleshooting:** See [Troubleshooting Guide](troubleshooting.md)
 - **Bug reports:** Open a GitHub issue
 
 ---
@@ -289,5 +267,4 @@ New to GitHub Copilot? Here are the essentials for IaC workflows:
 | Open Copilot Chat  | `Ctrl+Alt+I`  | `Cmd+Alt+I`  |
 | Inline chat        | `Ctrl+I`      | `Cmd+I`      |
 
-> 📖 **Deep Dive**: For complete Copilot setup, plans comparison, and detailed tutorials,
-> see [Getting Started with GitHub Copilot](copilot-getting-started.md).
+> 📖 **Deep Dive**: See the [Troubleshooting Guide](troubleshooting.md) for common issues.

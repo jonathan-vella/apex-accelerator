@@ -398,7 +398,6 @@ Implementer: [Executes deployment to Azure]
 | MCP Server             | `mcp/azure-pricing-mcp/`                                |
 | MCP Configuration      | `.vscode/mcp.json`                                      |
 | Legacy Planning Files  | `.bicep-planning-files/` (deprecated)                   |
-| Legacy Diagrams        | `docs/diagrams/` (preserved for demos)                  |
 | Global ADRs            | `docs/adr/` (repository-level decisions)                |
 
 ---
@@ -436,11 +435,9 @@ Implementer: [Executes deployment to Azure]
 
 ## Related Documentation
 
-- [Time Savings Evidence](../presenter/time-savings-evidence.md) — Quantified efficiency gains (45 min vs 18+ hours)
-- [Copilot Portfolio Showcase](../presenter/copilot-portfolio-showcase.md) — Real-world projects
 - [ADR-003: AVM-First Approach](../adr/ADR-003-avm-first-approach.md) — Why we use Azure Verified Modules
 - [ADR-004: Region Defaults](../adr/ADR-004-region-defaults.md) — Default `swedencentral`, fallback guidance
-- [Scenario Prompts](../../scenarios/S11-quick-demos/ecommerce-prompts.md)
+- [Troubleshooting Guide](../guides/troubleshooting.md)
 - [Copilot Instructions](../../.github/copilot-instructions.md)
 - [Azure Pricing MCP README](../../mcp/azure-pricing-mcp/README.md)
 - [README](../../README.md)

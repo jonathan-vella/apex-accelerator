@@ -42,6 +42,5 @@ This comprehensive guide covers:
 ## Related Documentation
 
 - [Quick Start](../guides/quickstart.md) — 10-minute setup + first workflow run
-- [Getting Started Journey](../guides/getting-started-journey.md) — Comprehensive onboarding with learning paths
 - [Troubleshooting](../guides/troubleshooting.md) — Common issues and solutions
 - [Agent Definitions](../../.github/agents/) — Customize agent behavior

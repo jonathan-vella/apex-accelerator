@@ -1,0 +1,244 @@
+# Sync Template from Upstream Repository
+# Keeps this skeleton template in sync with azure-agentic-infraops
+# Runs weekly and creates a PR with changes for review
+
+name: Sync from Upstream
+
+on:
+  schedule:
+    # Run every Monday at 06:00 UTC
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (show changes without creating PR)"
+        required: false
+        default: false
+        type: boolean
+
+env:
+  UPSTREAM_REPO: "jonathan-vella/azure-agentic-infraops"
+  UPSTREAM_BRANCH: "main"
+
+jobs:
+  sync:
+    name: Sync from upstream
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout template repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Clone upstream repository
+        run: |
+          git clone --depth 1 --branch ${{ env.UPSTREAM_BRANCH }} \
+            https://github.com/${{ env.UPSTREAM_REPO }}.git upstream
+
+      - name: Sync files from upstream
+        run: |
+          echo "🔄 Syncing files from upstream repository..."
+
+          # Define paths to sync (source -> destination)
+          # These are the essential files for running custom agents
+
+          # 1. Agent definitions
+          echo "📁 Syncing .github/agents/"
+          rm -rf .github/agents/
+          cp -r upstream/.github/agents/ .github/agents/
+
+          # 2. Instruction files
+          echo "📁 Syncing .github/instructions/"
+          rm -rf .github/instructions/
+          cp -r upstream/.github/instructions/ .github/instructions/
+
+          # 3. Prompt files
+          echo "📁 Syncing .github/prompts/"
+          rm -rf .github/prompts/
+          cp -r upstream/.github/prompts/ .github/prompts/
+
+          # 4. Copilot instructions (main file)
+          echo "📄 Syncing .github/copilot-instructions.md"
+          cp upstream/.github/copilot-instructions.md .github/copilot-instructions.md
+
+          # 5. Shared agent defaults
+          echo "📁 Syncing .github/agents/_shared/"
+          # Already included in agents/ sync above
+
+          # 6. Dev container configuration
+          echo "📁 Syncing .devcontainer/"
+          rm -rf .devcontainer/
+          cp -r upstream/.devcontainer/ .devcontainer/
+
+          # 7. MCP server (excluding .archive/)
+          echo "📁 Syncing mcp/azure-pricing-mcp/"
+          rm -rf mcp/azure-pricing-mcp/
+          cp -r upstream/mcp/azure-pricing-mcp/ mcp/azure-pricing-mcp/
+          rm -rf mcp/azure-pricing-mcp/.archive/ 2>/dev/null || true
+
+          # 8. VS Code settings
+          echo "📁 Syncing .vscode/"
+          rm -rf .vscode/
+          cp -r upstream/.vscode/ .vscode/
+
+          # 9. Husky hooks
+          echo "📁 Syncing .husky/"
+          rm -rf .husky/
+          cp -r upstream/.husky/ .husky/
+
+          # 10. Root config files
+          echo "📄 Syncing root config files"
+          cp upstream/package.json package.json
+          cp upstream/package-lock.json package-lock.json 2>/dev/null || true
+          cp upstream/commitlint.config.js commitlint.config.js
+          cp upstream/.markdownlint-cli2.jsonc .markdownlint-cli2.jsonc
+          cp upstream/.gitattributes .gitattributes
+          cp upstream/VERSION.md VERSION.md
+
+          # 11. Docs - only essential reference files
+          echo "📁 Syncing docs/reference/"
+          rm -rf docs/reference/
+          cp -r upstream/docs/reference/ docs/reference/
+
+          echo "📁 Syncing docs/workflow/"
+          rm -rf docs/workflow/
+          cp -r upstream/docs/workflow/ docs/workflow/
+
+          echo "📁 Syncing docs/adr/"
+          rm -rf docs/adr/
+          cp -r upstream/docs/adr/ docs/adr/
+
+          # 12. Agent output template
+          echo "📄 Syncing agent-output/README.md"
+          cp upstream/agent-output/README.md agent-output/README.md
+
+          # 13. Infra template
+          echo "📄 Syncing infra/bicep/README.md"
+          cp upstream/infra/bicep/README.md infra/bicep/README.md
+
+          # Cleanup
+          rm -rf upstream/
+
+          echo "✅ Sync complete"
+
+      - name: Post-sync cleanup
+        run: |
+          echo "🧹 Running post-sync cleanup..."
+
+          # Remove any scenario references that shouldn't be in template
+          # These patterns exist in the main repo but not in template
+
+          # Fix docs/guides if it was synced (we maintain our own minimal version)
+          if [ -d "docs/guides" ]; then
+            # Keep only essential guides
+            find docs/guides -type f -name "*.md" | while read file; do
+              filename=$(basename "$file")
+              case "$filename" in
+                README.md|quickstart.md|troubleshooting.md|markdown-style-guide.md)
+                  echo "  ✓ Keeping: $filename"
+                  ;;
+                *)
+                  echo "  ✗ Removing: $filename"
+                  rm "$file"
+                  ;;
+              esac
+            done
+          fi
+
+          # Remove scenario-specific folders if accidentally synced
+          rm -rf scenarios/ 2>/dev/null || true
+          rm -rf docs/presenter/ 2>/dev/null || true
+          rm -rf docs/diagrams/ 2>/dev/null || true
+          rm -rf docs/cost-estimates/ 2>/dev/null || true
+          rm -rf docs/audit-checklists/ 2>/dev/null || true
+          rm -rf docs/getting-started/ 2>/dev/null || true
+
+          echo "✅ Cleanup complete"
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No changes detected - template is up to date"
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "📝 Changes detected:"
+            git diff --stat
+            git status --short
+          fi
+
+      - name: Show diff (dry run)
+        if: steps.changes.outputs.has_changes == 'true' && github.event.inputs.dry_run == 'true'
+        run: |
+          echo "🔍 DRY RUN - Changes that would be applied:"
+          git diff --stat
+          echo ""
+          echo "📋 Modified files:"
+          git status --short
+
+      - name: Get upstream version
+        id: version
+        if: steps.changes.outputs.has_changes == 'true' && github.event.inputs.dry_run != 'true'
+        run: |
+          if [ -f "VERSION.md" ]; then
+            VERSION=$(grep -oP '(?<=## Version )\d+\.\d+\.\d+' VERSION.md | head -1 || echo "unknown")
+          else
+            VERSION="unknown"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "📌 Upstream version: $VERSION"
+
+      - name: Create Pull Request
+        if: steps.changes.outputs.has_changes == 'true' && github.event.inputs.dry_run != 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: sync from upstream v${{ steps.version.outputs.version }}"
+          title: "chore: Sync from upstream (v${{ steps.version.outputs.version }})"
+          body: |
+            ## 🔄 Upstream Sync
+
+            This PR syncs the template repository with the latest changes from
+            [azure-agentic-infraops](${{ github.server_url }}/${{ env.UPSTREAM_REPO }}).
+
+            ### Upstream Version
+            **${{ steps.version.outputs.version }}**
+
+            ### Synced Components
+            - `.github/agents/` - Custom agent definitions
+            - `.github/instructions/` - Instruction files
+            - `.github/prompts/` - Prompt files
+            - `.github/copilot-instructions.md` - Main Copilot instructions
+            - `.devcontainer/` - Dev container configuration
+            - `.vscode/` - VS Code settings
+            - `.husky/` - Git hooks
+            - `mcp/azure-pricing-mcp/` - MCP server
+            - `docs/reference/` - Reference documentation
+            - `docs/workflow/` - Workflow documentation
+            - `docs/adr/` - Architecture Decision Records
+            - Root config files (package.json, etc.)
+
+            ### Excluded from Sync
+            - `scenarios/` - Demo scenarios (main repo only)
+            - `docs/presenter/` - Presentation materials
+            - `docs/diagrams/` - Generated diagrams
+            - `README.md` - Template has its own README
+
+            ### Review Checklist
+            - [ ] Changes are appropriate for the template
+            - [ ] No scenario-specific content leaked through
+            - [ ] All agent definitions work correctly
+            - [ ] Dev container builds successfully
+
+            ---
+            *Auto-generated by the upstream sync workflow*
+          branch: "chore/sync-upstream-${{ steps.version.outputs.version }}"
+          labels: |
+            sync
+            automated
+          draft: false

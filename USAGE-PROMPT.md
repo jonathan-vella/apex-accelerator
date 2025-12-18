@@ -33,13 +33,16 @@ Create a new Azure infrastructure project using the agentic workflow template.
 4. Customize .github/copilot-instructions.md
 5. Run npm install to set up Husky hooks
 6. Open in Dev Container
-7. Begin using the 4-step agent workflow
+7. Begin using the 7-step agent workflow
 
 **Agent Workflow:**
-- Step 1: @plan - Create implementation plan
+- Step 1: @plan - Create requirements document
 - Step 2: azure-principal-architect - Get WAF assessment
-- Step 3: bicep-plan - Create detailed infrastructure plan
-- Step 4: bicep-implement - Generate Bicep templates
+- Step 3: diagram-generator / adr-generator - Design artifacts
+- Step 4: bicep-plan - Create detailed infrastructure plan
+- Step 5: bicep-implement - Generate Bicep templates
+- Step 6: Deploy to Azure
+- Step 7: workload-documentation-generator - As-built artifacts
 ```
 
 ---

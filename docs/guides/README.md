@@ -1,56 +1,20 @@
 # Guides
 
-> **Central hub for all how-to guides, tutorials, and best practices.**
-
-This folder consolidates all operational guides for Agentic InfraOps, from getting started to advanced workflows.
+> **Operational guides for Agentic InfraOps.**
 
 ---
 
-## 📖 Start Here
+## Available Guides
 
-> **New to Agentic InfraOps?** Follow this path:
->
-> 1️⃣ [Prerequisites](prerequisites.md) → 2️⃣ [Quick Start](quickstart.md) → 3️⃣ [Copilot Getting Started](copilot-getting-started.md)
-
----
-
-## 🚀 Getting Started
-
-| Guide                                                 | Description                                             | Time      |
-| ----------------------------------------------------- | ------------------------------------------------------- | --------- |
-| [Quick Start](quickstart.md)                          | Clone, Dev Container, run first demo — minimal steps    | 10 min    |
-| [Getting Started Journey](getting-started-journey.md) | Comprehensive onboarding with phases and learning paths | 30 min    |
-| [Prerequisites](prerequisites.md)                     | Required tools, Azure setup, knowledge prereqs          | Reference |
-| [Dev Containers Setup](dev-containers-setup.md)       | Docker setup, alternatives, troubleshooting             | Reference |
-
-> **Which one?** Use Quick Start if you just want to run something. Use the Journey for structured learning.
-
-## 🤖 GitHub Copilot
-
-| Guide                                                 | Description                                    | Time      |
-| ----------------------------------------------------- | ---------------------------------------------- | --------- |
-| [Copilot Getting Started](copilot-getting-started.md) | Install, configure, and use Copilot in VS Code | 15 min    |
-| [Copilot Best Practices](copilot-best-practices.md)   | Prompting tips, validation, IT Pro patterns    | Reference |
-| [Model Selection](copilot-model-selection.md)         | Choose the right AI model for your task        | Reference |
-
-## 🔧 Operations
-
-| Guide                                           | Description                                           |
-| ----------------------------------------------- | ----------------------------------------------------- |
-| [Troubleshooting](troubleshooting.md)           | Solutions for Dev Container, Copilot, Azure, agents   |
-| [Markdown Style Guide](markdown-style-guide.md) | Documentation standards (120-char lines, ATX headers) |
-
-## 🛠️ Internal Tools
-
-| Guide                                                   | Description                                            |
-| ------------------------------------------------------- | ------------------------------------------------------ |
-| [Coding Agent Lint Fix](CODING-AGENT-LINT-FIX-ISSUE.md) | GitHub issue for delegating lint fixes to coding agent |
+| Guide                                           | Description                                           | Time   |
+| ----------------------------------------------- | ----------------------------------------------------- | ------ |
+| [Quick Start](quickstart.md)                    | Clone, Dev Container, run first workflow              | 10 min |
+| [Troubleshooting](troubleshooting.md)           | Solutions for Dev Container, Copilot, Azure, agents   | —      |
+| [Markdown Style Guide](markdown-style-guide.md) | Documentation standards (120-char lines, ATX headers) | —      |
 
 ---
 
 ## Related Documentation
 
 - [Workflow Guide](../workflow/WORKFLOW.md) — Complete seven-step agent workflow
-- [Scenarios](../../scenarios/) — Learning scenarios and demos
-- [ADRs](../adr/) — Architecture Decision Records (ADR-003 AVM-first, ADR-004 regions)
-- [Presenter Materials](../presenter/) — ROI, time savings, executive pitch
+- [Reference Docs](../reference/) — Defaults, patterns, agents overview

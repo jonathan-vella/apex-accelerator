@@ -16,9 +16,9 @@ local.settings.json
 .terraform/
 *.tfvars
 
-# VS Code
-.vscode/
-*.code-workspace
+# Archive folders
+.archive/
+*/.archive/
 
 # OS
 .DS_Store
