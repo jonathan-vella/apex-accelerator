@@ -88,8 +88,8 @@ This file is automatically updated by agents as they create new outputs.
 
 ## Related Resources
 
-- **Bicep Code**: [`infra/bicep/{project}/`](../../infra/bicep/)
-- **Workflow Guide**: [`docs/workflow/WORKFLOW.md`](../docs/workflow/WORKFLOW.md)
+- **Bicep Code**: [`infra/bicep/{project}/`](../../infra/bicep/{project}/)
+- **Scenarios**: [`scenarios/`](../../scenarios/)
 ```
 
 ## Existing Demo Outputs
@@ -97,6 +97,7 @@ This file is automatically updated by agents as they create new outputs.
 Legacy demo outputs in the following locations are preserved for demonstration purposes:
 
 - `docs/adr/` - Global Architecture Decision Records
+- `docs/diagrams/` - Workflow and architecture diagrams
 - `.bicep-planning-files/` - Legacy planning files
 
 New projects should use this `agent-output/` structure exclusively.

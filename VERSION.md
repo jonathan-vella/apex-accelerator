@@ -1,20 +1,30 @@
-# Version History
+# Version Information
 
-## Version 3.6.0
+**Current Version:** 3.7.8
 
-**Release Date:** December 2025
+**Last Updated:** 2025-12-18
 
-This is the initial template version, synced from
-[azure-agentic-infraops](https://github.com/jonathan-vella/azure-agentic-infraops).
+**Build:** 17d6691
 
-### Included Components
+## Version History
 
-- Custom Copilot agents for Azure infrastructure
-- Dev Container with Azure tooling
-- Azure Pricing MCP server
-- Reference documentation and workflow guides
+See [CHANGELOG.md](CHANGELOG.md) for detailed release notes.
 
-### Sync Information
+## Semantic Versioning
 
-This template is automatically kept in sync with the upstream repository via the
-**Sync from Upstream** workflow (`.github/workflows/sync-from-upstream.yml`).
+This project follows [Semantic Versioning 2.0.0](https://semver.org/):
+
+- **MAJOR** version for incompatible API changes (breaking changes)
+- **MINOR** version for new functionality (feat:)
+- **PATCH** version for bug fixes (fix:)
+
+## Automated Versioning
+
+Version bumps are automated via GitHub Actions based on [Conventional Commits](https://www.conventionalcommits.org/):
+
+| Commit Type | Version Bump | Example |
+|-------------|--------------|---------|
+| `feat:` | Minor | `feat: add new agent` |
+| `fix:` | Patch | `fix: correct typo` |
+| `feat!:` or `BREAKING CHANGE:` | Major | `feat!: redesign workflow` |
+| `docs:`, `chore:`, etc. | None | `docs: update README` |

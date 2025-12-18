@@ -464,7 +464,7 @@ Also update the project's `agent-output/{project-name}/README.md` to track this 
 ## References
 
 - [Azure Pricing Calculator](https://azure.microsoft.com/en-us/pricing/calculator/)
-- [Azure Pricing MCP](../../mcp/azure-pricing-mcp/README.md)
+- [Azure Pricing MCP Architecture](../../docs/diagrams/mcp/azure_pricing_mcp_architecture.png)
 ```
 
 ### WAF Assessment File Structure
