@@ -1,10 +1,14 @@
-# Project Name
+# Agentic InfraOps Template
 
-> **Your Project Tagline** - One sentence describing your project.
+> **Azure infrastructure engineered by AI agents.** Template with custom Copilot agents, Dev Container,
+> and workflow automation.
 
 ## Overview
 
-[Describe what this project does and why it exists]
+Starter template for agentic Azure infrastructure development. Contains custom Copilot agents
+(architect, bicep-plan, bicep-implement), Azure Pricing MCP server, and the 7-step workflow.
+
+This template auto-syncs weekly from [azure-agentic-infraops](https://github.com/jonathan-vella/azure-agentic-infraops).
 
 ## Quick Start
 
@@ -12,14 +16,15 @@
 
 - Docker Desktop (or alternative: Podman, Colima, Rancher Desktop)
 - VS Code with Dev Containers extension
-- Azure subscription with Contributor access
+- GitHub Copilot subscription
+- Azure subscription with Contributor access (for deployments)
 
 ### Getting Started
 
 ```bash
 # Clone repository
-git clone https://github.com/YOUR-ORG/YOUR-PROJECT.git
-cd your-project
+git clone https://github.com/jonathan-vella/azure-agentic-infraops-accelerator.git
+cd azure-agentic-infraops-accelerator
 
 # Open in VS Code
 code .
@@ -33,7 +38,7 @@ az login
 az account set --subscription "<your-subscription-id>"
 
 # Verify tools
-terraform version && az bicep version && pwsh --version
+az bicep version && terraform version && pwsh --version
 ```
 
 ## Agent Workflow
