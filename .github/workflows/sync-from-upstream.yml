@@ -114,11 +114,19 @@ jobs:
 
           # 12. Agent output template
           echo "📄 Syncing agent-output/README.md"
-          cp upstream/agent-output/README.md agent-output/README.md
+          if [ -f "upstream/agent-output/README.md" ]; then
+            cp upstream/agent-output/README.md agent-output/README.md
+          else
+            echo "  ⚠️ Skipped: agent-output/README.md not found in upstream"
+          fi
 
-          # 13. Infra template
+          # 13. Infra template (optional - may not exist in upstream)
           echo "📄 Syncing infra/bicep/README.md"
-          cp upstream/infra/bicep/README.md infra/bicep/README.md
+          if [ -f "upstream/infra/bicep/README.md" ]; then
+            cp upstream/infra/bicep/README.md infra/bicep/README.md
+          else
+            echo "  ⚠️ Skipped: infra/bicep/README.md not found in upstream"
+          fi
 
           # Cleanup
           rm -rf upstream/
