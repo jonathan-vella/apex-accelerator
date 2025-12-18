@@ -1,6 +1,6 @@
 # Development Container for Agentic InfraOps
 
-> **Version 3.6.0**
+> **Version 3.7.8**
 
 This devcontainer provides a **complete, pre-configured development environment** for Agentic InfraOps.
 It includes all required tools, extensions, and configurations to build Azure infrastructure with AI agents.
@@ -167,8 +167,8 @@ sudo npm update -g markdownlint-cli           # markdownlint
 ## 📚 Related Documentation
 
 - [Workflow Guide](../docs/workflow/WORKFLOW.md)
+- [Scenario Prompts](../scenarios/S11-quick-demos/ecommerce-prompts.md)
 - [Copilot Instructions](../.github/copilot-instructions.md)
-- [Troubleshooting](../docs/guides/troubleshooting.md)
 - [Repository README](../README.md)
 
 ---
