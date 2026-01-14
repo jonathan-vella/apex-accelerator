@@ -94,6 +94,32 @@ graph LR
 ​`
 ```
 
+## Template-First Approach for Workflow Artifacts
+
+**MANDATORY for Wave 1 artifacts (01, 02, 04, 06):**
+
+When generating core workflow artifacts, agents **MUST** follow the canonical templates:
+
+| Artifact                        | Template                                                   | Producing Agent           |
+| ------------------------------- | ---------------------------------------------------------- | ------------------------- |
+| `01-requirements.md`            | `.github/templates/01-requirements.template.md`            | @plan (built-in)          |
+| `02-architecture-assessment.md` | `.github/templates/02-architecture-assessment.template.md` | azure-principal-architect |
+| `04-implementation-plan.md`     | `.github/templates/04-implementation-plan.template.md`     | bicep-plan                |
+| `06-deployment-summary.md`      | `.github/templates/06-deployment-summary.template.md`      | Deployment tooling/manual |
+
+**Requirements:**
+
+1. **Preserve H2 heading order**: Templates define invariant H2 sections that MUST appear in order
+2. **No embedded skeletons**: Agents must link to templates, never embed structure inline
+3. **Optional sections**: May appear after the last required H2 (anchor), with warnings if before
+4. **Validation**: All artifacts are validated by `scripts/validate-wave1-artifacts.mjs`
+
+**Enforcement:**
+
+- CI drift guard runs on PR/push when templates, agents, or instructions change
+- Strictness mode starts `relaxed` (warnings), ratchets to `standard` (failures) after workflow proven
+- See `.github/workflows/` for drift guard configuration
+
 ## Lists and Formatting
 
 - Use `-` for bullet points (not `*` or `+`)

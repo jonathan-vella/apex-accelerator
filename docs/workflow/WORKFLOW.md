@@ -1,8 +1,24 @@
 # Agentic InfraOps - Agent Workflow
 
-> **Version 3.6.0** | [Changelog](../../VERSION.md)
+> **Version 3.7.8** | [Changelog](../../VERSION.md)
 
 This document describes the 7-step agent workflow for Azure infrastructure development with Agentic InfraOps.
+
+---
+
+## How to Invoke Agents
+
+1. Press `Ctrl+Alt+I` to open Copilot Chat
+2. Select the agent from the **agent picker dropdown** at the top of the chat
+3. Type your prompt and submit
+4. Wait for approval before proceeding to the next step
+
+> **Note: Project Planner vs Plan**
+>
+> VS Code includes a built-in **Plan** agent for general planning tasks. This repository uses a custom
+> **Project Planner** agent (`project-planner.agent.md`) specifically designed for Azure infrastructure
+> requirements gathering. The custom agent includes Azure-specific instructions, templates, and handoffs
+> to other agents in this 7-step workflow.
 
 ---
 
@@ -12,7 +28,7 @@ This document describes the 7-step agent workflow for Azure infrastructure devel
 %%{init: {'theme':'neutral'}}%%
 graph TB
     subgraph "Step 1: Requirements"
-        P["@plan<br/>(built-in)"]
+        P["Project Planner<br/>(custom agent)"]
     end
 
     subgraph "Step 2: Architecture"
@@ -73,7 +89,7 @@ graph TB
 
 | Step | Agent/Phase                 | Purpose                              | Creates                                   | Required |
 | ---- | --------------------------- | ------------------------------------ | ----------------------------------------- | -------- |
-| 1    | `@plan` (built-in)          | Gather requirements                  | `01-requirements.md`                      | ✅ Yes   |
+| 1    | `project-planner` (custom)  | Gather requirements                  | `01-requirements.md`                      | ✅ Yes   |
 | 2    | `azure-principal-architect` | WAF assessment                       | `02-architecture-assessment.md`           | ✅ Yes   |
 | 3    | Design Artifacts            | Visualize design, document decisions | `03-des-*` diagrams + cost + ADRs         | Optional |
 | 4    | `bicep-plan`                | Implementation planning + governance | `04-*` plan + governance constraints      | ✅ Yes   |
@@ -81,9 +97,9 @@ graph TB
 | 6    | Deploy                      | Deploy to Azure                      | `06-deployment-summary.md`                | ✅ Yes   |
 | 7    | As-Built Artifacts          | Document final state                 | `07-ab-*` diagrams + ADRs + workload docs | Optional |
 
-### Step 1: Requirements (@plan)
+### Step 1: Requirements (Project Planner)
 
-Use the VS Code built-in `@plan` agent to gather comprehensive requirements.
+Use the **Project Planner** custom agent to gather comprehensive requirements.
 
 **📋 Requirements Template:** See [`.github/prompts/plan-requirements.prompt.md`](../../.github/prompts/plan-requirements.prompt.md)
 
@@ -101,7 +117,7 @@ Use the VS Code built-in `@plan` agent to gather comprehensive requirements.
 **Example Prompt:**
 
 ```text
-@plan Create deployment plan for HIPAA-compliant patient portal.
+Create deployment plan for HIPAA-compliant patient portal.
 Business context: Healthcare startup serving 10,000 patients.
 NFRs: 99.95% SLA, RTO=4hrs, RPO=1hr, <2s page load.
 Compliance: HIPAA, SOC 2, data residency in EU.

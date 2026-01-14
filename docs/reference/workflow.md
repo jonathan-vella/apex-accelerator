@@ -1,6 +1,6 @@
 # Workflow Reference
 
-> **Version 3.6.0** | Canonical 7-step agent workflow diagram
+> **Version 3.7.8** | Canonical 7-step agent workflow diagram
 
 This document contains the authoritative workflow diagram for Agentic InfraOps. All other documentation should
 link to this document rather than duplicating the diagram.
@@ -13,7 +13,7 @@ link to this document rather than duplicating the diagram.
 %%{init: {'theme':'neutral'}}%%
 graph TB
     subgraph "Step 1: Requirements"
-        P["@plan<br/>(built-in)"]
+        P["Project Planner<br/>(custom)"]
     end
 
     subgraph "Step 2: Architecture"

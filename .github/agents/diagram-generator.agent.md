@@ -2,22 +2,35 @@
 name: Azure Diagram Generator
 description: Generates Python architecture diagrams for Azure infrastructure using the 'diagrams' library by mingrammer. Creates version-controlled, reproducible architecture visualizations that can be regenerated as PNG images.
 tools:
-  - "edit"
-  - "search"
-  - "runCommands"
-  - "Microsoft Docs/*"
-  - "Azure MCP/*"
+  [
+    "vscode",
+    "execute",
+    "read",
+    "agent",
+    "edit",
+    "search",
+    "web",
+    "microsoft-docs/*",
+    "azure-mcp/*",
+    "todo",
+    "ms-azuretools.vscode-azureresourcegroups/azureActivityLog",
+    "ms-python.python/getPythonEnvironmentInfo",
+    "ms-python.python/getPythonExecutableCommand",
+    "ms-python.python/installPythonPackage",
+    "ms-python.python/configurePythonEnvironment",
+    "ms-vscode.vscode-websearchforcopilot/websearch",
+  ]
 handoffs:
   - label: Continue to Infrastructure Planning
-    agent: bicep-plan
+    agent: Azure Bicep Planning Specialist
     prompt: Now create a Bicep implementation plan for the visualized architecture. Use the diagram as reference for resource dependencies and relationships.
     send: true
   - label: Document Architecture Decision
-    agent: adr-generator
+    agent: ADR Generator
     prompt: Create an ADR documenting this architecture. Include the generated diagram as visual reference for the architectural decision.
     send: true
   - label: Return to Architect Review
-    agent: azure-principal-architect
+    agent: Azure Principal Architect
     prompt: Review the architecture diagram and provide additional WAF assessment feedback or refinements.
     send: true
 ---
@@ -340,7 +353,7 @@ graph TD
 
 | Step | Phase                     | This Agent's Role        |
 | ---- | ------------------------- | ------------------------ |
-| 1    | @plan                     | —                        |
+| 1    | project-planner           | —                        |
 | 2    | azure-principal-architect | Caller (triggers Step 3) |
 | 3    | **Design Artifacts**      | Generate `-des` diagrams |
 | 4    | bicep-plan                | —                        |
@@ -348,32 +361,31 @@ graph TD
 | 6    | Deploy                    | Caller (triggers Step 7) |
 | 7    | **As-Built Artifacts**    | Generate `-ab` diagrams  |
 
-### Approval Gate
+### Automatic PNG Generation
 
-After generating diagram code, ask:
+After generating diagram code, **ALWAYS** execute the Python script to create the PNG file automatically:
+
+1. **Create the Python diagram file** in `agent-output/{project}/{step}-diagram.py`
+2. **Execute the script immediately** using the terminal:
+   ```bash
+   cd agent-output/{project}
+   python {step}-diagram.py
+   ```
+3. **Verify PNG creation** by checking that `{step}-diagram.png` exists
+4. **Report completion** to the user
 
 > **🎨 Architecture Diagram Generated**
 >
-> I've created a Python diagram file:
+> I've created and executed the diagram:
 >
-> - **File**: `agent-output/{project}/{step}-diagram.py`
+> - **Python File**: `agent-output/{project}/{step}-diagram.py`
+> - **PNG File**: `agent-output/{project}/{step}-diagram.png`
 > - **Resources**: X Azure resources visualized
 > - **Clusters**: Y logical groupings
 >
-> **To generate the PNG:**
->
-> ```bash
-> cd agent-output/{project}
-> python {step}-diagram.py
-> ```
->
 > _(Where `{step}` is `03-des` or `07-ab` based on workflow phase)_
 >
-> **Do you approve this diagram?**
->
-> - Reply **"yes"** or **"approve"** to proceed
-> - Reply **"generate"** to run Python and create PNG
-> - Reply with **feedback** to refine the diagram
+> The diagram is ready for review. Reply with **feedback** if you'd like to refine it.
 
 ### Guardrails
 
@@ -384,14 +396,17 @@ After generating diagram code, ask:
 - ✅ Use valid `diagrams.azure.*` imports only
 - ✅ Include docstring with prerequisites and generation command
 - ✅ Match diagram to approved architecture design
+- ✅ **ALWAYS execute the Python script to generate the PNG file automatically**
+- ✅ Verify PNG file creation after script execution
 
 **DO NOT:**
 
 - ❌ Use invalid or made-up diagram node types
 - ❌ Create diagrams that don't match the actual architecture
-- ❌ Skip the validation step (test PNG generation)
+- ❌ Skip the PNG generation step - always execute the Python script
 - ❌ Overwrite existing diagrams without user consent
 - ❌ Output to legacy `docs/diagrams/` folder (use `agent-output/` instead)
+- ❌ Leave diagram in Python-only state without generating PNG
 
 ## Patterns to Avoid
 

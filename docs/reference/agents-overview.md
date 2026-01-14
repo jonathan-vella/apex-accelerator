@@ -1,6 +1,6 @@
 # Agents Overview
 
-> **Version 3.6.0** | Complete reference for all 7 custom agents
+> **Version 3.7.8** | Complete reference for all 7 custom agents
 
 This document provides a single-page overview of all agents in Agentic InfraOps, their purposes, when to use them,
 and example prompts.
@@ -11,7 +11,7 @@ and example prompts.
 
 | Agent                              | Step | Purpose                       | Creates Code? | Output Files                          |
 | ---------------------------------- | ---- | ----------------------------- | ------------- | ------------------------------------- |
-| `@plan` (built-in)                 | 1    | Requirements gathering        | ❌ No         | `01-requirements.md`                  |
+| `project-planner` (custom)         | 1    | Requirements gathering        | ❌ No         | `01-requirements.md`                  |
 | `azure-principal-architect`        | 2    | WAF assessment & guidance     | ❌ No         | `02-architecture-assessment.md`       |
 | `diagram-generator`                | 3, 7 | Python architecture diagrams  | ✅ Yes        | `03-des-diagram.*`, `07-ab-diagram.*` |
 | `adr-generator`                    | 3, 7 | Architecture Decision Records | ❌ No         | `03-des-adr-*`, `07-ab-adr-*`         |
@@ -23,8 +23,8 @@ and example prompts.
 
 ## How to Use Agents
 
-1. Press `Ctrl+Shift+A` or click the **Agent** button in Copilot Chat
-2. Select agent from dropdown
+1. Press `Ctrl+Alt+I` to open Copilot Chat
+2. Select agent from the agent picker dropdown
 3. Type your prompt and submit
 4. **Wait for approval prompt** before proceeding to next step
 
@@ -32,19 +32,22 @@ and example prompts.
 
 ## Agent Details
 
-### @plan (Built-in)
+### Project Planner (Custom)
 
-> **Step 1** | VS Code built-in planning agent
+> **Step 1** | Custom requirements gathering agent
 
 **Purpose**: Gather comprehensive requirements including business context, NFRs (SLA/RTO/RPO), compliance needs,
-and cost constraints.
+and cost constraints. This is a custom agent specifically designed for Azure infrastructure projects.
+
+> **Note**: VS Code includes a built-in "Plan" agent for general planning. This repository uses the custom
+> **Project Planner** agent (`project-planner.agent.md`) with Azure-specific instructions and workflow handoffs.
 
 **📋 Template**: Use [`.github/prompts/plan-requirements.prompt.md`](../../.github/prompts/plan-requirements.prompt.md)
 
 **Example Prompt**:
 
 ```text
-@plan Create deployment plan for HIPAA-compliant patient portal.
+Create deployment plan for HIPAA-compliant patient portal.
 Business context: Healthcare startup serving 10,000 patients.
 NFRs: 99.95% SLA, RTO=4hrs, RPO=1hr, <2s page load.
 Compliance: HIPAA, SOC 2, data residency in EU.

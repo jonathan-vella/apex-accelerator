@@ -1,6 +1,6 @@
 # Defaults Reference
 
-> **Version 3.6.0** | Single source of truth for regions, naming, tags, and SKUs
+> **Version 3.7.8** | Single source of truth for regions, naming, tags, and SKUs
 
 This document centralizes all default configuration values for Agentic InfraOps. All other documentation and agent
 files should reference this document rather than duplicating content.

@@ -3,12 +3,17 @@ name: Azure Bicep Implementation Specialist
 description: Expert Azure Bicep Infrastructure as Code specialist that creates near-production-ready Bicep templates following best practices and Azure Verified Modules standards. Validates, tests, and ensures code quality.
 tools:
   [
+    "vscode",
+    "execute",
+    "read",
+    "agent",
     "edit",
     "search",
-    "runCommands",
-    "Microsoft Docs/*",
-    "Azure MCP/*",
-    "Bicep (EXPERIMENTAL)/*",
+    "web",
+    "microsoft-docs/*",
+    "azure-mcp/*",
+    "bicep-(experimental)/*",
+    "todo",
     "ms-azuretools.vscode-azure-github-copilot/azure_recommend_custom_modes",
     "ms-azuretools.vscode-azure-github-copilot/azure_query_azure_resource_graph",
     "ms-azuretools.vscode-azure-github-copilot/azure_get_auth_context",
@@ -16,22 +21,23 @@ tools:
     "ms-azuretools.vscode-azure-github-copilot/azure_get_dotnet_template_tags",
     "ms-azuretools.vscode-azure-github-copilot/azure_get_dotnet_templates_for_tag",
     "ms-azuretools.vscode-azureresourcegroups/azureActivityLog",
+    "ms-vscode.vscode-websearchforcopilot/websearch",
   ]
 handoffs:
   - label: Generate Workload Documentation
-    agent: workload-documentation-generator
+    agent: Workload Documentation Generator
     prompt: Generate comprehensive workload documentation package including design document, operations runbook, and resource inventory. Synthesize from existing WAF assessment, implementation plan, and Bicep code.
     send: true
   - label: Generate As-Built Diagram
-    agent: diagram-generator
+    agent: Azure Diagram Generator
     prompt: Generate a Python architecture diagram documenting the implemented infrastructure. Use '-ab' suffix for as-built diagram. Include all deployed Azure resources and their relationships.
     send: true
   - label: Document Implementation Decision
-    agent: adr-generator
+    agent: ADR Generator
     prompt: Create an ADR documenting the infrastructure implementation, including the architectural decisions, trade-offs, and deployment approach used in the Bicep templates.
     send: true
   - label: Return to Architect Review
-    agent: azure-principal-architect
+    agent: Azure Principal Architect
     prompt: Review the implemented Bicep templates for WAF compliance and architectural alignment before deployment.
     send: true
 ---
@@ -163,17 +169,17 @@ az deployment group show `
 
 ## Pre-flight: resolve output path
 
-- Prompt once to resolve \outputBasePath\ if not provided by the user.
-- Default path is: \infra/bicep/{goal}\.
+- Prompt once to resolve `outputBasePath` if not provided by the user.
+- Default path is: `infra/bicep/{goal}`.
 - Verify or create the folder before proceeding.
 
 ## Testing & validation
 
-- Run \icep restore\ for module restoration (required for AVM br/public:\*)
-- Run \icep build {path to bicep file}.bicep --stdout --no-restore\ to validate
-- Run \icep format {path to bicep file}.bicep\ to format templates
-- Run \icep lint {path to bicep file}.bicep\ to check for issues
-- **Run security scanning**: \icep lint --diagnostics-format sarif {file}.bicep\ to check security issues
+- Run `bicep restore` for module restoration (required for AVM br/public:\*)
+- Run `bicep build {path to bicep file}.bicep --stdout --no-restore` to validate
+- Run `bicep format {path to bicep file}.bicep` to format templates
+- Run `bicep lint {path to bicep file}.bicep` to check for issues
+- **Run security scanning**: `bicep lint --diagnostics-format sarif {file}.bicep` to check security issues
 - After any command failure, diagnose and retry
 - Treat warnings from analysers as actionable items
 - After successful build, remove transient ARM JSON files
@@ -182,7 +188,7 @@ az deployment group show `
 
 ## The final check
 
-- All parameters (\param\), variables (\ar\) and types are used; remove dead code
+- All parameters (`param`), variables (`var`) and types are used; remove dead code
 - AVM versions or API versions match the implementation plan
 - No secrets or environment-specific values hardcoded
 - The generated Bicep compiles cleanly and passes format checks
@@ -605,7 +611,7 @@ This agent is **Step 5** of the 7-step agentic infrastructure workflow.
 ```mermaid
 %%{init: {'theme':'neutral'}}%%
 graph LR
-    P["@plan<br/>(Step 1)"] --> A[azure-principal-architect<br/>Step 2]
+    P["Project Planner<br/>(Step 1)"] --> A[azure-principal-architect<br/>Step 2]
     A --> D["Design Artifacts<br/>(Step 3)"]
     D --> B[bicep-plan<br/>Step 4]
     B --> I[bicep-implement<br/>Step 5]
@@ -618,7 +624,7 @@ graph LR
 
 | Step | Agent/Phase               | Purpose                                         |
 | ---- | ------------------------- | ----------------------------------------------- |
-| 1    | @plan                     | Requirements gathering → `01-requirements.md`   |
+| 1    | project-planner           | Requirements gathering → `01-requirements.md`   |
 | 2    | azure-principal-architect | WAF assessment → `02-*` files                   |
 | 3    | Design Artifacts          | Design diagrams + ADRs → `03-des-*` files       |
 | 4    | bicep-plan                | Implementation planning → `04-*` files          |
@@ -637,6 +643,8 @@ graph LR
 - Deployment script (`deploy.ps1`)
 - Module files in `modules/` subfolder
 - Reference file: `agent-output/{project}/05-implementation-reference.md`
+
+**Template**: Use [`../templates/05-implementation-reference.template.md`](../templates/05-implementation-reference.template.md)
 
 ### Approval Gate (MANDATORY)
 
