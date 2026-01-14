@@ -2,21 +2,36 @@
 name: ADR Generator
 description: Expert agent for creating comprehensive Architectural Decision Records (ADRs) with structured formatting optimized for AI consumption and human readability.
 tools:
-  - "edit"
-  - "search"
-  - "runCommands"
-  - "Microsoft Docs/*"
+  [
+    "vscode",
+    "execute",
+    "read",
+    "agent",
+    "edit",
+    "search",
+    "web",
+    "microsoft-docs/*",
+    "azure-mcp/*",
+    "todo",
+    "ms-azuretools.vscode-azure-github-copilot/azure_recommend_custom_modes",
+    "ms-azuretools.vscode-azure-github-copilot/azure_query_azure_resource_graph",
+    "ms-azuretools.vscode-azure-github-copilot/azure_get_auth_context",
+    "ms-azuretools.vscode-azure-github-copilot/azure_set_auth_context",
+    "ms-azuretools.vscode-azure-github-copilot/azure_get_dotnet_template_tags",
+    "ms-azuretools.vscode-azure-github-copilot/azure_get_dotnet_templates_for_tag",
+    "ms-vscode.vscode-websearchforcopilot/websearch",
+  ]
 handoffs:
   - label: Review Against WAF Pillars
-    agent: azure-principal-architect
+    agent: Azure Principal Architect
     prompt: Assess the WAF implications of the architectural decision documented above. Evaluate against all 5 pillars (Security, Reliability, Performance, Cost, Operations) and provide specific recommendations.
     send: true
   - label: Generate Implementation Plan
-    agent: bicep-plan
+    agent: Azure Bicep Planning Specialist
     prompt: Create a detailed implementation plan for the architecture decision documented in the ADR above. Include resource breakdown, dependencies, and implementation tasks.
     send: true
   - label: Generate Architecture Diagram
-    agent: diagram-generator
+    agent: Azure Diagram Generator
     prompt: Generate a Python architecture diagram to visualize the architectural decision documented in the ADR. Include relevant Azure resources and relationships.
     send: true
 ---
@@ -307,7 +322,7 @@ graph TD
 
 | Step | Phase                     | This Agent's Role                           |
 | ---- | ------------------------- | ------------------------------------------- |
-| 1    | @plan                     | —                                           |
+| 1    | project-planner           | —                                           |
 | 2    | azure-principal-architect | Caller (triggers Step 3)                    |
 | 3    | **Design Artifacts**      | Generate `-des` ADRs (proposed decisions)   |
 | 4    | bicep-plan                | —                                           |

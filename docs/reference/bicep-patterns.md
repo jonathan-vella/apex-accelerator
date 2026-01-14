@@ -1,6 +1,6 @@
 # Bicep Patterns Reference
 
-> **Version 3.6.0** | Critical deployment patterns for Azure Bicep
+> **Version 3.7.8** | Critical deployment patterns for Azure Bicep
 
 This document contains essential Bicep patterns extracted from the copilot instructions. These patterns solve
 common deployment challenges and policy compliance issues.
