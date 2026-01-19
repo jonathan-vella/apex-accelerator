@@ -14,8 +14,6 @@ Cost estimates provide:
 - Optimization guidance for reducing costs
 - Fast decisions via "what changes cost" tables
 
-Target output style: structurally similar to `agent-output/ecommerce/01-cost-estimate.md`.
-
 ## General Requirements
 
 - Keep markdown lines <= 120 characters.

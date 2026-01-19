@@ -1,0 +1,114 @@
+# Operations Runbook: {project-name}
+
+**Version**: 1.0
+**Date**: {date}
+**Environment**: {environment}
+**Region**: {region}
+
+---
+
+## Quick Reference
+
+| Item                | Value             |
+| ------------------- | ----------------- |
+| **Primary Region**  | {region}          |
+| **Resource Group**  | {resource-group}  |
+| **Support Contact** | {support-contact} |
+| **Escalation Path** | {escalation-path} |
+
+### Critical Resources
+
+| Resource   | Name   | Resource Group   |
+| ---------- | ------ | ---------------- |
+| {resource} | {name} | {resource-group} |
+
+---
+
+## 1. Daily Operations
+
+### 1.1 Health Checks
+
+**Morning Health Check:**
+
+1. ✅ {health-check-1}
+2. ✅ {health-check-2}
+3. ✅ {health-check-3}
+
+**KQL Query - System Health Overview:**
+
+```kusto
+// Health query example
+{kql-query}
+```
+
+### 1.2 Log Review
+
+**Priority Logs to Review:**
+
+| Log Source   | Query Focus   | Action Threshold |
+| ------------ | ------------- | ---------------- |
+| {log-source} | {query-focus} | {threshold}      |
+
+---
+
+## 2. Incident Response
+
+### 2.1 Severity Definitions
+
+| Severity | Definition   | Response Time |
+| -------- | ------------ | ------------- |
+| P1       | {definition} | {time}        |
+| P2       | {definition} | {time}        |
+| P3       | {definition} | {time}        |
+
+### 2.2 Runbooks by Alert
+
+| Alert        | Runbook            | Owner   |
+| ------------ | ------------------ | ------- |
+| {alert-name} | {runbook-location} | {owner} |
+
+---
+
+## 3. Common Procedures
+
+### 3.1 Restart Services
+
+```bash
+# Restart App Service
+{restart-command}
+```
+
+### 3.2 Scale Resources
+
+```bash
+# Scale up/out
+{scale-command}
+```
+
+---
+
+## 4. Maintenance Windows
+
+| Task               | Schedule   | Duration   |
+| ------------------ | ---------- | ---------- |
+| {maintenance-task} | {schedule} | {duration} |
+
+---
+
+## 5. Contacts & Escalation
+
+| Role   | Contact   | Phone   |
+| ------ | --------- | ------- |
+| {role} | {contact} | {phone} |
+
+---
+
+## 6. Change Log
+
+| Date   | Change   | Author   |
+| ------ | -------- | -------- |
+| {date} | {change} | {author} |
+
+---
+
+_Operations runbook generated from infrastructure artifacts._

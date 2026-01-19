@@ -100,7 +100,7 @@ Critical information to gather (ask if missing):
 | Requirement      | Default Value                       | Question to Ask                              |
 | ---------------- | ----------------------------------- | -------------------------------------------- |
 | Project name     | (required)                          | What is the project/workload name?           |
-| Budget           | (required)                          | What is the monthly/annual budget?           |
+| Budget           | (required)                          | What is your approximate monthly budget?     |
 | SLA target       | 99.9%                               | What uptime is required? (99.9%, 99.95%...?) |
 | RTO              | 4 hours                             | Maximum acceptable downtime?                 |
 | RPO              | 1 hour                              | Maximum acceptable data loss window?         |
@@ -163,7 +163,7 @@ When creating the full requirements document, include these H2 sections **in ord
 2. `## Functional Requirements` — Core capabilities, user types, integrations
 3. `## Non-Functional Requirements (NFRs)` — Availability, performance, scalability
 4. `## Compliance & Security Requirements` — Frameworks, data residency, auth
-5. `## Cost Constraints` — Budget table, optimization priorities
+5. `## Budget` — User's approximate budget (MCP generates detailed estimates)
 6. `## Operational Requirements` — Monitoring, support, backup/DR
 7. `## Regional Preferences` — Primary region, failover, availability zones
 8. `## Summary for Architecture Assessment` — Key constraints for next agent (optional)

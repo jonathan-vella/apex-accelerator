@@ -19,7 +19,7 @@
 - Agent definitions: `.github/agents/*.agent.md`
 - Shared defaults: `.github/agents/_shared/defaults.md` (regions, tags, AVM, security)
 - Plan requirements: `.github/prompts/plan-requirements.prompt.md` (comprehensive NFR capture)
-- Workflow guide: `docs/workflow/WORKFLOW.md`
+- Workflow guide: `docs/reference/workflow.md`
 - Reference docs: `docs/reference/` (defaults, workflow, agents-overview, bicep-patterns)
 - Line endings: `.gitattributes` (use `* text=auto eol=lf` for cross-platform)
 
@@ -55,7 +55,7 @@ graph LR
 
 **How to use agents**: `Ctrl+Alt+I` → select agent from picker → type prompt → wait for approval before next step
 
-📖 **Full workflow details**: `docs/workflow/WORKFLOW.md`
+📖 **Full workflow details**: `docs/reference/workflow.md`
 
 ## Project Structure
 
@@ -69,10 +69,9 @@ azure-agentic-infraops/
 │   └── copilot-instructions.md  # THIS FILE
 ├── agent-output/{project}/      # Agent-generated artifacts
 ├── infra/bicep/                 # Generated Bicep templates
-├── scenarios/                   # Demo scenarios S01-S10
+├── scenarios/                   # Demo scenarios S01-S08
 ├── docs/                        # Documentation
-│   ├── reference/               # Single source of truth
-│   └── workflow/WORKFLOW.md     # Full workflow guide
+│   └── reference/               # Single source of truth (incl. workflow.md)
 └── mcp/azure-pricing-mcp/       # Azure Pricing MCP server
 ```
 
@@ -155,7 +154,7 @@ code azure-agentic-infraops
 ## References
 
 - **Shared Defaults**: `.github/agents/_shared/defaults.md`
-- **Workflow Guide**: `docs/workflow/WORKFLOW.md`
+- **Workflow Guide**: `docs/reference/workflow.md`
 - **Bicep Patterns**: `docs/reference/bicep-patterns.md`
 - **Agents Overview**: `docs/reference/agents-overview.md`
 - **Troubleshooting**: `docs/guides/troubleshooting.md`
