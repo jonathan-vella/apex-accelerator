@@ -111,34 +111,7 @@ jobs:
           cp upstream/.gitattributes .gitattributes
           cp upstream/VERSION.md VERSION.md
 
-          # 12. Docs - essential documentation files
-          echo "📁 Syncing docs/reference/"
-          rm -rf docs/reference/
-          cp -r upstream/docs/reference/ docs/reference/
-
-          echo "📁 Syncing docs/workflow/"
-          rm -rf docs/workflow/
-          cp -r upstream/docs/workflow/ docs/workflow/
-
-          echo "📁 Syncing docs/adr/"
-          rm -rf docs/adr/
-          cp -r upstream/docs/adr/ docs/adr/
-
-          echo "📁 Syncing docs/guides/"
-          rm -rf docs/guides/
-          cp -r upstream/docs/guides/ docs/guides/
-
-          echo "📄 Syncing docs/GLOSSARY.md"
-          if [ -f "upstream/docs/GLOSSARY.md" ]; then
-            cp upstream/docs/GLOSSARY.md docs/GLOSSARY.md
-          fi
-
-          echo "📄 Syncing docs/README.md"
-          if [ -f "upstream/docs/README.md" ]; then
-            cp upstream/docs/README.md docs/README.md
-          fi
-
-          # 13. Agent output template
+          # 12. Agent output template
           echo "📄 Syncing agent-output/README.md"
           if [ -f "upstream/agent-output/README.md" ]; then
             cp upstream/agent-output/README.md agent-output/README.md
@@ -146,7 +119,7 @@ jobs:
             echo "  ⚠️ Skipped: agent-output/README.md not found in upstream"
           fi
 
-          # 14. Infra template (optional - may not exist in upstream)
+          # 13. Infra template (optional - may not exist in upstream)
           echo "📄 Syncing infra/bicep/README.md"
           if [ -f "upstream/infra/bicep/README.md" ]; then
             cp upstream/infra/bicep/README.md infra/bicep/README.md
@@ -242,17 +215,11 @@ jobs:
             - `.vscode/` - VS Code settings
             - `.husky/` - Git hooks
             - `mcp/azure-pricing-mcp/` - MCP server
-            - `docs/reference/` - Reference documentation
-            - `docs/workflow/` - Workflow documentation
-            - `docs/adr/` - Architecture Decision Records
-            - `docs/guides/` - User guides
-            - `docs/GLOSSARY.md` - Glossary
             - Root config files (package.json, etc.)
 
             ### Excluded from Sync
             - `scenarios/` - Demo scenarios (main repo only)
-            - `docs/presenter/` - Presentation materials
-            - `docs/diagrams/` - Generated diagrams
+            - `docs/` - Template maintains its own documentation
             - `README.md` - Template has its own README
 
             ### Review Checklist
