@@ -85,7 +85,7 @@ to ensure recommendations align with current Microsoft guidance.
 | ---------------------- | ------------------------------------------------- | ----------------------------- |
 | **NFRs (mandatory)**   | SLA target, RTO, RPO, performance targets         | Ask user for specifics        |
 | **Compliance**         | Regulatory framework (HIPAA, PCI-DSS, GDPR, etc.) | Ask if any compliance applies |
-| **Cost Constraints**   | Monthly/annual budget or "optimize for cost"      | Ask for budget range          |
+| **Budget**             | Approximate monthly budget (MCP generates detail) | Ask for budget range          |
 | **Scale Requirements** | Expected users, transactions, data volume         | Ask for growth projections    |
 
 **Validation Prompt Template:**

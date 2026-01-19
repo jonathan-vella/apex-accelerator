@@ -70,14 +70,16 @@ Identify applicable requirements:
 - **Data residency**: Primary region, sovereignty requirements
 - **Security controls**: Authentication, encryption, network isolation
 
-### Step 5: Cost Constraints
+### Step 5: Budget
 
-Capture budget information:
+Capture the user's budget (approximate is fine):
 
-- Monthly operational budget
-- Annual budget
-- One-time setup budget
-- Cost optimization priorities (ranked 1-5)
+- Monthly budget (e.g., ~$50/month)
+- Annual budget (optional)
+- One-time setup budget (optional)
+
+> The Azure Pricing MCP server will generate detailed cost estimates during
+> architecture assessment (Step 2).
 
 ### Step 6: Operational Requirements
 
@@ -119,7 +121,7 @@ Before completing, verify:
 - [ ] At least one functional requirement defined
 - [ ] SLA/RTO/RPO specified (or explicitly marked N/A)
 - [ ] Compliance requirements identified
-- [ ] Budget range provided
+- [ ] Budget provided (approximate OK - MCP generates estimates)
 - [ ] Primary region confirmed
 
 ## Next Steps
@@ -134,4 +136,4 @@ After requirements are captured and approved:
 
 - Template: [01-requirements.template.md](../templates/01-requirements.template.md)
 - Agent: [project-planner.agent.md](../agents/project-planner.agent.md)
-- Workflow: [WORKFLOW.md](../../docs/workflow/WORKFLOW.md)
+- Workflow: [workflow.md](../../docs/reference/workflow.md)

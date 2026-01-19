@@ -1,14 +1,14 @@
 # Version Information
 
-**Current Version:** 3.11.0
+**Current Version:** 5.1.0
 
-**Last Updated:** 2026-01-14
+**Last Updated:** 2026-01-19
 
-**Build:** 2b62c73
+**Build:** 8b9dc23
 
 ## Version History
 
-See the [main repository CHANGELOG](https://github.com/jonathan-vella/azure-agentic-infraops/blob/main/CHANGELOG.md) for detailed release notes.
+See [CHANGELOG.md](CHANGELOG.md) for detailed release notes.
 
 ## Semantic Versioning
 

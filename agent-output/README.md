@@ -98,6 +98,5 @@ Legacy demo outputs in the following locations are preserved for demonstration p
 
 - `docs/adr/` - Global Architecture Decision Records
 - `docs/diagrams/` - Workflow and architecture diagrams
-- `.bicep-planning-files/` - Legacy planning files
 
 New projects should use this `agent-output/` structure exclusively.
