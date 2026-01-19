@@ -65,32 +65,44 @@ jobs:
           echo "📄 Syncing .github/copilot-instructions.md"
           cp upstream/.github/copilot-instructions.md .github/copilot-instructions.md
 
-          # 5. Shared agent defaults
+          # 5. GitHub templates (issue and PR templates)
+          echo "📁 Syncing .github/ISSUE_TEMPLATE/"
+          rm -rf .github/ISSUE_TEMPLATE/
+          if [ -d "upstream/.github/ISSUE_TEMPLATE" ]; then
+            cp -r upstream/.github/ISSUE_TEMPLATE/ .github/ISSUE_TEMPLATE/
+          fi
+
+          echo "📄 Syncing .github/PULL_REQUEST_TEMPLATE.md"
+          if [ -f "upstream/.github/PULL_REQUEST_TEMPLATE.md" ]; then
+            cp upstream/.github/PULL_REQUEST_TEMPLATE.md .github/PULL_REQUEST_TEMPLATE.md
+          fi
+
+          # 6. Shared agent defaults
           echo "📁 Syncing .github/agents/_shared/"
           # Already included in agents/ sync above
 
-          # 6. Dev container configuration
+          # 7. Dev container configuration
           echo "📁 Syncing .devcontainer/"
           rm -rf .devcontainer/
           cp -r upstream/.devcontainer/ .devcontainer/
 
-          # 7. MCP server (excluding .archive/)
+          # 8. MCP server (excluding .archive/)
           echo "📁 Syncing mcp/azure-pricing-mcp/"
           rm -rf mcp/azure-pricing-mcp/
           cp -r upstream/mcp/azure-pricing-mcp/ mcp/azure-pricing-mcp/
           rm -rf mcp/azure-pricing-mcp/.archive/ 2>/dev/null || true
 
-          # 8. VS Code settings
+          # 9. VS Code settings
           echo "📁 Syncing .vscode/"
           rm -rf .vscode/
           cp -r upstream/.vscode/ .vscode/
 
-          # 9. Husky hooks
+          # 10. Husky hooks
           echo "📁 Syncing .husky/"
           rm -rf .husky/
           cp -r upstream/.husky/ .husky/
 
-          # 10. Root config files
+          # 11. Root config files
           echo "📄 Syncing root config files"
           cp upstream/package.json package.json
           cp upstream/package-lock.json package-lock.json 2>/dev/null || true
@@ -99,7 +111,7 @@ jobs:
           cp upstream/.gitattributes .gitattributes
           cp upstream/VERSION.md VERSION.md
 
-          # 11. Docs - only essential reference files
+          # 12. Docs - essential documentation files
           echo "📁 Syncing docs/reference/"
           rm -rf docs/reference/
           cp -r upstream/docs/reference/ docs/reference/
@@ -112,7 +124,21 @@ jobs:
           rm -rf docs/adr/
           cp -r upstream/docs/adr/ docs/adr/
 
-          # 12. Agent output template
+          echo "📁 Syncing docs/guides/"
+          rm -rf docs/guides/
+          cp -r upstream/docs/guides/ docs/guides/
+
+          echo "📄 Syncing docs/GLOSSARY.md"
+          if [ -f "upstream/docs/GLOSSARY.md" ]; then
+            cp upstream/docs/GLOSSARY.md docs/GLOSSARY.md
+          fi
+
+          echo "📄 Syncing docs/README.md"
+          if [ -f "upstream/docs/README.md" ]; then
+            cp upstream/docs/README.md docs/README.md
+          fi
+
+          # 13. Agent output template
           echo "📄 Syncing agent-output/README.md"
           if [ -f "upstream/agent-output/README.md" ]; then
             cp upstream/agent-output/README.md agent-output/README.md
@@ -120,7 +146,7 @@ jobs:
             echo "  ⚠️ Skipped: agent-output/README.md not found in upstream"
           fi
 
-          # 13. Infra template (optional - may not exist in upstream)
+          # 14. Infra template (optional - may not exist in upstream)
           echo "📄 Syncing infra/bicep/README.md"
           if [ -f "upstream/infra/bicep/README.md" ]; then
             cp upstream/infra/bicep/README.md infra/bicep/README.md
@@ -140,23 +166,6 @@ jobs:
           # Remove any scenario references that shouldn't be in template
           # These patterns exist in the main repo but not in template
 
-          # Fix docs/guides if it was synced (we maintain our own minimal version)
-          if [ -d "docs/guides" ]; then
-            # Keep only essential guides
-            find docs/guides -type f -name "*.md" | while read file; do
-              filename=$(basename "$file")
-              case "$filename" in
-                README.md|quickstart.md|troubleshooting.md|markdown-style-guide.md)
-                  echo "  ✓ Keeping: $filename"
-                  ;;
-                *)
-                  echo "  ✗ Removing: $filename"
-                  rm "$file"
-                  ;;
-              esac
-            done
-          fi
-
           # Remove scenario-specific folders if accidentally synced
           rm -rf scenarios/ 2>/dev/null || true
           rm -rf docs/presenter/ 2>/dev/null || true
@@ -164,6 +173,7 @@ jobs:
           rm -rf docs/cost-estimates/ 2>/dev/null || true
           rm -rf docs/audit-checklists/ 2>/dev/null || true
           rm -rf docs/getting-started/ 2>/dev/null || true
+          rm -rf .bicep-planning-files/ 2>/dev/null || true
 
           echo "✅ Cleanup complete"
 
@@ -194,7 +204,11 @@ jobs:
         if: steps.changes.outputs.has_changes == 'true' && github.event.inputs.dry_run != 'true'
         run: |
           if [ -f "VERSION.md" ]; then
-            VERSION=$(grep -oP '(?<=## Version )\d+\.\d+\.\d+' VERSION.md | head -1 || echo "unknown")
+            VERSION=$(grep -oP '(?<=\*\*Current Version:\*\* )\d+\.\d+\.\d+' VERSION.md | head -1 || echo "unknown")
+            # Fallback to old format if new format not found
+            if [ "$VERSION" = "unknown" ]; then
+              VERSION=$(grep -oP '(?<=## Version )\d+\.\d+\.\d+' VERSION.md | head -1 || echo "unknown")
+            fi
           else
             VERSION="unknown"
           fi
@@ -222,6 +236,8 @@ jobs:
             - `.github/instructions/` - Instruction files
             - `.github/prompts/` - Prompt files
             - `.github/copilot-instructions.md` - Main Copilot instructions
+            - `.github/ISSUE_TEMPLATE/` - Issue templates
+            - `.github/PULL_REQUEST_TEMPLATE.md` - PR template
             - `.devcontainer/` - Dev container configuration
             - `.vscode/` - VS Code settings
             - `.husky/` - Git hooks
@@ -229,6 +245,8 @@ jobs:
             - `docs/reference/` - Reference documentation
             - `docs/workflow/` - Workflow documentation
             - `docs/adr/` - Architecture Decision Records
+            - `docs/guides/` - User guides
+            - `docs/GLOSSARY.md` - Glossary
             - Root config files (package.json, etc.)
 
             ### Excluded from Sync
