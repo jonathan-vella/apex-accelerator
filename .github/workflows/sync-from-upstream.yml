@@ -60,7 +60,7 @@ jobs:
             --exclude='USAGE-PROMPT.md' \
             --exclude='CONTRIBUTING.md' \
             --exclude='CHANGELOG.md' \
-            --exclude='.github/workflows/sync-from-upstream.yml' \
+            --exclude='.github/workflows/' \
             upstream/ ./ || [ $? -eq 24 ]
 
           # Sync specific README files we want to keep updated
@@ -158,12 +158,12 @@ jobs:
             |------|--------|
             | `scenarios/` | Demo scenarios (main repo only) |
             | `docs/` | Template maintains its own documentation |
+            | `.github/workflows/` | Template maintains its own workflows |
             | `agent-output/*/` | Example project outputs (README synced) |
             | `infra/bicep/*/` | Example Bicep templates (README synced) |
             | `README.md` | Template has its own README |
             | `CONTRIBUTING.md` | Main repo contribution guide |
             | `CHANGELOG.md` | Main repo changelog |
-            | `.github/workflows/sync-from-upstream.yml` | This workflow (self-preserve) |
 
             ### Review Checklist
             - [ ] Review changed files for unexpected content
