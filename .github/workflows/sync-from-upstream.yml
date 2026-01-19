@@ -48,7 +48,8 @@ jobs:
 
           # Exclusion-based sync: sync everything EXCEPT specific paths
           # This ensures new folders/files are automatically picked up
-          rsync -av --delete \
+          # Note: --delete is NOT used because excluded directories may contain files
+          rsync -av \
             --exclude='.git/' \
             --exclude='scenarios/' \
             --exclude='docs/' \
