@@ -8,7 +8,7 @@
 
 ## Version History
 
-See [CHANGELOG.md](CHANGELOG.md) for detailed release notes.
+See the [main repository CHANGELOG](https://github.com/jonathan-vella/azure-agentic-infraops/blob/main/CHANGELOG.md) for detailed release notes.
 
 ## Semantic Versioning
 

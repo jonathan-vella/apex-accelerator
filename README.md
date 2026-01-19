@@ -126,22 +126,18 @@ graph TB
 │   ├── agents/              # Copilot agents
 │   ├── instructions/        # AI coding standards
 │   ├── prompts/             # Reusable prompt templates
+│   ├── templates/           # Artifact output templates
 │   └── copilot-instructions.md
-├── .bicep-planning-files/   # Implementation plans (bicep-plan output)
 ├── agent-output/            # Agent-generated artifacts
 ├── infra/bicep/             # Bicep templates
-├── mcp/azure-pricing-mcp/   # Azure Pricing MCP server
-└── docs/
-    ├── adr/                 # Architecture Decision Records
-    ├── reference/           # Defaults, patterns, agents
-    └── workflow/            # Agent workflow documentation
+└── mcp/azure-pricing-mcp/   # Azure Pricing MCP server
 ```
 
 ## Documentation
 
 - [Copilot Instructions](.github/copilot-instructions.md)
-- [Documentation Hub](docs/README.md)
-- [Architecture Decisions](docs/adr/README.md)
+- [Main Repository Docs](https://github.com/jonathan-vella/azure-agentic-infraops/tree/main/docs)
+- [Workflow Guide](https://github.com/jonathan-vella/azure-agentic-infraops/blob/main/docs/reference/workflow.md)
 
 ## Development
 

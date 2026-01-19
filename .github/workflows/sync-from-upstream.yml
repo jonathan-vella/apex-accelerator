@@ -42,110 +42,54 @@ jobs:
       - name: Sync files from upstream
         run: |
           echo "🔄 Syncing files from upstream repository..."
+          echo ""
+          echo "Using exclusion-based sync - all content synced EXCEPT blocklist"
+          echo ""
 
-          # Define paths to sync (source -> destination)
-          # These are the essential files for running custom agents
+          # Exclusion-based sync: sync everything EXCEPT specific paths
+          # This ensures new folders/files are automatically picked up
+          rsync -av --delete \
+            --exclude='.git/' \
+            --exclude='scenarios/' \
+            --exclude='docs/' \
+            --exclude='agent-output/*/' \
+            --exclude='infra/bicep/*/' \
+            --exclude='README.md' \
+            --exclude='TEMPLATE-README.md' \
+            --exclude='USAGE-PROMPT.md' \
+            --exclude='CONTRIBUTING.md' \
+            --exclude='CHANGELOG.md' \
+            --exclude='.github/workflows/sync-from-upstream.yml' \
+            upstream/ ./
 
-          # 1. Agent definitions
-          echo "📁 Syncing .github/agents/"
-          rm -rf .github/agents/
-          cp -r upstream/.github/agents/ .github/agents/
-
-          # 2. Instruction files
-          echo "📁 Syncing .github/instructions/"
-          rm -rf .github/instructions/
-          cp -r upstream/.github/instructions/ .github/instructions/
-
-          # 3. Prompt files
-          echo "📁 Syncing .github/prompts/"
-          rm -rf .github/prompts/
-          cp -r upstream/.github/prompts/ .github/prompts/
-
-          # 4. Copilot instructions (main file)
-          echo "📄 Syncing .github/copilot-instructions.md"
-          cp upstream/.github/copilot-instructions.md .github/copilot-instructions.md
-
-          # 5. GitHub templates (issue and PR templates)
-          echo "📁 Syncing .github/ISSUE_TEMPLATE/"
-          rm -rf .github/ISSUE_TEMPLATE/
-          if [ -d "upstream/.github/ISSUE_TEMPLATE" ]; then
-            cp -r upstream/.github/ISSUE_TEMPLATE/ .github/ISSUE_TEMPLATE/
-          fi
-
-          echo "📄 Syncing .github/PULL_REQUEST_TEMPLATE.md"
-          if [ -f "upstream/.github/PULL_REQUEST_TEMPLATE.md" ]; then
-            cp upstream/.github/PULL_REQUEST_TEMPLATE.md .github/PULL_REQUEST_TEMPLATE.md
-          fi
-
-          # 6. Shared agent defaults
-          echo "📁 Syncing .github/agents/_shared/"
-          # Already included in agents/ sync above
-
-          # 7. Dev container configuration
-          echo "📁 Syncing .devcontainer/"
-          rm -rf .devcontainer/
-          cp -r upstream/.devcontainer/ .devcontainer/
-
-          # 8. MCP server (excluding .archive/)
-          echo "📁 Syncing mcp/azure-pricing-mcp/"
-          rm -rf mcp/azure-pricing-mcp/
-          cp -r upstream/mcp/azure-pricing-mcp/ mcp/azure-pricing-mcp/
-          rm -rf mcp/azure-pricing-mcp/.archive/ 2>/dev/null || true
-
-          # 9. VS Code settings
-          echo "📁 Syncing .vscode/"
-          rm -rf .vscode/
-          cp -r upstream/.vscode/ .vscode/
-
-          # 10. Husky hooks
-          echo "📁 Syncing .husky/"
-          rm -rf .husky/
-          cp -r upstream/.husky/ .husky/
-
-          # 11. Root config files
-          echo "📄 Syncing root config files"
-          cp upstream/package.json package.json
-          cp upstream/package-lock.json package-lock.json 2>/dev/null || true
-          cp upstream/commitlint.config.js commitlint.config.js
-          cp upstream/.markdownlint-cli2.jsonc .markdownlint-cli2.jsonc
-          cp upstream/.gitattributes .gitattributes
-          cp upstream/VERSION.md VERSION.md
-
-          # 12. Agent output template
-          echo "📄 Syncing agent-output/README.md"
+          # Sync specific README files we want to keep updated
+          echo ""
+          echo "📄 Syncing template README files..."
           if [ -f "upstream/agent-output/README.md" ]; then
             cp upstream/agent-output/README.md agent-output/README.md
-          else
-            echo "  ⚠️ Skipped: agent-output/README.md not found in upstream"
+            echo "  ✓ agent-output/README.md"
           fi
-
-          # 13. Infra template (optional - may not exist in upstream)
-          echo "📄 Syncing infra/bicep/README.md"
           if [ -f "upstream/infra/bicep/README.md" ]; then
+            mkdir -p infra/bicep
             cp upstream/infra/bicep/README.md infra/bicep/README.md
-          else
-            echo "  ⚠️ Skipped: infra/bicep/README.md not found in upstream"
+            echo "  ✓ infra/bicep/README.md"
           fi
 
-          # Cleanup
+          # Cleanup upstream clone
           rm -rf upstream/
 
+          echo ""
           echo "✅ Sync complete"
 
       - name: Post-sync cleanup
         run: |
           echo "🧹 Running post-sync cleanup..."
 
-          # Remove any scenario references that shouldn't be in template
-          # These patterns exist in the main repo but not in template
+          # Remove any archive folders that shouldn't be in template
+          find . -type d -name ".archive" -exec rm -rf {} + 2>/dev/null || true
 
-          # Remove scenario-specific folders if accidentally synced
+          # Remove any scenario-specific content that may have leaked
           rm -rf scenarios/ 2>/dev/null || true
-          rm -rf docs/presenter/ 2>/dev/null || true
-          rm -rf docs/diagrams/ 2>/dev/null || true
-          rm -rf docs/cost-estimates/ 2>/dev/null || true
-          rm -rf docs/audit-checklists/ 2>/dev/null || true
-          rm -rf docs/getting-started/ 2>/dev/null || true
           rm -rf .bicep-planning-files/ 2>/dev/null || true
 
           echo "✅ Cleanup complete"
@@ -204,29 +148,28 @@ jobs:
             ### Upstream Version
             **${{ steps.version.outputs.version }}**
 
-            ### Synced Components
-            - `.github/agents/` - Custom agent definitions
-            - `.github/instructions/` - Instruction files
-            - `.github/prompts/` - Prompt files
-            - `.github/copilot-instructions.md` - Main Copilot instructions
-            - `.github/ISSUE_TEMPLATE/` - Issue templates
-            - `.github/PULL_REQUEST_TEMPLATE.md` - PR template
-            - `.devcontainer/` - Dev container configuration
-            - `.vscode/` - VS Code settings
-            - `.husky/` - Git hooks
-            - `mcp/azure-pricing-mcp/` - MCP server
-            - Root config files (package.json, etc.)
+            ### Sync Strategy
+            **Exclusion-based sync** - All content is synced EXCEPT the blocklist below.
+            This ensures new folders and files are automatically picked up.
 
             ### Excluded from Sync
-            - `scenarios/` - Demo scenarios (main repo only)
-            - `docs/` - Template maintains its own documentation
-            - `README.md` - Template has its own README
+            | Path | Reason |
+            |------|--------|
+            | `scenarios/` | Demo scenarios (main repo only) |
+            | `docs/` | Template maintains its own documentation |
+            | `agent-output/*/` | Example project outputs (README synced) |
+            | `infra/bicep/*/` | Example Bicep templates (README synced) |
+            | `README.md` | Template has its own README |
+            | `CONTRIBUTING.md` | Main repo contribution guide |
+            | `CHANGELOG.md` | Main repo changelog |
+            | `.github/workflows/sync-from-upstream.yml` | This workflow (self-preserve) |
 
             ### Review Checklist
-            - [ ] Changes are appropriate for the template
+            - [ ] Review changed files for unexpected content
             - [ ] No scenario-specific content leaked through
             - [ ] All agent definitions work correctly
             - [ ] Dev container builds successfully
+            - [ ] Root config files are appropriate for template
 
             ---
             *Auto-generated by the upstream sync workflow*

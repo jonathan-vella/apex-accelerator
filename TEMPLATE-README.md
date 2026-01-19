@@ -14,19 +14,18 @@
 | `.github/agents/`                 | Custom Copilot agents for the workflow        |
 | `.github/instructions/`           | AI coding standards and best practices        |
 | `.github/prompts/`                | Reusable prompt templates                     |
+| `.github/templates/`              | Artifact output templates                     |
 | `.github/copilot-instructions.md` | Main Copilot context file                     |
 | `.husky/`                         | Git hooks for quality enforcement             |
 | `.vscode/`                        | VS Code and MCP server configuration          |
 | `mcp/azure-pricing-mcp/`          | Azure Pricing MCP server                      |
 
-### Documentation
+### Output Directories
 
 | Component         | Purpose                            |
 | ----------------- | ---------------------------------- |
-| `docs/reference/` | Defaults, patterns, agents         |
-| `docs/workflow/`  | Seven-step agent workflow guide    |
-| `docs/adr/`       | Architecture Decision Records      |
-| `docs/guides/`    | Quickstart and troubleshooting     |
+| `agent-output/`   | Agent-generated artifacts          |
+| `infra/bicep/`    | Generated Bicep templates          |
 
 ### Quality Tooling
 
@@ -55,17 +54,16 @@ This template automatically syncs from the main repository weekly via the
 - **Manual trigger**: Actions → Sync from Upstream → Run workflow
 - **Dry run option**: Preview changes without creating a PR
 
-The sync includes:
-- Agent definitions and instructions
-- Dev container configuration
-- MCP server updates
-- Reference documentation
-- Config file updates
+The sync uses an **exclusion-based approach** - all content is synced EXCEPT:
 
 **Excluded from sync** (template-specific):
 - `scenarios/` - Demo scenarios
-- `docs/presenter/` - Presentation materials
-- `README.md` - Template maintains its own
+- `docs/` - Template maintains its own documentation
+- `agent-output/*/` - Example project outputs (README synced)
+- `infra/bicep/*/` - Example templates (README synced)
+- `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md` - Main repo files
+
+This ensures new folders and files are automatically picked up from upstream.
 
 ## Quick Start
 
@@ -93,10 +91,9 @@ flowchart LR
     C --> D["bicep-implement"]
 ```
 
-See [Workflow Guide](docs/workflow/WORKFLOW.md) for the complete seven-step workflow.
+See the [main repository workflow guide](https://github.com/jonathan-vella/azure-agentic-infraops/blob/main/docs/reference/workflow.md) for the complete seven-step workflow.
 
 ## Related
 
 - **Main repository**: [azure-agentic-infraops](https://github.com/jonathan-vella/azure-agentic-infraops)
-- **Workflow documentation**: [docs/workflow/WORKFLOW.md](docs/workflow/WORKFLOW.md)
-- **Agent reference**: [docs/reference/agents-overview.md](docs/reference/agents-overview.md)
+- **Workflow documentation**: [Main repo docs](https://github.com/jonathan-vella/azure-agentic-infraops/tree/main/docs)
