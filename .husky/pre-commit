@@ -23,3 +23,27 @@ if [ -n "$STAGED_MD_FILES" ]; then
 else
   echo "ℹ️  No markdown files to validate"
 fi
+
+# Core artifact structure validation (01, 02, 04, 06)
+echo ""
+echo "🔍 Running core artifact structure validation..."
+
+# Check if any core artifacts are staged (Wave 2 validated in CI only)
+STAGED_CORE=$(echo "$STAGED_MD_FILES" | grep -E '(01-requirements|02-architecture-assessment|04-implementation-plan|04-governance-constraints|06-deployment-summary)\.md$' || true)
+
+if [ -n "$STAGED_CORE" ]; then
+  echo "📋 Validating core artifact structure..."
+  # Use per-artifact strictness (no override) - standard for core, relaxed for Wave 2
+  npm run lint:artifact-templates
+  
+  if [ $? -ne 0 ]; then
+    echo ""
+    echo "❌ Core artifact validation failed!"
+    echo "Ensure artifact structure matches templates in .github/templates/"
+    exit 1
+  fi
+  
+  echo "✅ Core artifacts passed structure validation"
+else
+  echo "ℹ️  No core artifacts to validate"
+fi

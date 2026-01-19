@@ -35,7 +35,7 @@ aligned with Azure Well-Architected Framework and Azure Verified Modules.
 ```mermaid
 %%{init: {'theme':'neutral'}}%%
 graph LR
-    P["@plan<br/>Step 1"] --> A[azure-principal-architect<br/>Step 2]
+    P["Project Planner<br/>Step 1"] --> A[azure-principal-architect<br/>Step 2]
     A --> D["Design Artifacts<br/>Step 3"]
     D --> B[bicep-plan<br/>Step 4]
     B --> I[bicep-implement<br/>Step 5]
@@ -45,7 +45,7 @@ graph LR
 
 | Step | Agent                                | Output                          |
 | ---- | ------------------------------------ | ------------------------------- |
-| 1    | `@plan`                              | `01-requirements.md`            |
+| 1    | `project-planner`                    | `01-requirements.md`            |
 | 2    | `azure-principal-architect`          | `02-architecture-assessment.md` |
 | 3    | `diagram-generator`, `adr-generator` | `03-des-*.md/.py/.png`          |
 | 4    | `bicep-plan`                         | `04-implementation-plan.md`     |
@@ -53,7 +53,7 @@ graph LR
 | 6    | Deploy                               | `06-deployment-summary.md`      |
 | 7    | `workload-documentation-generator`   | `07-*.md`                       |
 
-**How to use agents**: `Ctrl+Shift+A` → select agent → type prompt → wait for approval before next step
+**How to use agents**: `Ctrl+Alt+I` → select agent from picker → type prompt → wait for approval before next step
 
 📖 **Full workflow details**: `docs/workflow/WORKFLOW.md`
 
@@ -62,7 +62,7 @@ graph LR
 ```
 azure-agentic-infraops/
 ├── .github/
-│   ├── agents/                  # 6 custom agents
+│   ├── agents/                  # 7 custom agents
 │   │   ├── _shared/defaults.md  # Regions, tags, AVM, security
 │   │   └── *.agent.md           # Agent definitions
 │   ├── instructions/            # File-type specific rules
