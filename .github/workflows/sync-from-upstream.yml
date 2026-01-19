@@ -48,7 +48,7 @@ jobs:
 
           # Exclusion-based sync: sync everything EXCEPT specific paths
           # This ensures new folders/files are automatically picked up
-          # Note: --delete is NOT used because excluded directories may contain files
+          # Note: rsync exit code 24 ("files vanished") is harmless and ignored
           rsync -av \
             --exclude='.git/' \
             --exclude='scenarios/' \
@@ -61,7 +61,7 @@ jobs:
             --exclude='CONTRIBUTING.md' \
             --exclude='CHANGELOG.md' \
             --exclude='.github/workflows/sync-from-upstream.yml' \
-            upstream/ ./
+            upstream/ ./ || [ $? -eq 24 ]
 
           # Sync specific README files we want to keep updated
           echo ""
