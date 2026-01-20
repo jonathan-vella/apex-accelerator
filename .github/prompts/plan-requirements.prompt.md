@@ -136,4 +136,3 @@ After requirements are captured and approved:
 
 - Template: [01-requirements.template.md](../templates/01-requirements.template.md)
 - Agent: [project-planner.agent.md](../agents/project-planner.agent.md)
-- Workflow: [workflow.md](../../docs/reference/workflow.md)
