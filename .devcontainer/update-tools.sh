@@ -21,35 +21,6 @@ else
     FAILURES+=("Bicep")
 fi
 
-# Update Terraform (informational - managed by devcontainer feature)
-echo "📦 Checking Terraform version..."
-CURRENT_TF=$(terraform version -json 2>/dev/null | jq -r '.terraform_version' || echo "unknown")
-echo "   ℹ️  Current version: $CURRENT_TF (managed by devcontainer feature)"
-
-# Update tfsec
-echo "📦 Updating tfsec..."
-if command -v tfsec &> /dev/null; then
-    CURRENT_TFSEC=$(tfsec --version 2>/dev/null || echo "unknown")
-    echo "   ℹ️  Current version: $CURRENT_TFSEC (managed by devcontainer feature)"
-fi
-
-# Update PowerShell modules (PowerShell itself managed by devcontainer feature)
-echo "📦 Updating PowerShell modules..."
-if command -v pwsh &> /dev/null && pwsh -NoProfile -Command "
-    \$ErrorActionPreference = 'SilentlyContinue'
-    \$modules = @('Az.Accounts', 'Az.Resources', 'Az.Storage', 'Az.Network', 'Az.KeyVault', 'Az.Websites')
-    foreach (\$module in \$modules) {
-        Write-Host \"   Updating \$module...\"
-        Update-Module -Name \$module -Force -ErrorAction SilentlyContinue
-    }
-    Write-Host '   ✅ PowerShell modules updated'
-" 2>/dev/null; then
-    :
-else
-    echo "   ⚠️  PowerShell module updates had issues"
-    FAILURES+=("PowerShell modules")
-fi
-
 # Update Python packages
 echo "📦 Updating Python packages..."
 if pip3 install --upgrade --quiet --break-system-packages checkov diagrams 2>/dev/null; then
@@ -59,26 +30,13 @@ else
     FAILURES+=("Python packages")
 fi
 
-# Update markdownlint
-echo "📦 Updating markdownlint-cli..."
-if sudo npm update -g markdownlint-cli --silent 2>/dev/null; then
-    echo "   ✅ markdownlint-cli updated"
+# Update markdownlint-cli2
+echo "📦 Updating markdownlint-cli2..."
+if npm update -g markdownlint-cli2 --silent 2>/dev/null; then
+    echo "   ✅ markdownlint-cli2 updated"
 else
-    echo "   ⚠️  markdownlint-cli update had issues"
-    FAILURES+=("markdownlint-cli")
-fi
-
-# Update Go modules
-echo "📦 Updating Go modules..."
-if command -v go &> /dev/null; then
-    if go install github.com/gruntwork-io/terratest/modules/terraform@latest 2>/dev/null; then
-        echo "   ✅ Terratest updated"
-    else
-        echo "   ⚠️  Terratest update had issues"
-        FAILURES+=("Terratest")
-    fi
-else
-    echo "   ⚠️  Go not available, skipping Terratest"
+    echo "   ⚠️  markdownlint-cli2 update had issues"
+    FAILURES+=("markdownlint-cli2")
 fi
 
 # Summary
@@ -99,8 +57,6 @@ echo ""
 echo "📊 Current tool versions:"
 printf "   %-15s %s\n" "Azure CLI:" "$(az version --query '\"azure-cli\"' -o tsv 2>/dev/null || echo 'unknown')"
 printf "   %-15s %s\n" "Bicep:" "$(az bicep version 2>/dev/null || echo 'unknown')"
-printf "   %-15s %s\n" "Terraform:" "$(terraform version 2>/dev/null | head -n1 | awk '{print $2}' || echo 'unknown')"
-printf "   %-15s %s\n" "tfsec:" "$(tfsec --version 2>/dev/null || echo 'unknown')"
 printf "   %-15s %s\n" "Checkov:" "$(checkov --version 2>/dev/null || echo 'unknown')"
-printf "   %-15s %s\n" "markdownlint:" "$(markdownlint --version 2>/dev/null || echo 'unknown')"
+printf "   %-15s %s\n" "markdownlint:" "$(markdownlint-cli2 --version 2>/dev/null || echo 'unknown')"
 echo ""

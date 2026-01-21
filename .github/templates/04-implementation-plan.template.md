@@ -138,7 +138,7 @@ graph TD
 > - Governance constraints addressed
 > - CAF naming conventions applied
 >
-> Reply **"approve"** to proceed to bicep-implement, or provide feedback.
+> Reply **"approve"** to proceed to bicep-code, or provide feedback.
 
 ---
 

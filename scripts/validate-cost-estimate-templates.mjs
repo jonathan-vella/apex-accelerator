@@ -20,8 +20,8 @@ const REQUIRED_MERMAID_INIT =
 const TITLE_DRIFT = "Cost Estimate Drift";
 const TITLE_MISSING_AB = "Missing As-Built Examples";
 
-const AGENT_DES = ".github/agents/azure-principal-architect.agent.md";
-const AGENT_AB = ".github/agents/workload-documentation-generator.agent.md";
+const AGENT_DES = ".github/agents/architect.agent.md";
+const AGENT_AB = ".github/agents/docs.agent.md";
 
 const TEMPLATE_DES = ".github/templates/03-des-cost-estimate.template.md";
 const TEMPLATE_AB = ".github/templates/07-ab-cost-estimate.template.md";
