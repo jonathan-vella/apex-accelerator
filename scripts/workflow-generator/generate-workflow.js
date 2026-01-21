@@ -274,7 +274,7 @@ function getProgressiveMermaidDiagrams() {
     `%%{init: {'theme':'neutral'}}%%
 graph LR
     subgraph "Step 1: Requirements"
-        P["Project Planner"]
+        P["Plan"]
     end
 
     style P fill:#e1f5fe`,
@@ -283,7 +283,7 @@ graph LR
     `%%{init: {'theme':'neutral'}}%%
 graph LR
     subgraph "Step 1: Requirements"
-        P["Project Planner"]
+        P["Plan"]
     end
     subgraph "Step 2: Architecture"
         A["azure-principal-<br/>architect"]
@@ -298,7 +298,7 @@ graph LR
     `%%{init: {'theme':'neutral'}}%%
 graph LR
     subgraph "Step 1: Requirements"
-        P["Project Planner"]
+        P["Plan"]
     end
     subgraph "Step 2: Architecture"
         A["azure-principal-<br/>architect"]
@@ -320,7 +320,7 @@ graph LR
     `%%{init: {'theme':'neutral'}}%%
 graph LR
     subgraph "Step 1: Requirements"
-        P["Project Planner"]
+        P["Plan"]
     end
     subgraph "Step 2: Architecture"
         A["azure-principal-<br/>architect"]
@@ -347,7 +347,7 @@ graph LR
     `%%{init: {'theme':'neutral'}}%%
 graph LR
     subgraph "Step 1: Requirements"
-        P["Project Planner"]
+        P["Plan"]
     end
     subgraph "Step 2: Architecture"
         A["azure-principal-<br/>architect"]
@@ -358,7 +358,7 @@ graph LR
         B["bicep-plan"]
     end
     subgraph "Step 4: Implementation"
-        I["bicep-implement"]
+        I["bicep-code"]
     end
 
     P -->|requirements| A

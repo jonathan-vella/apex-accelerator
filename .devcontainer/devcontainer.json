@@ -3,10 +3,6 @@
   "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
 
   "features": {
-    "ghcr.io/devcontainers/features/terraform:1": {
-      "installTFsec": true,
-      "installTerragrunt": false
-    },
     "ghcr.io/devcontainers/features/azure-cli:1": {
       "installBicep": true,
       "version": "latest"
@@ -15,17 +11,37 @@
       "version": "latest"
     },
     "ghcr.io/devcontainers/features/python:1": {
-      "version": "3.12"
+      "version": "3.13",
+      "installTools": false
     },
     "ghcr.io/devcontainers/features/node:1": {
       "version": "lts"
     },
-    "ghcr.io/devcontainers/features/go:1": {
+    "ghcr.io/devcontainers/features/github-cli:1": {
       "version": "latest"
     }
   },
 
-  "postCreateCommand": "set -e; sudo apt-get update; sudo apt-get install -y graphviz dos2unix; pip install --user diagrams matplotlib pillow; npm install; npm install -g markdownlint-cli2; az config set auto-upgrade.enable=no --only-show-errors 2>/dev/null || true; az extension add --name azure-devops --only-show-errors 2>/dev/null || true; bash .devcontainer/post-create.sh",
+  // Lifecycle commands - use object format for parallel execution where possible
+  "onCreateCommand": {
+    "apt-packages": "sudo apt-get update && sudo apt-get install -y graphviz dos2unix",
+    "install-uv": "curl -LsSf https://astral.sh/uv/install.sh | sh"
+  },
+  "postCreateCommand": {
+    "npm-install": "npm install",
+    "npm-global": "npm install -g markdownlint-cli2",
+    "post-create": "bash .devcontainer/post-create.sh"
+  },
+  "postStartCommand": {
+    "lefthook": "npx lefthook install 2>/dev/null || true"
+  },
+
+  // Environment variables for Python optimization
+  "containerEnv": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONUNBUFFERED": "1",
+    "UV_CACHE_DIR": "/home/vscode/.cache/uv"
+  },
 
   "remoteEnv": {
     "AZURE_DEFAULTS_LOCATION": "swedencentral"
@@ -36,10 +52,8 @@
       "extensions": [
         "GitHub.copilot",
         "GitHub.copilot-chat",
-        "ms-vscode.vscode-node-azure-pack",
         "ms-azuretools.vscode-azureresourcegroups",
         "ms-azuretools.vscode-bicep",
-        "HashiCorp.terraform",
         "ms-vscode.powershell",
         "bierner.markdown-mermaid",
         "bierner.markdown-preview-github-styles",
@@ -48,7 +62,6 @@
         "ms-vscode.azurecli",
         "ms-azuretools.vscode-azurecontainerapps",
         "ms-azuretools.vscode-azurestaticwebapps",
-        "ms-azuretools.vscode-azureterraform",
         "ms-azuretools.azure-dev",
         "ms-azuretools.vscode-docker",
         "ms-kubernetes-tools.vscode-kubernetes-tools",
@@ -58,7 +71,6 @@
         "ms-azuretools.vscode-azure-github-copilot",
         "ms-vscode.vscode-websearchforcopilot",
         "teamsdevapp.vscode-ai-foundry",
-        "ms-windows-ai-studio.windows-ai-studio",
         "esbenp.prettier-vscode",
         "mechatroner.rainbow-csv",
         "redhat.vscode-yaml"
@@ -81,14 +93,15 @@
         "[bicep]": {
           "editor.tabSize": 2
         },
-        "[terraform]": {
-          "editor.tabSize": 2
-        },
         "[powershell]": {
           "editor.tabSize": 4
         },
+        "[python]": {
+          "editor.tabSize": 4
+        },
+        "python.analysis.typeCheckingMode": "basic",
         "markdownlint.config": {
-          "extends": "${workspaceFolder}/.markdownlint.json"
+          "extends": "${workspaceFolder}/.markdownlint-cli2.jsonc"
         },
         "markdownlint.run": "onSave"
       }
@@ -100,12 +113,13 @@
       "source": "${localEnv:USERPROFILE}${localEnv:HOME}/.azure",
       "target": "/home/vscode/.azure",
       "type": "bind"
+    },
+    {
+      "source": "devcontainer-uv-cache-${devcontainerId}",
+      "target": "/home/vscode/.cache/uv",
+      "type": "volume"
     }
   ],
 
-  "remoteUser": "vscode",
-
-  "containerEnv": {
-    "TF_PLUGIN_CACHE_DIR": "/home/vscode/.terraform-cache"
-  }
+  "remoteUser": "vscode"
 }

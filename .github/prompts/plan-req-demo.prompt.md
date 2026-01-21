@@ -15,7 +15,7 @@ All values are pre-filled for quick live demonstration.
 
 | Field           | Value                                        |
 | --------------- | -------------------------------------------- |
-| **Project**     | `contoso-static-demo`                        |
+| **Project**     | `infraops-demo`                              |
 | **Type**        | Static Web Application                       |
 | **Region**      | `westeurope` (Static Web App supported)      |
 | **Environment** | Production                                   |

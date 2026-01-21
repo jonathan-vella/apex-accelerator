@@ -205,13 +205,6 @@ if ($codeInstalled) {
 
 Write-CheckHeader "Optional Tools (Recommended)"
 
-# Terraform
-$tfInstalled = Test-Command "terraform"
-$tfVersion = if ($tfInstalled) { Get-CommandVersion "terraform" } else { "" }
-$results.Optional += Write-CheckResult -Name "Terraform" -Passed $tfInstalled `
-    -Details $tfVersion `
-    -Remediation "Install from https://terraform.io/downloads"
-
 # Python (for diagram generation)
 $pythonInstalled = Test-Command "python3" -or (Test-Command "python")
 $pythonVersion = if ($pythonInstalled) { 

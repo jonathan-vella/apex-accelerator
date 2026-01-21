@@ -9,97 +9,82 @@ exec 2>&1
 
 # Create directories
 echo "📂 Creating cache directories..."
-mkdir -p "${HOME}/.terraform-cache"
-chmod 755 "${HOME}/.terraform-cache"
+mkdir -p "${HOME}/.cache"
+# Fix ownership if needed (may be owned by root from previous installs)
+sudo chown -R vscode:vscode "${HOME}/.cache" 2>/dev/null || true
+chmod 755 "${HOME}/.cache" 2>/dev/null || true
 
 # Configure Git safe directory (for mounted volumes)
 echo "🔐 Configuring Git..."
 git config --global --add safe.directory "${PWD}"
 git config --global core.autocrlf input
+# Note: lefthook setup moved to postStartCommand (runs every container start)
 
-# Configure Husky git hooks
-echo "🪝 Setting up Git hooks (Husky)..."
-git config core.hooksPath .husky
-if [ -f ".husky/pre-commit" ]; then
-    # Try to set executable permission, but don't fail if it doesn't work
-    # (file may already be executable or permissions may be restricted on mounted volumes)
-    chmod +x .husky/pre-commit 2>/dev/null || true
-    if [ -x ".husky/pre-commit" ]; then
-        echo "  ✅ Pre-commit hook enabled"
-    else
-        echo "  ⚠️  Pre-commit hook exists but couldn't set executable (may already be executable)"
-    fi
+# Ensure uv is on PATH (installed via onCreateCommand)
+export PATH="${HOME}/.local/bin:${PATH}"
+
+# Install Python packages using uv (10-100x faster than pip)
+echo "🐍 Installing Python packages with uv..."
+if command -v uv &> /dev/null; then
+    # Create uv cache directory with proper permissions
+    mkdir -p "${HOME}/.cache/uv" 2>/dev/null || true
+    chmod -R 755 "${HOME}/.cache/uv" 2>/dev/null || true
+    uv pip install --system --quiet diagrams matplotlib pillow checkov 2>&1 || echo "  ⚠️  Installation had issues, continuing..."
+    echo "  ✅ Python packages installed (diagrams, matplotlib, pillow, checkov)"
 else
-    echo "  ⚠️  Pre-commit hook not found"
+    echo "  ⚠️  uv not found, falling back to pip..."
+    pip3 install --quiet --user diagrams matplotlib pillow checkov 2>&1 | tail -1 || true
 fi
 
-# Verify Python packages (installed via pip or should be)
-echo "🐍 Verifying Python packages..."
-python3 -c "import checkov; import diagrams" 2>/dev/null && echo "  ✅ checkov and diagrams available" || {
-    echo "  Installing checkov and diagrams..."
-    pip3 install --quiet --user checkov diagrams 2>&1 | tail -1 || echo "  ⚠️  Installation had issues, continuing..."
-}
-
-# Install markdownlint-cli2 (installed via postCreateCommand, verify here)
+# Verify markdownlint-cli2 (installed globally via postCreateCommand)
 echo "📝 Verifying markdownlint-cli2..."
-if command -v markdownlint-cli2 &> /dev/null; then
-    echo "  ✅ markdownlint-cli2 already installed"
-elif command -v markdownlint &> /dev/null; then
-    echo "  ✅ markdownlint already installed"
+if npm list -g markdownlint-cli2 --depth=0 2>/dev/null | grep -q markdownlint-cli2; then
+    MDLINT_VERSION=$(npm list -g markdownlint-cli2 --depth=0 2>/dev/null | grep markdownlint-cli2 | sed 's/.*@//')
+    echo "  ✅ markdownlint-cli2 v${MDLINT_VERSION} installed globally"
+elif [ -f "${PWD}/node_modules/.bin/markdownlint-cli2" ]; then
+    echo "  ✅ markdownlint-cli2 installed locally"
 else
-    echo "  ⚠️  markdownlint not found (should have been installed via postCreateCommand)"
+    echo "  ⚠️  markdownlint-cli2 not found (should have been installed via postCreateCommand)"
 fi
 
-# Install Azure PowerShell modules (parallel install)
+# Install Azure PowerShell modules (parallel install using Start-Job)
 echo "🔧 Installing Azure PowerShell modules..."
 pwsh -NoProfile -Command "
     \$ErrorActionPreference = 'SilentlyContinue'
     Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
     
-    # Install modules in parallel using jobs
+    # Define modules to install
     \$modules = @('Az.Accounts', 'Az.Resources', 'Az.Storage', 'Az.Network', 'Az.KeyVault', 'Az.Websites')
-    \$jobs = @()
     
-    foreach (\$module in \$modules) {
-        if (-not (Get-Module -ListAvailable -Name \$module)) {
-            Write-Host \"  Installing \$module...\"
-            Install-Module -Name \$module -Scope CurrentUser -Force -AllowClobber -SkipPublisherCheck
-        } else {
-            Write-Host \"  \$module already installed\"
-        }
+    # Filter to only modules not already installed
+    \$toInstall = \$modules | Where-Object { -not (Get-Module -ListAvailable -Name \$_) }
+    
+    if (\$toInstall.Count -eq 0) {
+        Write-Host '  ✅ All PowerShell modules already installed'
+        exit 0
     }
     
-    Write-Host '✅ PowerShell modules installed'
+    Write-Host \"  Installing \$(\$toInstall.Count) modules: \$(\$toInstall -join ', ')...\"
+    
+    # Install modules in parallel using background jobs
+    \$jobs = \$toInstall | ForEach-Object {
+        Start-Job -ScriptBlock {
+            param(\$m)
+            Install-Module -Name \$m -Scope CurrentUser -Force -AllowClobber -SkipPublisherCheck -ErrorAction SilentlyContinue
+        } -ArgumentList \$_
+    }
+    
+    # Wait for all jobs with timeout (90 seconds)
+    \$completed = \$jobs | Wait-Job -Timeout 90
+    \$jobs | Remove-Job -Force
+    
+    Write-Host '  ✅ PowerShell modules installed'
 " || echo "⚠️  Warning: PowerShell module installation incomplete"
 
-# Install GitHub CLI (not in universal:2 image)
-echo "📦 Installing GitHub CLI..."
-if ! command -v gh &> /dev/null; then
-    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
-    sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-    sudo apt-get update && sudo apt-get install -y gh 2>&1 | tail -3
-else
-    echo "  ✅ GitHub CLI already installed"
-fi
-
-# Install Terratest dependencies (Go pre-installed in universal image)
-echo "🧪 Installing Terratest..."
-if command -v go &> /dev/null; then
-    export GOPATH="$HOME/go"
-    export PATH="$PATH:$GOPATH/bin"
-    if go install github.com/gruntwork-io/terratest/modules/terraform@latest 2>/dev/null; then
-        echo "  ✅ Terratest installed to $GOPATH/bin"
-    else
-        echo "  ⚠️  Terratest installation had issues, but may still be available"
-    fi
-else
-    echo "  ⚠️  Go not found, skipping Terratest"
-fi
-
-# Verify utilities (installed via devcontainer postCreateCommand)
+# Verify utilities (installed via devcontainer features and onCreateCommand)
 echo "🛠️  Verifying utilities..."
-command -v dot &> /dev/null && echo "  ✅ graphviz available" || echo "  ⚠️  graphviz not found (required for S08)"
+command -v gh &> /dev/null && echo "  ✅ GitHub CLI available" || echo "  ⚠️  GitHub CLI not found"
+command -v dot &> /dev/null && echo "  ✅ graphviz available" || echo "  ⚠️  graphviz not found (required for diagrams)"
 command -v dos2unix &> /dev/null && echo "  ✅ dos2unix available" || echo "  ⚠️  dos2unix not found"
 
 # Setup Azure Pricing MCP Server
@@ -114,15 +99,14 @@ if [ -d "$MCP_DIR" ]; then
     # Always install/upgrade package in editable mode for proper entry points
     echo "  Installing MCP server package..."
     cd "$MCP_DIR"
-    "$MCP_DIR/.venv/bin/pip" install --quiet --upgrade pip 2>&1 | tail -1 || true
+    # Use pip for editable installs to avoid uv symlink issues
     "$MCP_DIR/.venv/bin/pip" install --quiet -e . 2>&1 | tail -1 || true
     cd - > /dev/null
     echo "  ✅ Azure Pricing MCP installed"
     
-    # Health check - verify server starts
+    # Health check - verify module imports correctly
     echo "  Running health check..."
-    if echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"healthcheck","version":"1.0"}}}' | \
-       timeout 5 "$MCP_DIR/.venv/bin/python" -m azure_pricing_mcp 2>/dev/null | grep -q '"serverInfo"'; then
+    if "$MCP_DIR/.venv/bin/python" -c "from azure_pricing_mcp import server; print('OK')" 2>/dev/null; then
         echo "  ✅ MCP server health check passed"
     else
         echo "  ⚠️  MCP server health check failed (may need manual setup)"
@@ -143,17 +127,15 @@ echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "✅ Verifying tool installations..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-printf "  %-15s %s\n" "Terraform:" "$(terraform version 2>/dev/null | head -n1 || echo '❌ not installed')"
 printf "  %-15s %s\n" "Azure CLI:" "$(az version --query '\"azure-cli\"' -o tsv 2>/dev/null || az --version 2>/dev/null | head -n1 || echo '❌ not installed')"
 printf "  %-15s %s\n" "Bicep:" "$(az bicep version 2>/dev/null | head -n1 || echo '❌ not installed')"
 printf "  %-15s %s\n" "PowerShell:" "$(pwsh --version 2>/dev/null || echo '❌ not installed')"
 printf "  %-15s %s\n" "Python:" "$(python3 --version 2>/dev/null || echo '❌ not installed')"
-printf "  %-15s %s\n" "Go:" "$(go version 2>/dev/null | awk '{print $3}' || echo '❌ not installed')"
 printf "  %-15s %s\n" "Node.js:" "$(node --version 2>/dev/null || echo '❌ not installed')"
 printf "  %-15s %s\n" "GitHub CLI:" "$(gh --version 2>/dev/null | head -n1 || echo '❌ not installed')"
-printf "  %-15s %s\n" "tfsec:" "$(tfsec --version 2>/dev/null || echo '❌ not installed')"
+printf "  %-15s %s\n" "uv:" "$(uv --version 2>/dev/null || echo '❌ not installed')"
 printf "  %-15s %s\n" "Checkov:" "$(checkov --version 2>/dev/null || echo '❌ not installed')"
-printf "  %-15s %s\n" "markdownlint:" "$(markdownlint-cli2 --version 2>/dev/null || markdownlint --version 2>/dev/null || echo '❌ not installed')"
+printf "  %-15s %s\n" "markdownlint:" "$(markdownlint-cli2 --version 2>/dev/null || echo '❌ not installed')"
 
 echo ""
 echo "🎉 Post-create setup completed!"

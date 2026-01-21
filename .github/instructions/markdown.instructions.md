@@ -103,7 +103,7 @@ When generating core workflow artifacts, agents **MUST** follow the canonical te
 | Artifact                        | Template                                                   | Producing Agent           |
 | ------------------------------- | ---------------------------------------------------------- | ------------------------- |
 | `01-requirements.md`            | `.github/templates/01-requirements.template.md`            | @plan (built-in)          |
-| `02-architecture-assessment.md` | `.github/templates/02-architecture-assessment.template.md` | azure-principal-architect |
+| `02-architecture-assessment.md` | `.github/templates/02-architecture-assessment.template.md` | architect |
 | `04-implementation-plan.md`     | `.github/templates/04-implementation-plan.template.md`     | bicep-plan                |
 | `06-deployment-summary.md`      | `.github/templates/06-deployment-summary.template.md`      | Deployment tooling/manual |
 

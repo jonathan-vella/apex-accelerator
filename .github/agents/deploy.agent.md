@@ -22,24 +22,23 @@ tools:
     "ms-azuretools.vscode-azure-github-copilot/azure_get_dotnet_template_tags",
     "ms-azuretools.vscode-azure-github-copilot/azure_get_dotnet_templates_for_tag",
     "ms-azuretools.vscode-azureresourcegroups/azureActivityLog",
-    "ms-vscode.vscode-websearchforcopilot/websearch",
   ]
 handoffs:
   - label: Generate Workload Documentation
-    agent: Workload Documentation Generator
-    prompt: Generate comprehensive workload documentation for the deployed infrastructure. Include resource inventory, operations runbook, and backup/DR plan.
+    agent: Docs
+    prompt: Generate comprehensive workload documentation for the deployed infrastructure. Include resource inventory, operations runbook, backup/DR plan, and as-built cost estimate (07-ab-cost-estimate.md).
     send: true
   - label: Return to Architect Review
-    agent: Azure Principal Architect
+    agent: Architect
     prompt: Review the deployment results and validate WAF compliance of the deployed infrastructure.
     send: true
   - label: Generate As-Built Diagram
-    agent: Azure Diagram Generator
+    agent: Diagram
     prompt: Generate an as-built architecture diagram documenting the deployed infrastructure. Use '-ab' suffix for as-built diagram.
     send: true
-  - label: Generate As-Built Cost Estimate
-    agent: Azure Principal Architect
-    prompt: Generate an as-built cost estimate comparing actual deployed resources against design estimates. Create 07-ab-cost-estimate.md.
+  - label: Fix Deployment Issues
+    agent: Bicep Code
+    prompt: The deployment encountered errors. Review the error messages and fix the Bicep templates to resolve the issues. Then retry deployment.
     send: true
 ---
 
@@ -133,6 +132,12 @@ After successful deployment, create:
 
 **Template**: Use [`../templates/06-deployment-summary.template.md`](../templates/06-deployment-summary.template.md)
 
+Template compliance rules:
+
+- Keep the template H2 headings exactly and in order.
+- Do not add any additional `##` (H2) headings.
+- If you need extra structure, use `###` (H3) headings inside the nearest required H2.
+
 Include:
 
 - Deployment timestamp and duration
@@ -145,10 +150,10 @@ Include:
 **Step 6** of 7-step workflow:
 
 ```
-project-planner → azure-principal-architect → Design Artifacts → bicep-plan → bicep-implement → [Deploy] → As-Built
+plan → architect → Design Artifacts → bicep-plan → bicep-code → [Deploy] → As-Built
 ```
 
-After deployment, hand off to `Workload Documentation Generator` for as-built documentation.
+After deployment, hand off to `Docs` for as-built documentation.
 </workflow_position>
 
 <stopping_rules>

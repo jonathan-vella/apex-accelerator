@@ -35,7 +35,7 @@ agent-output/
 
 | Step | Prefix | Artifact Types                                                                          |
 | ---- | ------ | --------------------------------------------------------------------------------------- |
-| 1    | `01-`  | `requirements.md` (saved by azure-principal-architect from @plan context)               |
+| 1    | `01-`  | `requirements.md` (saved by architect from @plan context)               |
 | 2    | `02-`  | `architecture-assessment.md` (WAF assessment only)                                      |
 | 3    | `03-`  | `des-diagram.*`, `des-cost-estimate.md`, `des-adr-NNN-{title}.md` (design artifacts)    |
 | 4    | `04-`  | `implementation-plan.md`, `governance-constraints.md`                                   |
@@ -43,7 +43,7 @@ agent-output/
 | 6    | `06-`  | `deployment-summary.md`                                                                 |
 | 7    | `07-`  | `ab-diagram.*`, `ab-adr-NNN-*.md`, `documentation-index.md`, `design-document.md`, etc. |
 
-> **Note**: Step 1 requirements are captured by `@plan` and saved by `azure-principal-architect`.
+> **Note**: Step 1 requirements are captured by `@plan` and saved by `architect`.
 > Step 5 Bicep code lives in `infra/bicep/{project}/`. Step 6 is deployment.
 > Step 7 combines as-built diagrams, ADRs, and workload documentation.
 
@@ -71,10 +71,10 @@ This file is automatically updated by agents as they create new outputs.
 ## Workflow Progress
 
 - [ ] Step 1: Requirements (@plan)
-- [ ] Step 2: Architecture (azure-principal-architect)
-- [ ] Step 3: Design Artifacts (diagram-generator, adr-generator)
+- [ ] Step 2: Architecture (architect)
+- [ ] Step 3: Design Artifacts (diagram, adr)
 - [ ] Step 4: Planning (bicep-plan)
-- [ ] Step 5: Implementation (bicep-implement)
+- [ ] Step 5: Implementation (bicep-code)
 - [ ] Step 6: Deploy
 - [ ] Step 7: As-Built Artifacts (diagrams, ADRs, workload docs)
 

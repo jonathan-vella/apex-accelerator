@@ -10,12 +10,6 @@ local.settings.json
 # PowerShell
 *.ps1xml
 
-# Terraform
-*.tfstate
-*.tfstate.backup
-.terraform/
-*.tfvars
-
 # VS Code
 .vscode/
 *.code-workspace
