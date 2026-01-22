@@ -6,11 +6,11 @@ This file contains shared configuration values that all agents should reference 
 
 ## Default Regions
 
-| Purpose              | Region               | Location             | Rationale                                 |
-| -------------------- | -------------------- | -------------------- | ----------------------------------------- |
-| **Primary**          | `swedencentral`      | Sweden Central       | EU GDPR compliant, sustainable operations |
-| **Alternative**      | `germanywestcentral` | Germany West Central | German data residency requirements        |
-| **Preview Features** | `eastus`             | East US              | Early access to new Azure features        |
+| Purpose              | Region               | Location             | Rationale                          |
+| -------------------- | -------------------- | -------------------- | ---------------------------------- |
+| **Primary**          | `australiaeast`      | Australia East       | AU region                          |
+| **Alternative**      | `germanywestcentral` | Germany West Central | German data residency requirements |
+| **Preview Features** | `eastus`             | East US              | Early access to new Azure features |
 
 ### Region Selection Guidelines
 
