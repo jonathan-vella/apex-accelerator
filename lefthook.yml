@@ -42,20 +42,3 @@ pre-commit:
         else
           echo "ℹ️  No core artifacts to validate"
         fi
-
-commit-msg:
-  commands:
-    commitlint:
-      run: npx --no -- commitlint --edit {1}
-      fail_text: |
-        ❌ Commit message validation failed!
-
-        📖 Conventional Commits format required:
-           <type>[optional scope]: <description>
-
-           Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
-
-           Examples:
-             feat: add new Azure App Service module
-             fix(bicep): correct storage account naming
-             docs: update README with deployment steps
