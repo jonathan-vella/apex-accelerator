@@ -1,6 +1,6 @@
 ---
 description: "Gather Azure workload requirements through structured interview"
-agent: "Project Planner"
+agent: "Requirements"
 model: "Claude Opus 4.5"
 tools:
   - edit/createFile
@@ -135,5 +135,5 @@ After requirements are captured and approved:
 ## Related Resources
 
 - Template: [01-requirements.template.md](../templates/01-requirements.template.md)
-- Agent: [plan.agent.md](../agents/plan.agent.md)
+- Agent: [requirements.agent.md](../agents/requirements.agent.md)
 - Workflow: [workflow.md](../../docs/reference/workflow.md)

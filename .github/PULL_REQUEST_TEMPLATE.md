@@ -25,7 +25,7 @@ Fixes #
 
 <!-- Which agent workflow was used to create these changes? -->
 
-- [ ] 7-step workflow: `@plan` → `architect` → `bicep-plan` → `bicep-code`
+- [ ] 7-step workflow: `@requirements` → `architect` → `bicep-plan` → `bicep-code`
 - [ ] Direct implementation (simple change)
 - [ ] Copilot Coding Agent (autonomous)
 - [ ] Manual implementation

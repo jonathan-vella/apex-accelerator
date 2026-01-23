@@ -1,6 +1,6 @@
 ---
 description: "Quick demo: Static Web App requirements (pre-filled values)"
-agent: "Project Planner"
+agent: "Requirements"
 model: "Claude Opus 4.5"
 tools:
   - edit/createFile
