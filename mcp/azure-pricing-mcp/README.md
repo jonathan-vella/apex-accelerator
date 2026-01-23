@@ -53,7 +53,7 @@ This MCP server integrates with the custom agents in this repository to provide
 
 | Agent                       | Integration                            |
 | --------------------------- | -------------------------------------- |
-| `azure-principal-architect` | Cost estimation during WAF assessments |
+| `architect` | Cost estimation during WAF assessments |
 | `bicep-plan`                | SKU pricing for implementation plans   |
 
 ### How It Works
