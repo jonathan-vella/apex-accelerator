@@ -88,7 +88,7 @@ cd ../infra/bicep/ && tree -L 2
 | Variable                  | Value                           | Purpose                                        |
 | ------------------------- | ------------------------------- | ---------------------------------------------- |
 | `TF_PLUGIN_CACHE_DIR`     | `/home/vscode/.terraform-cache` | Speeds up Terraform provider downloads         |
-| `AZURE_DEFAULTS_LOCATION` | `swedencentral`                 | Default Azure region (matches repo guidelines) |
+| `AZURE_DEFAULTS_LOCATION` | `australiaeast`                 | Default Azure region (matches repo guidelines) |
 
 ### Azure Credentials Mount
 

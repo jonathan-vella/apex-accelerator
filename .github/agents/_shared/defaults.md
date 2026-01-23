@@ -6,19 +6,10 @@ This file contains shared configuration values that all agents should reference 
 
 ## Default Regions
 
-| Purpose              | Region               | Location             | Rationale                          |
-| -------------------- | -------------------- | -------------------- | ---------------------------------- |
-| **Primary**          | `australiaeast`      | Australia East       | AU region                          |
-| **Alternative**      | `germanywestcentral` | Germany West Central | German data residency requirements |
-| **Preview Features** | `eastus`             | East US              | Early access to new Azure features |
-
-### Region Selection Guidelines
-
-- **Default (no constraints)**: Use `swedencentral`
-- **German data residency**: Use `germanywestcentral`
-- **Swiss banking/healthcare**: Use `switzerlandnorth`
-- **UK GDPR requirements**: Use `uksouth`
-- **APAC latency optimization**: Use `southeastasia`
+| Purpose         | Region               | Location            | Rationale        |
+| --------------- | -------------------- | ------------------- | ---------------- |
+| **Primary**     | `australiaeast`      | Australia East      | AU region        |
+| **Alternative** | `australiasoutheast` | Australia Southeast | DR Paired region |
 
 ## Required Tags
 
@@ -54,13 +45,53 @@ Follow Cloud Adoption Framework pattern: `{type}-{workload}-{env}-{region}-{inst
 
 | Region             | Abbreviation |
 | ------------------ | ------------ |
-| swedencentral      | `swc`        |
-| germanywestcentral | `gwc`        |
-| westeurope         | `weu`        |
-| northeurope        | `neu`        |
+| australiacentral   | `auc`        |
+| australiacentral2  | `auc2`       |
+| australiaeast      | `aue`        |
+| australiasoutheast | `ause`       |
+| brazilsouth        | `brs`        |
+| brazilsoutheast    | `brse`       |
+| canadacentral      | `canc`       |
+| canadaeast         | `cane`       |
+| centralindia       | `cin`        |
+| centralus          | `cus`        |
+| centraluseuap      | `cuseuap`    |
+| eastasia           | `ea`         |
 | eastus             | `eus`        |
 | eastus2            | `eus2`       |
+| eastus2euap        | `eus2euap`   |
+| francecentral      | `frc`        |
+| francesouth        | `frs`        |
+| germanynorth       | `gern`       |
+| germanywestcentral | `gerwc`      |
+| japaneast          | `jae`        |
+| japanwest          | `jaw`        |
+| jioindiacentral    | `jioinc`     |
+| jioindiawest       | `jioinw`     |
+| koreacentral       | `koc`        |
+| koreasouth         | `kors`       |
+| northcentralus     | `ncus`       |
+| northeurope        | `neu`        |
+| norwayeast         | `nore`       |
+| norwaywest         | `norw`       |
+| southafricanorth   | `san`        |
+| southafricawest    | `saw`        |
+| southcentralus     | `scus`       |
+| southeastasia      | `sea`        |
+| southindia         | `sin`        |
+| swedencentral      | `swc`        |
+| switzerlandnorth   | `swn`        |
+| switzerlandwest    | `sww`        |
+| uaecentral         | `uaec`       |
+| uaenorth           | `uaen`       |
+| uksouth            | `uks`        |
+| ukwest             | `ukw`        |
+| westcentralus      | `wcus`       |
+| westeurope         | `weu`        |
+| westindia          | `win`        |
+| westus             | `wus`        |
 | westus2            | `wus2`       |
+| westus3            | `wus3`       |
 
 ### Resource Type Prefixes
 

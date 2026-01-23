@@ -17,7 +17,7 @@ Deploy the Bicep infrastructure to Azure using the deploy agent workflow.
 - `projectName`: The project folder name in `infra/bicep/{projectName}/`
 - `environment`: Target environment (dev/staging/prod) - default: `dev`
 - `resourceGroup`: Resource group name - default: `rg-{projectName}-{environment}`
-- `location`: Azure region - default: `swedencentral`
+- `location`: Azure region - default: `australiaeast`
 
 ## Pre-Deployment Checklist
 

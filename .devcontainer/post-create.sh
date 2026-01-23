@@ -117,8 +117,8 @@ fi
 
 # Configure Azure CLI defaults (Azure CLI installed via devcontainer feature)
 echo "☁️  Configuring Azure CLI defaults..."
-if az config set defaults.location=swedencentral --only-show-errors 2>/dev/null; then
-    echo "  ✅ Default location set to swedencentral"
+if az config set defaults.location=australiaeast --only-show-errors 2>/dev/null; then
+    echo "  ✅ Default location set to australiaeast"
 fi
 az config set auto-upgrade.enable=no --only-show-errors 2>/dev/null || true
 

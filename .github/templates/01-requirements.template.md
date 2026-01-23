@@ -123,7 +123,7 @@ Table showing backup frequency and retention per component.
 
 Table showing:
 
-- Primary Region (default: swedencentral)
+- Primary Region (default: austaliaeast)
 - Failover Region
 - Availability Zones
 

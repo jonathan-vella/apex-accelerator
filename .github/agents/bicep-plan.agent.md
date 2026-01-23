@@ -76,12 +76,12 @@ or any infrastructure code files—that is the responsibility of `bicep-code` ag
 
 **Default Azure Regions (enforce in all plans):**
 
-- **Primary**: swedencentral (default for all resources)
-- **Alternative**: germanywestcentral (German data residency, alternative deployment option)
+- **Primary**: australiaeast (default for all resources)
+- **Alternative**: australiasoutheast (alternative deployment option)
 
 Document region selection in Introduction section:
 
-- Use swedencentral by default (or germanywestcentral/alternative if customer specifies)
+- Use australiaeast by default (or australiasoutheast/alternative if customer specifies)
 - Document rationale for region choice (compliance, latency, service availability)
 - If multi-region/DR is required, document the DR region strategy explicitly
 - Note any region-specific service limitations encountered
@@ -110,17 +110,15 @@ Follow CAF naming pattern: `{resourceType}-{workload}-{environment}-{region}-{in
 
 **Region Abbreviations:**
 
-- swedencentral: `swc`
-- germanywestcentral: `gwc`
-- westeurope: `weu`
-- northeurope: `neu`
+- australiaeast: `aue`
+- australiasoutheast: `ause`
 
 **Examples:**
 
-- `vnet-hub-prod-swc-001` (Virtual Network in Sweden Central)
-- `kv-app-dev-gwc-a1b2c3` (Key Vault in Germany West Central with unique suffix)
-- `sql-crm-prod-swc-main` (SQL Server in Sweden Central)
-- `st-data-staging-swc-x1y2z3` (Storage Account - no hyphens, lowercase)
+- `vnet-hub-prod-aue-001` (Virtual Network in Australia East)
+- `kv-app-dev-ause-a1b2c3` (Key Vault in Australia Southeast with unique suffix)
+- `sql-crm-prod-aue-main` (SQL Server in Australia East)
+- `st-data-staging-aue-x1y2z3` (Storage Account - no hyphens, lowercase)
 
 **Implementation in Plan:**
 
@@ -234,7 +232,7 @@ This step prevents deployment failures by identifying policy-enforced requiremen
       "tlsVersion": "1.2"
     },
     "network": {
-      "allowedRegions": ["swedencentral", "germanywestcentral"],
+      "allowedRegions": ["australiaeast", "australiasoutheast"],
       "requirePrivateEndpoints": true
     }
   }

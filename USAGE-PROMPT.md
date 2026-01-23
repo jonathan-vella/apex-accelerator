@@ -12,7 +12,7 @@ Create a new Azure infrastructure project using the agentic workflow template.
 **Project Details:**
 - Project Name: [YOUR PROJECT NAME]
 - Description: [Brief description of what this infrastructure will support]
-- Primary Region: swedencentral (or specify alternative)
+- Primary Region: australiaeast (or specify alternative)
 - Environment: dev | staging | prod
 
 **Required Infrastructure:**
@@ -55,7 +55,7 @@ Create a new Azure infrastructure project using the agentic workflow template.
 **Project Details:**
 - Project Name: contoso-ecommerce
 - Description: E-commerce platform with web frontend, API backend, and database
-- Primary Region: swedencentral
+- Primary Region: australiaeast
 - Environment: dev (initial), prod (target)
 
 **Required Infrastructure:**

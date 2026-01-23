@@ -184,7 +184,7 @@ Map business requirements and NFRs to concrete SKU decisions.
 | ------------------- | ----------------- |
 | 💵 Monthly Estimate | $X - $Y           |
 | 📅 Annual Estimate  | $X - $Y           |
-| 🌍 Primary Region   | swedencentral     |
+| 🌍 Primary Region   | australiaeast     |
 | 💳 Pricing Type     | List Price (PAYG) |
 | ⭐ WAF Score        | X.X/10 (or TBD)   |
 | 🎯 Target Users     | N concurrent      |

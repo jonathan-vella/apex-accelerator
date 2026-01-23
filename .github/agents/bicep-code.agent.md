@@ -68,31 +68,19 @@ Always work from an implementation plan when available.
 
 **Default Azure Regions (enforce in all implementations):**
 
-- **Primary**: swedencentral (default location parameter value)
-- **Alternative**: germanywestcentral (German data residency, alternative deployment option)
+> **See [Agent Shared Foundation - Default Regions](_shared/defaults.md#default-regions)** for regional defaults.
 
 **Region Parameter Pattern:**
 
 ```bicep
 @description('Azure region for resource deployment')
-@allowed([
-  'swedencentral'
-  'germanywestcentral'
-  'westeurope'
-  'northeurope'
-])
-param location string = 'swedencentral'
+param location string = 'australiaeast'
 
 // Only add secondaryLocation parameter if multi-region/DR is explicitly required
 // Example for DR scenarios:
 // @description('Secondary region for disaster recovery (only if DR required)')
 // @allowed([
-//   'swedencentral'
-//   'germanywestcentral'
-//   'westeurope'
-//   'northeurope'
-// ])
-// param secondaryLocation string = 'germanywestcentral'
+// param secondaryLocation string = 'australiasoutheast'
 ```
 
 - **Implement progressively** for complex infrastructures (3+ modules or 10+ resources)
@@ -205,7 +193,7 @@ Before finalizing implementation, verify:
 - [ ] All resource names follow CAF pattern: `{type}-{workload}-{env}-{region}-{instance}`
 - [ ] Region abbreviations used correctly (swc, gwc, weu, neu)
 - [ ] All resources have required tags: Environment, ManagedBy, Project, Owner
-- [ ] Location parameters default to `swedencentral`
+- [ ] Location parameters default to the default Azure region
 - [ ] Secondary region parameter available for DR scenarios (if applicable)
 - [ ] Resource groups follow naming: `rg-{workload}-{environment}-{region}`
 - [ ] Unique suffix generated from `resourceGroup().id` and passed to all modules
@@ -261,10 +249,8 @@ Follow CAF pattern: `{resourceType}-{workload}-{environment}-{region}-{instance}
 ```bicep
 // Region abbreviations
 var regionAbbreviations = {
-  swedencentral: 'swc'
-  germanywestcentral: 'gwc'
-  westeurope: 'weu'
-  northeurope: 'neu'
+australiaeast: 'aue'
+australiasoutheast: 'ause'
 }
 var location3Letter = regionAbbreviations[location]
 

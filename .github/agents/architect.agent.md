@@ -65,16 +65,7 @@ to ensure recommendations align with current Microsoft guidance.
 
 ### Region Selection Guidelines
 
-| Requirement               | Recommended Region      | Rationale                                 |
-| ------------------------- | ----------------------- | ----------------------------------------- |
-| Default (no constraints)  | `swedencentral`         | Sustainable operations, EU GDPR-compliant |
-| German data residency     | `germanywestcentral`    | German regulatory compliance              |
-| Swiss banking/healthcare  | `switzerlandnorth`      | Swiss data sovereignty                    |
-| UK GDPR requirements      | `uksouth`               | UK data residency                         |
-| APAC latency optimization | `southeastasia`         | Regional proximity                        |
-| Preview feature access    | `eastus` / `westeurope` | Early feature availability                |
-
-**Use swedencentral by default.** Document region selection rationale in all assessments.
+> **See [Agent Shared Foundation - Default Regions](_shared/defaults.md#default-regions)** for regional defaults.
 
 ### Requirements Validation (Step 2 Pre-Check)
 
@@ -189,7 +180,7 @@ For each recommendation:
 
 | Tool                     | Purpose                                        | Example Use                           |
 | ------------------------ | ---------------------------------------------- | ------------------------------------- |
-| `azure_price_search`     | Query current Azure retail prices with filters | Get D4s_v5 VM prices in swedencentral |
+| `azure_price_search`     | Query current Azure retail prices with filters | Get D4s_v5 VM prices in AustraliaEast |
 | `azure_price_compare`    | Compare prices across regions or SKUs          | Compare S1 vs P1v3 App Service Plans  |
 | `azure_cost_estimate`    | Calculate monthly/yearly costs for SKUs        | 730 hours/month for D8s_v5            |
 | `azure_region_recommend` | Find cheapest Azure regions for a SKU          | Which region is cheapest for SQL S2?  |

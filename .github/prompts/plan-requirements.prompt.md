@@ -93,8 +93,8 @@ Document operational needs:
 
 Confirm deployment regions:
 
-- **Primary**: `swedencentral` (default - sustainable, GDPR-compliant)
-- **Secondary**: `germanywestcentral` (for quota or DR)
+- **Primary**: `australiaeast` (default)
+- **Secondary**: `australiasoutheast` (for quota or DR)
 - Override reasons if not using defaults
 
 ## Output Expectations

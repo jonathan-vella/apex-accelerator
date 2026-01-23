@@ -116,7 +116,7 @@ Critical information to gather (ask if missing):
 | RPO              | 1 hour                              | Maximum acceptable data loss window?         |
 | Compliance       | None                                | Any regulatory requirements? (HIPAA, PCI...) |
 | Scale            | (required)                          | Expected users, transactions, data volume?   |
-| Region           | `swedencentral`                     | Preferred Azure region?                      |
+| Region           | `australiaeast`                     | Preferred Azure region?                      |
 | Authentication   | Azure AD                            | How will users authenticate?                 |
 | Network Security | Public endpoints with Azure AD auth | Network isolation requirements?              |
 
@@ -187,15 +187,8 @@ Validation: Files validated by `scripts/validate-artifact-templates.mjs`
 </invariant_sections>
 
 <regional_defaults>
-**Primary region**: `swedencentral` (default)
 
-| Requirement               | Recommended Region   | Rationale                                 |
-| ------------------------- | -------------------- | ----------------------------------------- |
-| Default (no constraints)  | `swedencentral`      | Sustainable operations, EU GDPR-compliant |
-| German data residency     | `germanywestcentral` | German regulatory compliance              |
-| Swiss banking/healthcare  | `switzerlandnorth`   | Swiss data sovereignty                    |
-| UK GDPR requirements      | `uksouth`            | UK data residency                         |
-| APAC latency optimization | `southeastasia`      | Regional proximity                        |
+> **See [Agent Shared Foundation - Default Regions](_shared/defaults.md#default-regions)** for regional defaults.
 
 </regional_defaults>
 

@@ -29,7 +29,7 @@ handoffs:
     prompt: Create an ADR documenting this architecture. Include the generated diagram as visual reference for the architectural decision.
     send: true
   - label: Return to Architect Review
-    agent: Azure Principal Architect
+    agent: Architect
     prompt: Review the architecture diagram and provide additional WAF assessment feedback or refinements.
     send: true
 ---
@@ -223,7 +223,7 @@ with Diagram(
     # External entry point
     frontdoor = FrontDoors("Azure Front Door")
 
-    with Cluster("Azure Region - Sweden Central"):
+    with Cluster("Azure Region - Australia East"):
         with Cluster("Resource Group"):
 
             with Cluster("Virtual Network"):
@@ -295,7 +295,7 @@ from diagrams.azure.devops import ApplicationInsights
 with Diagram("AKS Microservices", show=False, direction="LR"):
     fd = FrontDoors("Front Door")
 
-    with Cluster("Azure Region - Sweden Central"):
+    with Cluster("Azure Region - Australia East"):
         acr = ContainerRegistries("Container Registry")
 
         with Cluster("Virtual Network"):
