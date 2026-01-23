@@ -1,5 +1,5 @@
 ---
-name: Workload Documentation Generator
+name: Docs
 description: Generates comprehensive Azure workload documentation by synthesizing outputs from existing agents into customer-deliverable design documents, operational runbooks, and compliance artifacts. Automatically generates as-built cost estimates using Azure Pricing MCP tools based on implemented Bicep templates.
 tools:
   [
@@ -10,8 +10,8 @@ tools:
     "edit",
     "search",
     "web",
-    "microsoft-docs/*",
     "azure-mcp/*",
+    "pylance-mcp-server/*",
     "todo",
     "ms-azuretools.vscode-azure-github-copilot/azure_recommend_custom_modes",
     "ms-azuretools.vscode-azure-github-copilot/azure_query_azure_resource_graph",
@@ -24,20 +24,19 @@ tools:
     "ms-python.python/getPythonExecutableCommand",
     "ms-python.python/installPythonPackage",
     "ms-python.python/configurePythonEnvironment",
-    "ms-vscode.vscode-websearchforcopilot/websearch",
   ]
 handoffs:
   - label: Return to Architect Review
-    agent: Azure Principal Architect
+    agent: Architect
     prompt: Review the generated documentation for WAF alignment and completeness.
     send: true
   - label: Generate As-Built Diagram
-    agent: Azure Diagram Generator
+    agent: Diagram
     prompt: Generate an as-built architecture diagram to accompany the workload documentation.
     send: true
 ---
 
-# Workload Documentation Generator Agent
+# Docs Agent
 
 > **See [Agent Shared Foundation](_shared/defaults.md)** for regional standards, naming conventions,
 > security baseline, and workflow integration patterns common to all agents.
@@ -121,13 +120,13 @@ Extract from Bicep templates:
 | Storage    | X     |
 | Networking | X     |
 
-## Resources
+## Resource Listing
 
 | Name   | Type   | SKU   | Location |
 | ------ | ------ | ----- | -------- |
 | {name} | {type} | {sku} | {region} |
 
-## Dependencies
+### Dependencies
 ```
 
 ---
@@ -274,3 +273,9 @@ Before finalizing documentation:
 - [ ] Regional choices documented with rationale
 - [ ] Dependencies clearly mapped
 - [ ] Document index complete and accurate
+
+## Template Compliance (Non-Negotiable)
+
+- For each output file, keep the template H2 headings exactly and in order.
+- Do not add additional `##` (H2) headings beyond the template.
+- Put any extra detail under `###` (H3) headings within the nearest required H2.

@@ -1,21 +1,31 @@
 ---
-name: Project Planner
+name: Requirements
 model: "Claude Opus 4.5"
 description: Researches and captures Azure infrastructure project requirements
-argument-hint: Describe the Azure workload or project you want to plan
+argument-hint: Describe the Azure workload or project you want to gather requirements for
 tools:
-  - "search"
-  - "agent"
-  - "search/usages"
-  - "read/problems"
-  - "search/changes"
-  - "web/fetch"
-  - "web/githubRepo"
-  - "github.vscode-pull-request-github/issue_fetch"
-  - "github.vscode-pull-request-github/activePullRequest"
+  [
+    "vscode",
+    "execute",
+    "read",
+    "agent",
+    "edit",
+    "search",
+    "web",
+    "microsoft-docs/*",
+    "azure-mcp/*",
+    "todo",
+    "ms-azuretools.vscode-azure-github-copilot/azure_recommend_custom_modes",
+    "ms-azuretools.vscode-azure-github-copilot/azure_query_azure_resource_graph",
+    "ms-azuretools.vscode-azure-github-copilot/azure_get_auth_context",
+    "ms-azuretools.vscode-azure-github-copilot/azure_set_auth_context",
+    "ms-azuretools.vscode-azure-github-copilot/azure_get_dotnet_template_tags",
+    "ms-azuretools.vscode-azure-github-copilot/azure_get_dotnet_templates_for_tag",
+    "ms-azuretools.vscode-azureresourcegroups/azureActivityLog",
+  ]
 handoffs:
   - label: Architecture Assessment
-    agent: Azure Principal Architect
+    agent: Architect
     prompt: Review the requirements and create a comprehensive WAF assessment with cost estimates.
     send: true
   - label: Save Requirements
@@ -41,7 +51,7 @@ Your SOLE responsibility is requirements planning. NEVER consider starting imple
 STOP IMMEDIATELY if you consider:
 
 - Creating files other than `agent-output/{project-name}/01-requirements.md`
-- Modifying existing Bicep/Terraform code
+- Modifying existing Bicep code
 - Implementing infrastructure (that's for later steps)
 - Creating files before user explicitly approves the requirements draft
 - Switching to implementation mode or running file editing tools
@@ -150,7 +160,7 @@ Follow this template structure exactly (don't include the {}-guidance):
 
 IMPORTANT: For writing requirements, follow these rules:
 
-- DON'T show Bicep/Terraform code blocks—describe requirements, not implementation
+- DON'T show Bicep code blocks—describe requirements, not implementation
 - Use tables for constraints, metrics, and comparisons
 - Link to relevant files and reference existing `patterns` in workspace
 - ONLY write requirements, without implementation details
@@ -168,7 +178,12 @@ When creating the full requirements document, include these H2 sections **in ord
 7. `## Regional Preferences` — Primary region, failover, availability zones
 8. `## Summary for Architecture Assessment` — Key constraints for next agent (optional)
 
-Validation: Files validated by `scripts/validate-wave1-artifacts.mjs`
+Template compliance rules:
+
+- Do not add any additional `##` (H2) headings.
+- If you need extra structure, use `###` (H3) headings inside the nearest required H2.
+
+Validation: Files validated by `scripts/validate-artifact-templates.mjs`
 </invariant_sections>
 
 <regional_defaults>
@@ -188,8 +203,8 @@ Validation: Files validated by `scripts/validate-wave1-artifacts.mjs`
 **Step 1** of 7-step workflow:
 
 ```
-[project-planner] → azure-principal-architect → Design Artifacts → bicep-plan → bicep-implement → Deploy → As-Built
+[requirements] → architect → Design Artifacts → bicep-plan → bicep-code → Deploy → As-Built
 ```
 
-After requirements approval, hand off to `azure-principal-architect` for WAF assessment.
+After requirements approval, hand off to `architect` for WAF assessment.
 </workflow_position>

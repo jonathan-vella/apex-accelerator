@@ -2,77 +2,147 @@
 
 > **Agentic InfraOps** - Azure infrastructure engineered by agents. Verified. Well-Architected. Deployable.
 
-## Quick Reference
+## Core Mission
 
-| Rule                | Value                                                                                    |
-| ------------------- | ---------------------------------------------------------------------------------------- |
-| **Default Region**  | `swedencentral` (alt: `germanywestcentral`)                                              |
-| **Unique Names**    | `var uniqueSuffix = uniqueString(resourceGroup().id)` in main.bicep, pass to ALL modules |
-| **Key Vault**       | ≤24 chars: `kv-{short}-{env}-{suffix}`                                                   |
-| **Storage Account** | ≤24 chars, lowercase+numbers only, NO hyphens                                            |
-| **SQL Server**      | ≤63 chars, Azure AD-only auth                                                            |
-| **Zone Redundancy** | App Service Plans: P1v4+ (not S1/P1v2)                                                   |
-| **Deploy Scripts**  | `[CmdletBinding(SupportsShouldProcess)]` + `$WhatIfPreference`                           |
+Transform Azure infrastructure requirements into deploy-ready Bicep code using coordinated AI agents, aligned with
+Azure Well-Architected Framework (WAF) and Azure Verified Modules (AVM).
 
-**Critical Files:**
+## Agent Workflow (7 Steps)
 
-- Agent definitions: `.github/agents/*.agent.md`
-- Shared defaults: `.github/agents/_shared/defaults.md` (regions, tags, AVM, security)
-- Plan requirements: `.github/prompts/plan-requirements.prompt.md` (comprehensive NFR capture)
-- Workflow guide: `docs/reference/workflow.md`
-- Reference docs: `docs/reference/` (defaults, workflow, agents-overview, bicep-patterns)
-- Line endings: `.gitattributes` (use `* text=auto eol=lf` for cross-platform)
+Agents coordinate through artifact handoffs via `.github/agents/*.agent.md`:
 
-## Repository Purpose
+1. **Requirements** (`requirements` agent) → `01-requirements.md`
+2. **Architecture** (`architect` agent) → `02-architecture-assessment.md` + cost estimates via Azure Pricing MCP
+3. **Design Artifacts** (`diagram`, `adr` agents) → `03-des-*.{py,png,md}` (optional)
+4. **Planning** (`bicep-plan` agent) → `04-implementation-plan.md` + governance constraints
+5. **Implementation** (`bicep-code` agent) → Bicep templates in `infra/bicep/{project}/`
+6. **Deploy** (`deploy` agent) → `06-deployment-summary.md` + resource validation
+7. **As-Built** (`diagram`, `adr`, `docs` agents) → `07-*.md` documentation suite
 
-**Agentic InfraOps** transforms requirements into deploy-ready Azure infrastructure using coordinated AI agents,
-aligned with Azure Well-Architected Framework and Azure Verified Modules.
+**Key Rule**: Each agent saves outputs to `agent-output/{project}/` and passes context via handoff prompts.
 
-**Audience**: SI partners delivering Azure projects • IT Pros learning IaC • Customers evaluating agentic workflows
+## Critical Defaults
 
-## Seven-Step Workflow
+Source of truth: [`.github/agents/_shared/defaults.md`](.github/agents/_shared/defaults.md)
 
-```mermaid
-%%{init: {'theme':'neutral'}}%%
-graph LR
-    P["Project Planner<br/>Step 1"] --> A[azure-principal-architect<br/>Step 2]
-    A --> D["Design Artifacts<br/>Step 3"]
-    D --> B[bicep-plan<br/>Step 4]
-    B --> I[bicep-implement<br/>Step 5]
-    I --> DEP["Deploy<br/>Step 6"]
-    DEP --> F["As-Built Artifacts<br/>Step 7"]
+| Setting             | Value                                          | Notes                                              |
+| ------------------- | ---------------------------------------------- | -------------------------------------------------- |
+| **Default Region**  | `swedencentral`                                | EU GDPR-compliant; alt: `germanywestcentral`      |
+| **Required Tags**   | `Environment`, `ManagedBy`, `Project`, `Owner` | All resources must include these tags             |
+| **Unique Suffix**   | `uniqueString(resourceGroup().id)` in bicep   | Generate once in `main.bicep`, pass to all modules |
+| **Key Vault Name**  | `kv-{short}-{env}-{suffix}` (≤24 chars)       | Always include suffix to guarantee uniqueness     |
+| **Storage Account** | `st{short}{env}{suffix}` (≤24 chars, no `-`)  | Lowercase+numbers only; no hyphens               |
+| **SQL Server Auth** | Azure AD-only (`azureADOnlyAuthentication`)   | No SQL auth usernames/passwords                   |
+| **Zone Redundancy** | App Service Plans: P1v4+ only                 | Not S1/P1v2; required for HA                      |
+
+## Architecture Essentials
+
+### Artifact Output Structure
+
+All agent outputs go to `agent-output/{project}/` with strict naming and H2 structure:
+- **01-requirements.md**: Project Overview, Functional Requirements, NFRs, Compliance, Budget, Operational, Regional
+- **02-architecture-assessment.md**: Requirements Validation, Executive Summary, WAF Pillars, SKU Recs, Decisions, Handoff
+- **04-implementation-plan.md**: Overview, Resource Inventory, Module Structure, Tasks, Dependencies, Naming, Security
+- **04-governance-constraints.md**: Azure Policy Compliance, Required Tags, Security, Cost, Network Policies
+
+See [validation rules](scripts/validate-artifact-templates.mjs) for all artifacts.
+
+### Handoff Pattern
+
+Each agent defines `handoffs` in its agent definition linking to the next agent with context:
+
+```yaml
+handoffs:
+  - label: "Create WAF Assessment"
+    agent: architect
+    prompt: "Assess the requirements above for WAF alignment..."
+    send: true
 ```
 
-| Step | Agent                                | Output                          |
-| ---- | ------------------------------------ | ------------------------------- |
-| 1    | `project-planner`                    | `01-requirements.md`            |
-| 2    | `azure-principal-architect`          | `02-architecture-assessment.md` |
-| 3    | `diagram-generator`, `adr-generator` | `03-des-*.md/.py/.png`          |
-| 4    | `bicep-plan`                         | `04-implementation-plan.md`     |
-| 5    | `bicep-implement`                    | `infra/bicep/{project}/`        |
-| 6    | Deploy                               | `06-deployment-summary.md`      |
-| 7    | `workload-documentation-generator`   | `07-*.md`                       |
+Data flows through artifact files + agent context, not via copy-paste.
 
-**How to use agents**: `Ctrl+Alt+I` → select agent from picker → type prompt → wait for approval before next step
+## Developer Workflows
 
-📖 **Full workflow details**: `docs/reference/workflow.md`
+### Running Agents
+
+`Ctrl+Shift+A` → Select agent → Type prompt → Approve before execution
+
+### Validation
+
+```bash
+# Lint Bicep templates
+bicep lint infra/bicep/{project}/*.bicep
+
+# Validate artifact structure
+npm run validate
+
+# Lint markdown
+npm run lint:md
+```
+
+### Local Testing
+
+```bash
+# Set Azure subscription
+az account set --subscription "<sub-id>"
+
+# Preview Bicep deployment (what-if analysis)
+bicep build infra/bicep/{project}/main.bicep
+az deployment group what-if --template-file main.json ...
+```
+
+### MCP Integration
+
+The Azure Pricing MCP server (`.mcp/azure-pricing-mcp/`) integrates with agents to fetch real-time SKU pricing:
+- Used by `architect` agent for cost estimations in WAF assessments
+- Used by `bicep-plan` agent for SKU recommendations
+- Enable in VS Code settings; pre-configured in `.vscode/mcp.json`
+
+## Key Files & Directories
+
+| File/Dir                                | Purpose                                                      |
+| --------------------------------------- | ------------------------------------------------------------ |
+| `.github/agents/*.agent.md`             | Agent definitions with front matter (name, tools, handoffs) |
+| `.github/agents/_shared/defaults.md`    | Shared config: regions, tags, naming conventions, security   |
+| `.github/instructions/`                 | File-type rules (Bicep, Markdown, PowerShell, agents, etc.)  |
+| `.github/templates/`                    | H2 skeleton files for artifact generation                    |
+| `agent-output/{project}/`               | Project-scoped artifacts (01-07 sequentially)                |
+| `infra/bicep/{project}/`                | Bicep module library (main.bicep + modules/)                 |
+| `mcp/azure-pricing-mcp/`                | Azure Pricing MCP server for cost estimation                 |
+| `.vscode/mcp.json`                      | MCP server configuration (pre-configured)                    |
+| `scripts/validate-artifact-templates.mjs` | CI validation of artifact H2 structure                       |
 
 ## Project Structure
 
 ```
 azure-agentic-infraops/
 ├── .github/
-│   ├── agents/                  # 7 custom agents
-│   │   ├── _shared/defaults.md  # Regions, tags, AVM, security
-│   │   └── *.agent.md           # Agent definitions
-│   ├── instructions/            # File-type specific rules
-│   └── copilot-instructions.md  # THIS FILE
-├── agent-output/{project}/      # Agent-generated artifacts
-├── infra/bicep/                 # Generated Bicep templates
-├── scenarios/                   # Demo scenarios S01-S08
-├── docs/                        # Documentation
-│   └── reference/               # Single source of truth (incl. workflow.md)
-└── mcp/azure-pricing-mcp/       # Azure Pricing MCP server
+│   ├── agents/                    # 9 agents: requirements, architect, bicep-plan,
+│   │                              # bicep-code, deploy, diagram, adr, docs, diagnose
+│   │   ├── _shared/defaults.md    # Regions, tags, CAF naming, AVM standards
+│   │   ├── requirements.agent.md  # Step 1: Gather infrastructure needs
+│   │   ├── architect.agent.md     # Step 2: WAF assessment + cost estimates
+│   │   ├── bicep-plan.agent.md    # Step 4: Implementation planning
+│   │   ├── bicep-code.agent.md    # Step 5: Bicep code generation
+│   │   ├── deploy.agent.md        # Step 6: Azure deployment
+│   │   ├── diagram.agent.md       # Step 3/7: Architecture diagrams
+│   │   ├── adr.agent.md           # Step 3/7: Architecture Decision Records
+│   │   ├── docs.agent.md          # Step 7: Workload documentation
+│   │   └── diagnose.agent.md      # Troubleshooting helper
+│   ├── instructions/              # Rules for specific file types (applied via .gitattributes)
+│   ├── templates/                 # H2 skeleton files for artifact generation
+│   └── copilot-instructions.md    # THIS FILE
+├── agent-output/{project}/        # All agent-generated artifacts (01-07)
+├── infra/bicep/                   # Bicep module library
+│   └── {project}/                 # Project-specific templates
+│       ├── main.bicep             # Entry point (generates uniqueSuffix, orchestrates modules)
+│       └── modules/               # Feature modules (networking, compute, data, etc.)
+├── mcp/azure-pricing-mcp/         # Azure Pricing MCP server
+├── scripts/                       # Validation and workflow automation
+│   ├── validate-artifact-templates.mjs  # CI: Artifact H2 validation
+│   ├── validate-cost-estimate-templates.mjs # CI: Cost estimate validation
+│   └── workflow-generator/        # Mermaid → PNG/GIF animation
+└── docs/                          # Repository documentation
 ```
 
 ## Tech Stack
@@ -102,7 +172,7 @@ param uniqueSuffix string
 var kvName = 'kv-${take(projectName, 8)}-${environment}-${take(uniqueSuffix, 6)}'
 ```
 
-### Required Tags
+### Required Tags on All Resources
 
 ```bicep
 tags: {
@@ -141,24 +211,52 @@ bicep lint infra/bicep/{project}/main.bicep
 npm run lint:md
 ```
 
-## Dev Container
+## Agent-Specific Guidance
 
-Pre-configured with all tools. Quick start:
+### Requirements Agent
+- Captures comprehensive infrastructure needs via `01-requirements.md`
+- Hands off to Architect for WAF assessment
+- Uses `@plan` context for initial requirements gathering
 
-```bash
-git clone https://github.com/jonathan-vella/azure-agentic-infraops.git
-code azure-agentic-infraops
-# F1 → "Dev Containers: Reopen in Container"
-```
+### Architect Agent
+- Creates WAF assessments aligned with Azure Well-Architected Framework
+- Integrates Azure Pricing MCP for real-time cost estimates
+- Generates `02-architecture-assessment.md` with SKU recommendations
+- Hands off to Bicep Plan or Design Artifacts agents
 
-## References
+### Bicep Plan Agent
+- Discovers Azure Policy governance constraints (tag requirements, resource types allowed, etc.)
+- Creates detailed implementation plans in `04-implementation-plan.md`
+- Produces `04-governance-constraints.md` for compliance
+- Hands off to Bicep Code agent for implementation
 
-- **Shared Defaults**: `.github/agents/_shared/defaults.md`
-- **Workflow Guide**: `docs/reference/workflow.md`
-- **Bicep Patterns**: `docs/reference/bicep-patterns.md`
-- **Agents Overview**: `docs/reference/agents-overview.md`
-- **Troubleshooting**: `docs/guides/troubleshooting.md`
+### Bicep Code Agent
+- Generates Bicep modules in `infra/bicep/{project}/`
+- Follows Azure Verified Modules (AVM) standards
+- Ensures unique resource names via suffix pattern
+- Produces `05-implementation-reference.md` with validation status
+- Hands off to Deploy agent
 
+### Deploy Agent
+- Executes `bicep build` and `what-if` analysis before deployment
+- Manages Azure authentication and subscription selection
+- Generates `06-deployment-summary.md` with deployed resource details
+- Validates post-deployment resources
+
+### Diagram Agent
+- Generates Python architecture diagrams using `diagrams` library
+- Creates `03-des-diagram.py` (design) and `07-ab-diagram.py` (as-built)
+- Produces PNG files for visual documentation
+
+### ADR Agent
+- Documents architecture decisions as formal ADRs
+- Creates `03-des-adr-*.md` (design) and `07-ab-adr-*.md` (as-built)
+- Includes WAF trade-offs and decision rationale
+
+### Docs Agent
+- Generates comprehensive workload documentation
+- Creates `07-design-document.md`, `07-operations-runbook.md`, and related docs
+- Includes cost summaries, compliance matrices, backup/DR plans
 ---
 
 **Mission**: Azure infrastructure engineered by agents—from requirements to deployed templates,

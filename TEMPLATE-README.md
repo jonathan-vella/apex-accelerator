@@ -91,7 +91,8 @@ flowchart LR
     C --> D["bicep-implement"]
 ```
 
-See the [main repository workflow guide](https://github.com/jonathan-vella/azure-agentic-infraops/blob/main/docs/reference/workflow.md) for the complete seven-step workflow.
+See the [main repository workflow guide](https://github.com/jonathan-vella/azure-agentic-infraops/blob/main/docs/reference/workflow.md)
+for the complete seven-step workflow.
 
 ## Related
 

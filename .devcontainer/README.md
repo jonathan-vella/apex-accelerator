@@ -11,24 +11,22 @@ It includes all required tools, extensions, and configurations to build Azure in
 
 ### Infrastructure as Code Tools
 
-- **Terraform CLI** (latest) with tfsec pre-installed
 - **Azure CLI** (latest) with Bicep CLI
-- **Checkov** - Infrastructure security scanner
 - **Bicep** for Azure infrastructure
+- **Checkov** - Infrastructure security scanner
 
 ### Scripting & Automation
 
 - **PowerShell 7+** (via devcontainer feature) with Az modules (Accounts, Resources, Storage, Network, KeyVault, Websites)
-- **Python 3.12** with pip
+- **Python 3.13** with pip and uv
 - **Node.js LTS** with npm
 - **Bash** with common utilities
 
 ### Development Tools
 
-- **Go** (latest) for Terratest infrastructure testing
-- **Git** with Git LFS
+- **Git** with common utilities
 - **GitHub CLI** (gh)
-- **jq**, **tree**, **graphviz**, **dos2unix**
+- **graphviz**, **dos2unix**
 
 ### VS Code Extensions (27 Pre-installed)
 
@@ -106,11 +104,8 @@ so you only need to `az login` once on your host machine.
 # Test Bicep compilation
 bicep build infra/bicep/ecommerce/main.bicep
 
-# Test Terraform validation (if Terraform files exist)
-terraform --version
-
-# Test security scanners
-tfsec --version && checkov --version
+# Test security scanner
+checkov --version
 
 # Test PowerShell modules
 pwsh -Command "Get-Module -ListAvailable Az.*"
@@ -124,7 +119,7 @@ pwsh -Command "Get-Module -ListAvailable Az.*"
 bash .devcontainer/update-tools.sh
 ```
 
-This updates: Azure CLI, Bicep, PowerShell Az modules, Checkov, diagrams, markdownlint, Terratest
+This updates: Azure CLI, Bicep, PowerShell Az modules, Checkov, diagrams, markdownlint
 
 ### Update Specific Tools
 
@@ -166,8 +161,8 @@ sudo npm update -g markdownlint-cli           # markdownlint
 
 ## 📚 Related Documentation
 
-- [Workflow Guide](../docs/workflow/WORKFLOW.md)
-- [Scenario Prompts](../scenarios/S11-quick-demos/ecommerce-prompts.md)
+- [Workflow Guide](../docs/reference/workflow.md)
+- [Scenarios](../scenarios/)
 - [Copilot Instructions](../.github/copilot-instructions.md)
 - [Repository README](../README.md)
 

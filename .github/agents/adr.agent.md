@@ -1,5 +1,5 @@
 ---
-name: ADR Generator
+name: ADR
 description: Expert agent for creating comprehensive Architectural Decision Records (ADRs) with structured formatting optimized for AI consumption and human readability.
 tools:
   [
@@ -19,15 +19,15 @@ tools:
     "ms-azuretools.vscode-azure-github-copilot/azure_set_auth_context",
     "ms-azuretools.vscode-azure-github-copilot/azure_get_dotnet_template_tags",
     "ms-azuretools.vscode-azure-github-copilot/azure_get_dotnet_templates_for_tag",
-    "ms-vscode.vscode-websearchforcopilot/websearch",
+    "ms-azuretools.vscode-azureresourcegroups/azureActivityLog",
   ]
 handoffs:
   - label: Review Against WAF Pillars
-    agent: Azure Principal Architect
+    agent: Architect
     prompt: Assess the WAF implications of the architectural decision documented above. Evaluate against all 5 pillars (Security, Reliability, Performance, Cost, Operations) and provide specific recommendations.
     send: true
   - label: Generate Implementation Plan
-    agent: Azure Bicep Planning Specialist
+    agent: Bicep Plan
     prompt: Create a detailed implementation plan for the architecture decision documented in the ADR above. Include resource breakdown, dependencies, and implementation tasks.
     send: true
   - label: Generate Architecture Diagram
@@ -305,12 +305,12 @@ This agent produces artifacts in **Step 3** (design, `-des`) or **Step 7** (as-b
 ```mermaid
 %%{init: {'theme':'neutral'}}%%
 graph TD
-    A[azure-principal-architect<br/>Step 2] --> D{Document decision?}
-    D -->|Yes| ADR[adr-generator<br/>-des suffix]
-    D -->|No| B[bicep-plan<br/>Step 4]
+    A[Architect<br/>Step 2] --> D{Document decision?}
+    D -->|Yes| ADR[ADR<br/>-des suffix]
+    D -->|No| B[Bicep Plan<br/>Step 4]
     ADR --> B
     DEP[Deploy<br/>Step 6] --> F{Final documentation?}
-    F -->|Yes| ADR2[adr-generator<br/>-ab suffix]
+    F -->|Yes| ADR2[ADR<br/>-ab suffix]
     F -->|No| Done[Complete]
     ADR2 --> Done
 
@@ -320,26 +320,25 @@ graph TD
 
 **7-Step Workflow Overview:**
 
-| Step | Phase                     | This Agent's Role                           |
-| ---- | ------------------------- | ------------------------------------------- |
-| 1    | project-planner           | —                                           |
-| 2    | azure-principal-architect | Caller (triggers Step 3)                    |
-| 3    | **Design Artifacts**      | Generate `-des` ADRs (proposed decisions)   |
-| 4    | bicep-plan                | —                                           |
-| 5    | bicep-implement           | —                                           |
-| 6    | Deploy                    | Caller (triggers Step 7)                    |
-| 7    | **As-Built Artifacts**    | Generate `-ab` ADRs (implemented decisions) |
+| Step | Phase                  | This Agent's Role                           |
+| ---- | ---------------------- | ------------------------------------------- |
+| 1    | Plan                   | —                                           |
+| 2    | Architect              | Caller (triggers Step 3)                    |
+| 3    | **Design Artifacts**   | Generate `-des` ADRs (proposed decisions)   |
+| 4    | Bicep Plan             | —                                           |
+| 5    | Bicep Code             | —                                           |
+| 6    | Deploy                 | Caller (triggers Step 7)                    |
+| 7    | **As-Built Artifacts** | Generate `-ab` ADRs (implemented decisions) |
 
 ### Artifact Suffix Convention
 
 Apply the appropriate suffix based on when the ADR is generated:
 
 - **`-des`**: Design ADRs (Step 3 artifacts)
-
   - Example: `03-des-adr-0015-database-selection.md`
   - Status: "Proposed" or "Accepted"
   - Represents: Decisions made during architecture phase
-  - Called from: `azure-principal-architect` handoff
+  - Called from: `Architect` handoff
 
 - **`-ab`**: As-built ADRs (Step 7 artifacts)
   - Example: `07-ab-adr-0015-database-selection.md`
@@ -349,7 +348,7 @@ Apply the appropriate suffix based on when the ADR is generated:
 
 **Suffix Rules:**
 
-1. When called from `azure-principal-architect` → use `-des` suffix
+1. When called from `Architect` → use `-des` suffix
 2. When called after deployment (Step 6) → use `-ab` suffix
 3. When called standalone:
    - Design/proposal/planning language → use `-des`

@@ -1,0 +1,61 @@
+# lefthook.yml - Git hooks configuration
+# Replaces Husky with a faster, dependency-free alternative
+# https://github.com/evilmartians/lefthook
+
+pre-commit:
+  parallel: false
+  commands:
+    markdown-lint:
+      glob: "*.md"
+      run: |
+        # Get staged markdown files
+        STAGED_MD=$(git diff --cached --name-only --diff-filter=ACM | grep '\.md$' || true)
+        if [ -n "$STAGED_MD" ]; then
+          echo "📝 Validating $(echo "$STAGED_MD" | wc -l | tr -d ' ') markdown file(s)..."
+          echo "$STAGED_MD" | xargs markdownlint-cli2
+        else
+          echo "ℹ️  No markdown files to validate"
+        fi
+      stage_fixed: true
+
+    link-check:
+      glob: "docs/**/*.md"
+      run: |
+        # Get staged docs markdown files, excluding _superseded
+        STAGED_DOCS=$(git diff --cached --name-only --diff-filter=ACM | grep '^docs/.*\.md$' | grep -v '_superseded' || true)
+        if [ -n "$STAGED_DOCS" ]; then
+          echo "🔗 Checking links in $(echo "$STAGED_DOCS" | wc -l | tr -d ' ') doc file(s)..."
+          # Use npx to run from local node_modules (avoids Node.js 24 global install bug)
+          echo "$STAGED_DOCS" | xargs -I {} npx markdown-link-check {} --config .markdown-link-check.json --quiet
+        else
+          echo "ℹ️  No docs to check links"
+        fi
+
+    artifact-validation:
+      glob: "agent-output/**/*.md"
+      run: |
+        # Check if any core artifacts are staged
+        STAGED_CORE=$(git diff --cached --name-only --diff-filter=ACM | grep -E '(01-requirements|02-architecture-assessment|04-implementation-plan|04-governance-constraints|06-deployment-summary)\.md$' || true)
+        if [ -n "$STAGED_CORE" ]; then
+          echo "📋 Validating core artifact structure..."
+          npm run lint:artifact-templates
+        else
+          echo "ℹ️  No core artifacts to validate"
+        fi
+
+commit-msg:
+  commands:
+    commitlint:
+      run: npx --no -- commitlint --edit {1}
+      fail_text: |
+        ❌ Commit message validation failed!
+
+        📖 Conventional Commits format required:
+           <type>[optional scope]: <description>
+
+           Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
+
+           Examples:
+             feat: add new Azure App Service module
+             fix(bicep): correct storage account naming
+             docs: update README with deployment steps

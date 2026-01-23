@@ -1,5 +1,5 @@
 ---
-name: Azure Bicep Implementation Specialist
+name: Bicep Code
 description: Expert Azure Bicep Infrastructure as Code specialist that creates near-production-ready Bicep templates following best practices and Azure Verified Modules standards. Validates, tests, and ensures code quality.
 tools:
   [
@@ -21,23 +21,26 @@ tools:
     "ms-azuretools.vscode-azure-github-copilot/azure_get_dotnet_template_tags",
     "ms-azuretools.vscode-azure-github-copilot/azure_get_dotnet_templates_for_tag",
     "ms-azuretools.vscode-azureresourcegroups/azureActivityLog",
-    "ms-vscode.vscode-websearchforcopilot/websearch",
   ]
 handoffs:
+  - label: Deploy to Azure
+    agent: Deploy
+    prompt: Deploy the Bicep templates to Azure. Run what-if analysis first to preview changes, then execute deployment with user approval. Generate deployment summary upon completion.
+    send: true
   - label: Generate Workload Documentation
-    agent: Workload Documentation Generator
+    agent: Docs
     prompt: Generate comprehensive workload documentation package including design document, operations runbook, and resource inventory. Synthesize from existing WAF assessment, implementation plan, and Bicep code.
     send: true
   - label: Generate As-Built Diagram
-    agent: Azure Diagram Generator
+    agent: Diagram
     prompt: Generate a Python architecture diagram documenting the implemented infrastructure. Use '-ab' suffix for as-built diagram. Include all deployed Azure resources and their relationships.
     send: true
   - label: Document Implementation Decision
-    agent: ADR Generator
+    agent: ADR
     prompt: Create an ADR documenting the infrastructure implementation, including the architectural decisions, trade-offs, and deployment approach used in the Bicep templates.
     send: true
   - label: Return to Architect Review
-    agent: Azure Principal Architect
+    agent: Architect
     prompt: Review the implemented Bicep templates for WAF compliance and architectural alignment before deployment.
     send: true
 ---
@@ -611,10 +614,10 @@ This agent is **Step 5** of the 7-step agentic infrastructure workflow.
 ```mermaid
 %%{init: {'theme':'neutral'}}%%
 graph LR
-    P["Project Planner<br/>(Step 1)"] --> A[azure-principal-architect<br/>Step 2]
+    P["Plan<br/>(Step 1)"] --> A[architect<br/>Step 2]
     A --> D["Design Artifacts<br/>(Step 3)"]
     D --> B[bicep-plan<br/>Step 4]
-    B --> I[bicep-implement<br/>Step 5]
+    B --> I[bicep-code<br/>Step 5]
     I --> DEP["Deploy<br/>(Step 6)"]
     DEP --> F["As-Built Artifacts<br/>(Step 7)"]
     style I fill:#fce4ec,stroke:#e91e63,stroke-width:3px
@@ -622,15 +625,15 @@ graph LR
 
 **7-Step Workflow Overview:**
 
-| Step | Agent/Phase               | Purpose                                         |
-| ---- | ------------------------- | ----------------------------------------------- |
-| 1    | project-planner           | Requirements gathering → `01-requirements.md`   |
-| 2    | azure-principal-architect | WAF assessment → `02-*` files                   |
-| 3    | Design Artifacts          | Design diagrams + ADRs → `03-des-*` files       |
-| 4    | bicep-plan                | Implementation planning → `04-*` files          |
-| 5    | **bicep-implement**       | Bicep code generation (YOU ARE HERE)            |
-| 6    | Deploy                    | Deploy to Azure → `06-deployment-summary.md`    |
-| 7    | As-Built Artifacts        | As-built diagrams, ADRs, workload docs → `07-*` |
+| Step | Agent/Phase        | Purpose                                         |
+| ---- | ------------------ | ----------------------------------------------- |
+| 1    | plan               | Requirements gathering → `01-requirements.md`   |
+| 2    | architect          | WAF assessment → `02-*` files                   |
+| 3    | Design Artifacts   | Design diagrams + ADRs → `03-des-*` files       |
+| 4    | bicep-plan         | Implementation planning → `04-*` files          |
+| 5    | **bicep-code**     | Bicep code generation (YOU ARE HERE)            |
+| 6    | Deploy             | Deploy to Azure → `06-deployment-summary.md`    |
+| 7    | As-Built Artifacts | As-built diagrams, ADRs, workload docs → `07-*` |
 
 ### Input
 

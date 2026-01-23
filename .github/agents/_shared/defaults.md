@@ -27,7 +27,7 @@ All Azure resources MUST include these tags:
 | Tag            | Required | Description            | Example                              |
 | -------------- | -------- | ---------------------- | ------------------------------------ |
 | `Environment`  | ✅ Yes   | Deployment environment | `dev`, `staging`, `prod`             |
-| `ManagedBy`    | ✅ Yes   | IaC tool used          | `Bicep`, `Terraform`, `ARM`          |
+| `ManagedBy`    | ✅ Yes   | IaC tool used          | `Bicep`, `ARM`                       |
 | `Project`      | ✅ Yes   | Project identifier     | `ecommerce`, `patient-portal`        |
 | `Owner`        | ✅ Yes   | Team or individual     | `platform-team`, `john.doe`          |
 | `CostCenter`   | Optional | Billing allocation     | `CC-12345`                           |
