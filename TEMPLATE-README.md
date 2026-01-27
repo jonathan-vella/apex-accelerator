@@ -22,10 +22,10 @@
 
 ### Output Directories
 
-| Component         | Purpose                            |
-| ----------------- | ---------------------------------- |
-| `agent-output/`   | Agent-generated artifacts          |
-| `infra/bicep/`    | Generated Bicep templates          |
+| Component       | Purpose                   |
+| --------------- | ------------------------- |
+| `agent-output/` | Agent-generated artifacts |
+| `infra/bicep/`  | Generated Bicep templates |
 
 ### Quality Tooling
 
@@ -38,11 +38,11 @@
 
 ### GitHub Workflows
 
-| Workflow                      | Purpose                                         |
-| ----------------------------- | ----------------------------------------------- |
-| `markdown-lint.yml`           | CI markdown validation                          |
-| `update-version.yml`          | Automated version bumping                       |
-| `sync-from-upstream.yml`      | Weekly sync from main repository                |
+| Workflow                 | Purpose                          |
+| ------------------------ | -------------------------------- |
+| `markdown-lint.yml`      | CI markdown validation           |
+| `update-version.yml`     | Automated version bumping        |
+| `sync-from-upstream.yml` | Weekly sync from main repository |
 
 ## Staying Up to Date
 
@@ -56,6 +56,7 @@ This template automatically syncs from the main repository weekly via the
 The sync uses an **exclusion-based approach** - all content is synced EXCEPT:
 
 **Excluded from sync** (template-specific):
+
 - `scenarios/` - Demo scenarios
 - `docs/` - Template maintains its own documentation
 - `agent-output/*/` - Example project outputs (README synced)
