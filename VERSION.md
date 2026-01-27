@@ -1,10 +1,10 @@
 # Version Information
 
-**Current Version:** 5.1.0
+**Current Version:** 7.4.0
 
-**Last Updated:** 2026-01-19
+**Last Updated:** 2026-01-27
 
-**Build:** 8b9dc23
+**Build:** e5e6ceb
 
 ## Version History
 

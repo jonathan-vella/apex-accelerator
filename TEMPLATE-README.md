@@ -43,7 +43,6 @@
 | `markdown-lint.yml`           | CI markdown validation                          |
 | `update-version.yml`          | Automated version bumping                       |
 | `sync-from-upstream.yml`      | Weekly sync from main repository                |
-| `ms-learn-monitor.yml`        | Microsoft Learn link validation                 |
 
 ## Staying Up to Date
 
