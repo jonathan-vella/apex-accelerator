@@ -2,7 +2,7 @@
 
 **Current Version:** 7.4.0
 
-**Last Updated:** 2026-01-27
+**Last Updated:** 2026-01-23
 
 **Build:** e5e6ceb
 
@@ -22,9 +22,9 @@ This project follows [Semantic Versioning 2.0.0](https://semver.org/):
 
 Version bumps are automated via GitHub Actions based on [Conventional Commits](https://www.conventionalcommits.org/):
 
-| Commit Type                    | Version Bump | Example                    |
-| ------------------------------ | ------------ | -------------------------- |
-| `feat:`                        | Minor        | `feat: add new agent`      |
-| `fix:`                         | Patch        | `fix: correct typo`        |
-| `feat!:` or `BREAKING CHANGE:` | Major        | `feat!: redesign workflow` |
-| `docs:`, `chore:`, etc.        | None         | `docs: update README`      |
+| Commit Type | Version Bump | Example |
+|-------------|--------------|---------|
+| `feat:` | Minor | `feat: add new agent` |
+| `fix:` | Patch | `fix: correct typo` |
+| `feat!:` or `BREAKING CHANGE:` | Major | `feat!: redesign workflow` |
+| `docs:`, `chore:`, etc. | None | `docs: update README` |

@@ -4,8 +4,6 @@
 # Explicitly declare text files to always use LF
 *.md text eol=lf
 *.bicep text eol=lf
-*.tf text eol=lf
-*.tfvars text eol=lf
 *.sh text eol=lf
 *.ps1 text eol=lf
 *.psm1 text eol=lf
@@ -17,7 +15,6 @@
 *.py text eol=lf
 *.js text eol=lf
 *.ts text eol=lf
-*.go text eol=lf
 *.rb text eol=lf
 *.java text eol=lf
 *.c text eol=lf

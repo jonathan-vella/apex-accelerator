@@ -9,7 +9,7 @@ Each project gets its own subfolder with step-prefixed files for easy navigation
 agent-output/
 ├── {project-name}/                      # One folder per project
 │   ├── README.md                        # Auto-generated project index
-│   ├── 01-requirements.md               # Step 1: Requirements from @plan
+│   ├── 01-requirements.md               # Step 1: Requirements from @requirements
 │   ├── 02-architecture-assessment.md    # Step 2: WAF assessment
 │   ├── 03-des-diagram.py                # Step 3: Design diagram source
 │   ├── 03-des-diagram.png               # Step 3: Design diagram image
@@ -35,7 +35,7 @@ agent-output/
 
 | Step | Prefix | Artifact Types                                                                          |
 | ---- | ------ | --------------------------------------------------------------------------------------- |
-| 1    | `01-`  | `requirements.md` (saved by azure-principal-architect from @plan context)               |
+| 1    | `01-`  | `requirements.md` (saved by architect from @requirements context)                       |
 | 2    | `02-`  | `architecture-assessment.md` (WAF assessment only)                                      |
 | 3    | `03-`  | `des-diagram.*`, `des-cost-estimate.md`, `des-adr-NNN-{title}.md` (design artifacts)    |
 | 4    | `04-`  | `implementation-plan.md`, `governance-constraints.md`                                   |
@@ -43,13 +43,13 @@ agent-output/
 | 6    | `06-`  | `deployment-summary.md`                                                                 |
 | 7    | `07-`  | `ab-diagram.*`, `ab-adr-NNN-*.md`, `documentation-index.md`, `design-document.md`, etc. |
 
-> **Note**: Step 1 requirements are captured by `@plan` and saved by `azure-principal-architect`.
+> **Note**: Step 1 requirements are captured by `@requirements` and saved by `architect`.
 > Step 5 Bicep code lives in `infra/bicep/{project}/`. Step 6 is deployment.
 > Step 7 combines as-built diagrams, ADRs, and workload documentation.
 
 ## Project Name
 
-When starting a new workflow with `@plan`, you'll be prompted for a project name.
+When starting a new workflow with `@requirements`, you'll be prompted for a project name.
 This name is used to create the project folder and is inherited by all subsequent agents.
 
 If an `agent-output/{project}/` folder already exists, agents will suggest reusing it
@@ -70,11 +70,11 @@ This file is automatically updated by agents as they create new outputs.
 
 ## Workflow Progress
 
-- [ ] Step 1: Requirements (@plan)
-- [ ] Step 2: Architecture (azure-principal-architect)
-- [ ] Step 3: Design Artifacts (diagram-generator, adr-generator)
+- [ ] Step 1: Requirements (@requirements)
+- [ ] Step 2: Architecture (architect)
+- [ ] Step 3: Design Artifacts (diagram, adr)
 - [ ] Step 4: Planning (bicep-plan)
-- [ ] Step 5: Implementation (bicep-implement)
+- [ ] Step 5: Implementation (bicep-code)
 - [ ] Step 6: Deploy
 - [ ] Step 7: As-Built Artifacts (diagrams, ADRs, workload docs)
 
@@ -92,7 +92,16 @@ This file is automatically updated by agents as they create new outputs.
 - **Scenarios**: [`scenarios/`](../../scenarios/)
 ```
 
-## Existing Demo Outputs
+## Sample Projects
+
+| Project                                         | Description                                        | Artifacts                                |
+| ----------------------------------------------- | -------------------------------------------------- | ---------------------------------------- |
+| [agent-testing](./agent-testing/)               | Agent validation framework with 16 Azure resources | Full 7-step workflow + health validation |
+| [static-webapp](./static-webapp/)               | Azure Static Web App with Functions backend        | Production-ready SWA pattern             |
+| [ecommerce](./ecommerce/)                       | E-commerce platform architecture                   | Multi-tier with SQL and CDN              |
+| [infraops-static-demo](./infraops-static-demo/) | Demo static web infrastructure                     | Complete workflow example                |
+
+## Legacy Demo Outputs
 
 Legacy demo outputs in the following locations are preserved for demonstration purposes:
 
