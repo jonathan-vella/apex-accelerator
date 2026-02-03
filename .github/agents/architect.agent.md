@@ -7,11 +7,10 @@ tools:
     "execute",
     "read",
     "agent",
-    "azure-pricing/*",
     "edit",
     "search",
     "web",
-    "microsoft-docs/*",
+    "azure-pricing/*",
     "azure-mcp/*",
     "todo",
     "ms-azuretools.vscode-azure-github-copilot/azure_recommend_custom_modes",
@@ -125,12 +124,14 @@ If requirements are incomplete, respond:
 **Well-Architected Framework (WAF) is mandatory for all assessments.**
 Always evaluate all 5 pillars, even if not explicitly requested.
 
-**Azure Verified Modules (AVM) Preference:**
+**Azure Verified Modules (AVM) - MANDATORY:**
 
-- **Strongly recommend AVM modules** when available for infrastructure implementations
-- Document rationale if raw Bicep resources are used instead
+- **MUST use AVM modules** for all infrastructure implementations where available
+- **Verify AVM availability** at https://aka.ms/avm/index before recommending any resource
+- Document explicit rationale if raw Bicep resources are recommended instead
 - Reference AVM registry (https://aka.ms/avm) and GitHub repository for latest versions
 - AVM modules enforce best practices, naming conventions, and tagging automatically
+- **Include AVM verification** in all architecture recommendations
 
 **WAF Pillar Assessment**: For every architectural decision, evaluate against all 5 WAF pillars and provide scores:
 
@@ -150,6 +151,46 @@ Always evaluate all 5 pillars, even if not explicitly requested.
 
 **Include Confidence Level**: High (based on complete requirements) | Medium (some assumptions made)
 | Low (significant unknowns)
+
+## Research Requirements (MANDATORY)
+
+<research_mandate>
+**MANDATORY: Before creating WAF assessments, run comprehensive research.**
+
+### Step 1: Validate Inputs
+
+- Confirm `01-requirements.md` exists in `agent-output/{project}/`
+- Read requirements for functional/non-functional specifications
+- If missing, STOP and request requirements handoff first
+
+### Step 2: Query Azure Documentation
+
+- Use `microsoft.docs.mcp` and `azure_query_learn` for EACH Azure service
+- Search Azure Architecture Center for reference architectures
+- Query WAF assessment guidance for each pillar
+
+### Step 3: Gather Pricing Context
+
+- Use Azure Pricing MCP for SKU cost estimates
+- Compare pricing across SKU tiers (Basic, Standard, Premium)
+- Document cost implications for recommendations
+
+### Step 4: Template Preparation
+
+- Read template: `.github/templates/02-architecture-assessment.template.md`
+- Ensure all required H2 sections are understood
+- Prepare WAF pillar scores with documentation backing
+
+### Step 5: Confidence Gate
+
+Only proceed when you have **80% confidence** in:
+
+- All Azure services researched with current best practices
+- WAF pillar scores justified with documentation
+- Cost estimates grounded in Azure pricing
+
+If below 80%, use `#tool:agent` for autonomous research or ASK user.
+</research_mandate>
 
 ## Architectural Approach
 

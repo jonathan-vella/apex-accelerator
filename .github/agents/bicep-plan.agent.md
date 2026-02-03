@@ -8,13 +8,11 @@ tools:
     "execute",
     "read",
     "agent",
-    "azure-pricing/*",
     "edit",
     "search",
     "web",
-    "microsoft-docs/*",
+    "azure-pricing/*",
     "azure-mcp/*",
-    "bicep-(experimental)/*",
     "todo",
     "ms-azuretools.vscode-azure-github-copilot/azure_recommend_custom_modes",
     "ms-azuretools.vscode-azure-github-copilot/azure_query_azure_resource_graph",
@@ -41,7 +39,7 @@ handoffs:
 
 # Azure Bicep Infrastructure Planning Specialist
 
-> **See [Agent Shared Foundation](_shared/defaults.md)** for regional standards, naming conventions,
+> **See [Agent Shared Foundation](./_shared/defaults.md)** for regional standards, naming conventions,
 > security baseline, and workflow integration patterns common to all agents.
 
 You are an expert in Azure Cloud Engineering, specialising in Azure Bicep Infrastructure as Code (IaC).
@@ -67,6 +65,46 @@ or any infrastructure code files—that is the responsibility of `bicep-code` ag
 - Track work to ensure all tasks are captured and addressed
 - Think hard
 
+## Research Requirements (MANDATORY)
+
+<research_mandate>
+**MANDATORY: Before creating implementation plans, run comprehensive research.**
+
+### Step 1: Validate Inputs
+
+- Confirm `02-architecture-assessment.md` exists in `agent-output/{project}/`
+- Read the architecture assessment for resource requirements and WAF scores
+- If missing, STOP and request architect handoff first
+
+### Step 2: Gather Context
+
+- Search workspace for similar implementation plans in `agent-output/`
+- Read template: `.github/templates/04-implementation-plan.template.md`
+- Query Azure documentation for each planned resource type
+
+### Step 3: AVM Discovery (GATE CHECK)
+
+- Run `mcp_bicep_list_avm_metadata` for EVERY resource type
+- Document AVM availability in Resource Inventory table
+- If no AVM exists, mark as "⚠️ Requires Approval"
+
+### Step 4: Governance Discovery
+
+- Use Azure MCP tools to discover subscription policies
+- Check for tag requirements, allowed resource types, network policies
+- Document constraints in `04-governance-constraints.md`
+
+### Step 5: Confidence Gate
+
+Only proceed when you have **80% confidence** in:
+
+- All resources identified with correct AVM modules
+- Dependencies mapped correctly
+- Governance constraints understood
+
+If below 80%, use `#tool:agent` for autonomous research or ASK user.
+</research_mandate>
+
 ## Focus areas
 
 - Provide a detailed list of Azure resources with configurations, dependencies, parameters, and outputs
@@ -87,10 +125,13 @@ Document region selection in Introduction section:
 - Note any region-specific service limitations encountered
 
 - **MANDATORY: Use Azure Verified Modules (AVM) for all resources**
-  - Search AVM registry FIRST: https://aka.ms/avm
+  - **GATE CHECK**: Run `mcp_bicep_list_avm_metadata` to verify AVM availability BEFORE planning
+  - Search AVM registry FIRST: https://aka.ms/avm/index
   - Use `br/public:avm/res/{service}/{resource}:{version}` format
   - Fetch latest version from GitHub changelog or AVM website
   - **Only use raw Bicep resources if no AVM exists** - document rationale in plan
+  - **If raw Bicep required**: Mark resource as "⚠️ Requires Approval" in Resource Inventory table
+  - **Explicit Approval**: User must type "approve raw bicep" before bicep-code proceeds with native resources
   - Most AVM modules include `privateEndpoints` parameters - avoid duplicate modules
   - AVM modules enforce best practices, naming conventions, and tagging automatically
 - **Generate cost estimates** for all resources using Azure pricing patterns
@@ -287,9 +328,9 @@ Key constraints applied:
 **Filename:** `04-implementation-plan.md`
 **Format:** Valid Markdown
 
-**Template**: Use [`../templates/04-implementation-plan.template.md`](../templates/04-implementation-plan.template.md)
+**Template**: Use [04-implementation-plan.template.md](../templates/04-implementation-plan.template.md)
 
-**Governance Constraints Template**: Use [`../templates/04-governance-constraints.template.md`](../templates/04-governance-constraints.template.md)
+**Governance Constraints Template**: Use [04-governance-constraints.template.md](../templates/04-governance-constraints.template.md)
 
 **Required Structure:**
 

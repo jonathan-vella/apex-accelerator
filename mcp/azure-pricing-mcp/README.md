@@ -1,6 +1,6 @@
 # Azure Pricing MCP Server 💰
 
-> **Version 1.0.0**
+> **Version 3.1.0**
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![MCP](https://img.shields.io/badge/MCP-1.0+-green.svg)](https://modelcontextprotocol.io/)
@@ -51,10 +51,10 @@ The MCP server is pre-configured in `.vscode/mcp.json` for this workspace.
 This MCP server integrates with the custom agents in this repository to provide
 **real-time Azure pricing** during infrastructure planning:
 
-| Agent                       | Integration                            |
-| --------------------------- | -------------------------------------- |
-| `architect` | Cost estimation during WAF assessments |
-| `bicep-plan`                | SKU pricing for implementation plans   |
+| Agent        | Integration                            |
+| ------------ | -------------------------------------- |
+| `architect`  | Cost estimation during WAF assessments |
+| `bicep-plan` | SKU pricing for implementation plans   |
 
 ### How It Works
 
@@ -67,12 +67,18 @@ This MCP server integrates with the custom agents in this repository to provide
 
 The following tools are available to agents:
 
-- `azure_price_search` - Search prices with filters
-- `azure_price_compare` - Compare across regions/SKUs
-- `azure_cost_estimate` - Monthly/yearly cost calculations
-- `azure_region_recommend` - Find cheapest regions
-- `azure_discover_skus` - List available SKUs
-- `azure_sku_discovery` - Fuzzy name matching for services
+| Tool                     | Description                                              | Primary Agent               |
+| ------------------------ | -------------------------------------------------------- | --------------------------- |
+| `azure_price_search`     | Search prices with filters                               | `@architect`, `@bicep-plan` |
+| `azure_price_compare`    | Compare across regions/SKUs                              | `@architect`                |
+| `azure_cost_estimate`    | Monthly/yearly cost calculations                         | `@architect`, `@bicep-plan` |
+| `azure_region_recommend` | Find cheapest regions                                    | `@architect`                |
+| `azure_discover_skus`    | List available SKUs                                      | `@bicep-plan`               |
+| `azure_sku_discovery`    | Fuzzy name matching for services                         | `@bicep-plan`               |
+| `azure_ri_pricing`       | Reserved Instance pricing (**NEW v3.1.0**)               | `@architect`, `@bicep-plan` |
+| `spot_eviction_rates`    | Spot VM eviction rate queries (**NEW v3.1.0**)           | `@architect`                |
+| `spot_price_history`     | Up to 90 days Spot pricing history (**NEW v3.1.0**)      | `@architect`                |
+| `simulate_eviction`      | Trigger eviction simulation on Spot VMs (**NEW v3.1.0**) | `@diagnose`                 |
 
 ---
 
@@ -120,6 +126,10 @@ The following tools are available to agents:
 | `azure_region_recommend` | Find cheapest regions for a SKU with savings percentages |
 | `azure_discover_skus`    | List available SKUs for a specific service               |
 | `azure_sku_discovery`    | Intelligent SKU discovery with fuzzy name matching       |
+| `azure_ri_pricing`       | Reserved Instance pricing (1-year, 3-year) (**NEW**)     |
+| `spot_eviction_rates`    | Query Spot VM eviction rates by region (**NEW**)         |
+| `spot_price_history`     | Up to 90 days of Spot VM pricing history (**NEW**)       |
+| `simulate_eviction`      | Trigger eviction simulation on Spot VMs (**NEW**)        |
 
 ---
 
@@ -193,9 +203,9 @@ The MCP server is already configured in `.vscode/mcp.json`:
       "type": "stdio",
       "command": "${workspaceFolder}/mcp/azure-pricing-mcp/.venv/bin/python",
       "args": ["-m", "azure_pricing_mcp"],
-      "cwd": "${workspaceFolder}/mcp/azure-pricing-mcp/src"
-    }
-  }
+      "cwd": "${workspaceFolder}/mcp/azure-pricing-mcp/src",
+    },
+  },
 }
 ```
 
@@ -219,9 +229,9 @@ Create `.vscode/mcp.json` in your workspace:
       "type": "stdio",
       "command": "/absolute/path/to/mcp/azure-pricing-mcp/.venv/bin/python",
       "args": ["-m", "azure_pricing_mcp"],
-      "cwd": "/absolute/path/to/mcp/azure-pricing-mcp/src"
-    }
-  }
+      "cwd": "/absolute/path/to/mcp/azure-pricing-mcp/src",
+    },
+  },
 }
 ```
 
