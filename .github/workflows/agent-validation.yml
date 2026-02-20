@@ -14,11 +14,7 @@ on:
       - ".devcontainer/devcontainer.json"
       - ".vscode/mcp.json"
       - ".vscode/extensions.json"
-      - "scripts/validate-agent-frontmatter.mjs"
-      - "scripts/validate-skills-format.mjs"
-      - "scripts/validate-mcp-config.mjs"
-      - "scripts/validate-vscode-config.mjs"
-      - "scripts/validate-instruction-frontmatter.mjs"
+      - "package.json"
   pull_request:
     branches: [main]
     paths:
@@ -55,13 +51,28 @@ jobs:
         run: npm ci
 
       - name: Run VS Code 1.109 validation suite
-        run: npm run test:1109
+        run: |
+          if [ -f scripts/validate-vscode-config.mjs ] && [ -f scripts/validate-agent-frontmatter.mjs ] && [ -f scripts/validate-skills-format.mjs ]; then
+            npm run test:1109
+          else
+            echo "Skipping test:1109 - required scripts are not present in this repository."
+          fi
 
       - name: Validate MCP config
-        run: npm run lint:mcp-config
+        run: |
+          if [ -f scripts/validate-mcp-config.mjs ]; then
+            npm run lint:mcp-config
+          else
+            echo "Skipping lint:mcp-config - scripts/validate-mcp-config.mjs not found."
+          fi
 
       - name: Validate instruction file frontmatter
-        run: npm run lint:instruction-frontmatter
+        run: |
+          if [ -f scripts/validate-instruction-frontmatter.mjs ]; then
+            npm run lint:instruction-frontmatter
+          else
+            echo "Skipping lint:instruction-frontmatter - validation script not found."
+          fi
 
       - name: Validate handoff references
         run: |

@@ -4,7 +4,7 @@ This folder contains Azure Bicep templates for infrastructure deployment.
 
 ## Structure
 
-```
+```text
 infra/bicep/
 ├── {project-name}/
 │   ├── main.bicep          # Main deployment template
