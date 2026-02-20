@@ -1,0 +1,2 @@
+[console_scripts]
+azure-pricing-mcp = azure_pricing_mcp.server:run

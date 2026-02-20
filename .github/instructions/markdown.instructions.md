@@ -16,7 +16,7 @@ Follow these guidelines to ensure documentation quality across the repository.
 - Use LF line endings (enforced by `.gitattributes`)
 - Include meaningful alt text for all images
 - Validate with `markdownlint` before committing
-- Refer to `docs/guides/markdown-style-guide.md` for quick rules and examples
+- These standards serve as the canonical style reference for all markdown in this repository
 
 ## Line Length Guidelines
 
@@ -71,54 +71,120 @@ param location string = 'swedencentral'
 ```
 ````
 
-## Mermaid Diagrams
+## Diagram Embeds
 
-Always include the theme directive for dark mode compatibility:
+For Azure architecture artifacts, prefer **non-Mermaid** diagram files generated via
+Python diagrams (`.png`/`.svg`) and embed with Markdown images.
 
-### Good Example - Mermaid with theme directive
-
-```markdown
-​`mermaid
-%%{init: {'theme':'neutral'}}%%
-graph LR
-    A[Start] --> B[End]
-​`
-```
-
-### Bad Example - Missing theme directive
+### Good Example - External diagram embed
 
 ```markdown
-​`mermaid
-graph LR
-    A[Start] --> B[End]
-​`
+![Design Architecture](./03-des-diagram.png)
+
+Source: [03-des-diagram.py](./03-des-diagram.py)
 ```
+
+### Mermaid Usage
+
+Mermaid is allowed only when explicitly required by template/instruction.
+If Mermaid is used, include a neutral theme directive for dark mode compatibility.
 
 ## Template-First Approach for Workflow Artifacts
 
-**MANDATORY for Wave 1 artifacts (01, 02, 04, 06):**
+**MANDATORY for all workflow artifacts:**
 
-When generating core workflow artifacts, agents **MUST** follow the canonical templates:
+When generating workflow artifacts, agents **MUST** follow the canonical templates in
+`.github/skills/azure-artifacts/templates/`. Key examples:
 
-| Artifact                        | Template                                                   | Producing Agent           |
-| ------------------------------- | ---------------------------------------------------------- | ------------------------- |
-| `01-requirements.md`            | `.github/templates/01-requirements.template.md`            | @requirements (custom)    |
-| `02-architecture-assessment.md` | `.github/templates/02-architecture-assessment.template.md` | architect                 |
-| `04-implementation-plan.md`     | `.github/templates/04-implementation-plan.template.md`     | bicep-plan                |
-| `06-deployment-summary.md`      | `.github/templates/06-deployment-summary.template.md`      | Deployment tooling/manual |
+| Artifact                        | Template                                 | Producing Agent |
+| ------------------------------- | ---------------------------------------- | --------------- |
+| `01-requirements.md`            | `01-requirements.template.md`            | requirements    |
+| `02-architecture-assessment.md` | `02-architecture-assessment.template.md` | architect       |
+| `04-implementation-plan.md`     | `04-implementation-plan.template.md`     | bicep-plan      |
+| `06-deployment-summary.md`      | `06-deployment-summary.template.md`      | deploy          |
+
+All 15 artifact types have corresponding templates. See `artifact-h2-reference.instructions.md`
+for the complete heading reference.
 
 **Requirements:**
 
 1. **Preserve H2 heading order**: Templates define invariant H2 sections that MUST appear in order
 2. **No embedded skeletons**: Agents must link to templates, never embed structure inline
 3. **Optional sections**: May appear after the last required H2 (anchor), with warnings if before
-4. **Validation**: All artifacts are validated by `scripts/validate-wave1-artifacts.mjs`
+4. **Validation**: All artifacts are validated by `scripts/validate-artifact-templates.mjs`
 
 **Enforcement:**
 
-- CI drift guard runs on PR/push when templates, agents, or instructions change
-- Strictness mode starts `relaxed` (warnings), ratchets to `standard` (failures) after workflow proven
-- See `.github/workflows/` for drift guard configuration
+- Pre-commit hooks via Lefthook run validation on every commit
+- CI validates on PR/push via GitHub Actions
+- Auto-fix available: `npm run fix:artifact-h2`
+
+## Visual Styling Standards
+
+**MANDATORY**: All agent-generated documentation MUST follow the styling standards defined in:
+
+📚 **[Azure Artifacts Skill](../skills/azure-artifacts/SKILL.md)**
+
+### Quick Reference
+
+| Element        | Usage               | Example                                        |
+| -------------- | ------------------- | ---------------------------------------------- |
+| Callouts       | Emphasis & warnings | `> [!NOTE]`, `> [!TIP]`, `> [!WARNING]`        |
+| Status Emoji   | Progress indicators | ✅ ⚠️ ❌ 💡                                    |
+| Category Icons | Resource sections   | 💻 💾 🌐 🔐 📊                                 |
+| Collapsible    | Long content        | `<details><summary>...</summary>...</details>` |
+| References     | Evidence links      | Microsoft Learn URLs at document bottom        |
+
+### Callout Types
+
+```markdown
+> [!NOTE]
+> Informational - background context
+
+> [!TIP]
+> Best practice recommendation
+
+> [!IMPORTANT]
+> Critical requirement
+
+> [!WARNING]
+> Security/reliability concern
+
+> [!CAUTION]
+> Data loss risk or irreversible action
+```
+
+### Collapsible Sections
+
+Use for lengthy content (tables >10 rows, code examples, appendix material):
+
+```markdown
+<details>
+<summary>📋 Detailed Configuration</summary>
+
+| Setting | Value |
+| ------- | ----- |
+| ...     | ...   |
+
+</details>
+```
+
+### References Section
+
+Every documentation artifact SHOULD include a `## References` section at the bottom:
+
+```markdown
+---
+
+## References
+
+> [!NOTE]
+> 📚 The following Microsoft Learn resources provide additional guidance.
+
+| Topic      | Link                                            |
+| ---------- | ----------------------------------------------- |
+| Topic Name | [Display Text](https://learn.microsoft.com/...) |
+```
 
 ## Lists and Formatting
 
@@ -177,14 +243,14 @@ Prerequisites:
 ### Good Example - Descriptive links
 
 ```markdown
-See the [getting started guide](../../docs/getting-started/quickstart.md) for setup instructions.
+See the [getting started guide](../../docs/quickstart.md) for setup instructions.
 Refer to [Azure Bicep documentation](https://learn.microsoft.com/azure/azure-resource-manager/bicep/) for syntax details.
 ```
 
 ### Bad Example - Non-descriptive links
 
 ```markdown
-Click [here](../../docs/getting-started/quickstart.md) for more info.
+Click [here](../../docs/quickstart.md) for more info.
 ```
 
 ## Front Matter (Optional)
@@ -225,7 +291,7 @@ Run these commands before committing markdown:
 markdownlint '**/*.md' --ignore node_modules --config .markdownlint.json
 
 # Check for broken links (if using markdown-link-check)
-markdown-link-check README.md
+markdown-link-check ../../README.md
 ```
 
 ## Maintenance

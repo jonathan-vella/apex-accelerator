@@ -25,8 +25,8 @@ pre-commit:
     link-check:
       glob: "docs/**/*.md"
       run: |
-        # Get staged docs markdown files, excluding _superseded
-        STAGED_DOCS=$(git diff --cached --name-only --diff-filter=ACM | grep '^docs/.*\.md$' | grep -v '_superseded' || true)
+        # Get staged docs markdown files
+        STAGED_DOCS=$(git diff --cached --name-only --diff-filter=ACM | grep '^docs/.*\.md$' || true)
         if [ -n "$STAGED_DOCS" ]; then
           echo "🔗 Checking links in $(echo "$STAGED_DOCS" | wc -l | tr -d ' ') doc file(s)..."
           # Use npx to run from local node_modules (avoids Node.js 24 global install bug)
@@ -35,17 +35,102 @@ pre-commit:
           echo "ℹ️  No docs to check links"
         fi
 
-    artifact-validation:
-      glob: "agent-output/**/*.md"
+    h2-sync:
+      glob: "{.github/skills/azure-artifacts/SKILL.md,.github/instructions/artifact-h2-reference*,scripts/validate-artifact-templates*}"
       run: |
-        # Check if any core artifacts are staged
-        STAGED_CORE=$(git diff --cached --name-only --diff-filter=ACM | grep -E '(01-requirements|02-architecture-assessment|04-implementation-plan|04-governance-constraints|06-deployment-summary)\.md$' || true)
-        if [ -n "$STAGED_CORE" ]; then
-          echo "📋 Validating core artifact structure..."
-          npm run lint:artifact-templates
+        STAGED_SYNC=$(git diff --cached --name-only --diff-filter=ACM | grep -E '(SKILL\.md|artifact-h2-reference|validate-artifact-templates)' || true)
+        if [ -n "$STAGED_SYNC" ]; then
+          echo "🔄 Checking H2 heading sync across sources..."
+          npm run lint:h2-sync
         else
-          echo "ℹ️  No core artifacts to validate"
+          echo "ℹ️  No H2-source files to sync-check"
         fi
+      fail_text: |
+        ❌ H2 heading sync failed!
+
+        Sources must match: SKILL.md ↔ artifact-h2-reference ↔ validator
+        🔧 Run: npm run lint:h2-sync
+
+    artifact-validation:
+      glob: "{agent-output,.github/skills/azure-artifacts/templates}/**/*.md"
+      run: |
+        # Check if any agent-output artifacts are staged
+        STAGED_ARTIFACTS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^agent-output/.*\.md$' || true)
+        if [ -n "$STAGED_ARTIFACTS" ]; then
+          COUNT=$(echo "$STAGED_ARTIFACTS" | wc -l | tr -d ' ')
+          echo "📋 Validating $COUNT artifact(s) against templates..."
+          # Run full artifact validation - blocks on any H2 mismatch
+          if ! npm run lint:artifact-templates; then
+            echo ""
+            echo "❌ Artifact template validation failed!"
+            echo ""
+            echo "🔧 To fix:"
+            echo "   1. Check .github/instructions/artifact-h2-reference.instructions.md"
+            echo "   2. Use EXACT H2 headings from that file"
+            echo "   3. Run: npm run fix:artifact-h2 <file> --apply"
+            echo "   4. Re-stage and commit"
+            echo ""
+            exit 1
+          fi
+        else
+          echo "ℹ️  No agent-output artifacts to validate"
+        fi
+      fail_text: |
+        ❌ Artifact H2 structure validation failed!
+
+        📚 Reference: .github/instructions/artifact-h2-reference.instructions.md
+        🔧 Auto-fix: npm run fix:artifact-h2 <file> --apply
+
+    agent-frontmatter:
+      glob: "**/*.agent.md"
+      run: |
+        # Check if any agent files are staged
+        STAGED_AGENTS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.agent\.md$' || true)
+        if [ -n "$STAGED_AGENTS" ]; then
+          COUNT=$(echo "$STAGED_AGENTS" | wc -l | tr -d ' ')
+          echo "🤖 Validating $COUNT agent file(s)..."
+          npm run lint:agent-frontmatter
+        else
+          echo "ℹ️  No agent files to validate"
+        fi
+      fail_text: |
+        ❌ Agent frontmatter validation failed!
+
+        🔧 Check YAML syntax in agent definitions
+        📚 Reference: .github/instructions/agents-definitions.instructions.md
+
+    instruction-frontmatter:
+      glob: "**/*.instructions.md"
+      run: |
+        STAGED_INSTR=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.instructions\.md$' || true)
+        if [ -n "$STAGED_INSTR" ]; then
+          COUNT=$(echo "$STAGED_INSTR" | wc -l | tr -d ' ')
+          echo "📋 Validating $COUNT instruction file(s)..."
+          npm run lint:instruction-frontmatter
+        else
+          echo "ℹ️  No instruction files to validate"
+        fi
+      fail_text: |
+        ❌ Instruction frontmatter validation failed!
+
+        📚 Allowed fields: description, applyTo
+        🔧 Remove any non-standard fields from YAML frontmatter
+
+    python-lint:
+      glob: "mcp/**/*.py"
+      run: |
+        STAGED_PY=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^mcp/.*\.py$' || true)
+        if [ -n "$STAGED_PY" ]; then
+          COUNT=$(echo "$STAGED_PY" | wc -l | tr -d ' ')
+          echo "🐍 Linting $COUNT Python file(s) with ruff..."
+          cd mcp/azure-pricing-mcp && python -m ruff check src/ tests/
+        else
+          echo "ℹ️  No Python files to lint"
+        fi
+      fail_text: |
+        ❌ Python lint failed!
+
+        🔧 Fix: cd mcp/azure-pricing-mcp && python -m ruff check --fix src/ tests/
 
 commit-msg:
   commands:
@@ -63,3 +148,31 @@ commit-msg:
              feat: add new Azure App Service module
              fix(bicep): correct storage account naming
              docs: update README with deployment steps
+
+# Post-commit validation checks (enforced)
+post-commit:
+  commands:
+    version-sync:
+      run: |
+        echo "🔍 Checking version synchronization..."
+        node scripts/validate-version-sync.mjs
+      fail_text: "❌ Version sync check failed"
+
+    deprecated-refs:
+      glob: "*.md"
+      run: |
+        echo "🔍 Checking for deprecated references..."
+        node scripts/validate-no-deprecated-refs.mjs
+      fail_text: "❌ Deprecated references check failed"
+
+    json-syntax:
+      glob: "*.json"
+      run: |
+        echo "🔍 Validating JSON syntax..."
+        STAGED_JSON=$(git diff --cached --name-only --diff-filter=ACM | grep '\.json$' | grep -v node_modules | grep -v infra || true)
+        if [ -n "$STAGED_JSON" ]; then
+          for f in $STAGED_JSON; do
+            node -e "JSON.parse(require('fs').readFileSync('$f'))" 2>/dev/null && echo "  ✓ $f" || { echo "  ✗ $f - Invalid JSON"; exit 1; }
+          done
+        fi
+      fail_text: "❌ JSON syntax validation failed"

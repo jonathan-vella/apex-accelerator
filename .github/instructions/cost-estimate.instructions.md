@@ -26,8 +26,8 @@ Cost estimates provide:
 
 The canonical cost-estimate structure is defined in these templates:
 
-- `.github/templates/03-des-cost-estimate.template.md` (design estimate)
-- `.github/templates/07-ab-cost-estimate.template.md` (as-built estimate)
+- `.github/skills/azure-artifacts/templates/03-des-cost-estimate.template.md` (design estimate)
+- `.github/skills/azure-artifacts/templates/07-ab-cost-estimate.template.md` (as-built estimate)
 
 Agents MUST start from the appropriate template and fill it in.
 Do not re-embed long templates in agent bodies.
@@ -61,7 +61,7 @@ Notes:
 **Generated**: {YYYY-MM-DD}
 **Region**: {primary-region}
 **Environment**: {Production|Staging|Development}
-**MCP Tools Used**: {azure_price_search, azure_cost_estimate, azure_region_recommend, azure_sku_discovery}
+**MCP Tools Used**: {azure_price_search, azure_cost_estimate, azure_bulk_estimate, azure_region_recommend, azure_sku_discovery}
 **Architecture Reference**: {relative link to assessment doc, if available}
 ```
 
@@ -196,26 +196,25 @@ Add a short "Business Context" narrative (2-5 lines) linking spend to outcomes.
 
 Include both subsections:
 
-1. Cost distribution (Mermaid pie)
+1. Cost distribution (table + optional generated image)
 2. Key design decisions affecting cost
 
-The cost distribution Mermaid pie is required even for very small workloads.
-If there are only 1-2 cost categories, still include the pie (it can be simple).
+Cost distribution is required for all workloads. Preferred format is a markdown table.
+Optional: include a generated chart image (PNG/SVG) when available.
 
-````markdown
+```markdown
 ## Architecture Overview
 
 ### Cost Distribution
 
-```mermaid
-%%{init: {'theme':'base','themeVariables':{pie1:'#0078D4',pie2:'#107C10',pie3:'#5C2D91',pie4:'#D83B01',pie5:'#FFB900'}}}%%
-pie showData
-    title Monthly Cost Distribution ($)
-    "💻 Compute" : 535
-    "💾 Data Services" : 466
-    "🌐 Networking" : 376
+| Category         | Monthly Cost (USD) | Share |
+| ---------------- | -----------------: | ----: |
+| 💻 Compute       |                535 |   39% |
+| 💾 Data Services |                466 |   34% |
+| 🌐 Networking    |                376 |   27% |
+
+![Monthly Cost Distribution](./03-des-cost-distribution.png)
 ```
-````
 
 ### Key Design Decisions Affecting Cost
 
@@ -223,7 +222,7 @@ pie showData
 | -------- | -------------- | ------------------ | -------- |
 | ...      | +$.../month 📈 | ...                | Required |
 
-````
+````text
 
 ### 6. 🧾 What We Are Not Paying For (Yet)
 
@@ -411,7 +410,7 @@ Always include links to:
 
 ## Pricing Sources (Priority Order)
 
-1. Azure Pricing MCP (`azure_price_search`, `azure_cost_estimate`)
+1. Azure Pricing MCP (`azure_price_search`, `azure_cost_estimate`, `azure_bulk_estimate`)
 2. Azure Pricing Calculator (manual validation)
 3. Azure Retail Prices API (programmatic)
 

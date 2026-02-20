@@ -1,13 +1,19 @@
 """Tool handlers for Azure Pricing MCP Server."""
 
+import json
 import logging
+from collections.abc import Callable, Coroutine
 from typing import Any
 
 from mcp.types import TextContent
 
 from .config import DEFAULT_CUSTOMER_DISCOUNT
+from .error_codes import ErrorCode, error_response
 from .formatters import (
     _get_discount_tip,
+    format_bulk_estimate_response,
+    format_cache_stats_response,
+    format_compact,
     format_cost_estimate_response,
     format_customer_discount_response,
     format_discover_skus_response,
@@ -20,7 +26,8 @@ from .formatters import (
     format_spot_eviction_rates_response,
     format_spot_price_history_response,
 )
-from .services import PricingService, SKUService, SpotService
+from .services import BulkEstimateService, PricingService, SKUService, SpotService
+from .validation import validate_arguments
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +40,39 @@ class ToolHandlers:
         pricing_service: PricingService,
         sku_service: SKUService,
         spot_service: SpotService | None = None,
+        bulk_service: BulkEstimateService | None = None,
     ) -> None:
         self._pricing_service = pricing_service
         self._sku_service = sku_service
         self._spot_service = spot_service
+        self._bulk_service = bulk_service
+
+    async def _safe_handle(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        handler: Callable[[dict[str, Any]], Coroutine[Any, Any, list[TextContent]]],
+    ) -> list[TextContent]:
+        """Execute *handler* inside a validation + error boundary.
+
+        1. Runs input validation via ``validate_arguments``.
+        2. Delegates to the concrete handler.
+        3. Catches unexpected exceptions so that a structured error is always
+           returned instead of crashing the MCP server.
+        """
+        validation_error = validate_arguments(tool_name, arguments)
+        if validation_error:
+            return [TextContent(type="text", text=json.dumps(validation_error))]
+
+        try:
+            return await handler(arguments)
+        except Exception:
+            logger.exception("Unhandled error in handler for tool '%s'", tool_name)
+            err = error_response(
+                ErrorCode.INTERNAL_ERROR,
+                f"An unexpected error occurred while executing '{tool_name}'",
+            )
+            return [TextContent(type="text", text=json.dumps(err))]
 
     def _resolve_discount(self, arguments: dict[str, Any]) -> tuple[float, bool, bool]:
         """Resolve discount settings from arguments.
@@ -93,14 +129,20 @@ class ToolHandlers:
 
     async def handle_price_search(self, arguments: dict[str, Any]) -> list[TextContent]:
         """Handle azure_price_search tool calls."""
+        return await self._safe_handle("azure_price_search", arguments, self._do_price_search)
+
+    async def _do_price_search(self, arguments: dict[str, Any]) -> list[TextContent]:
+        output_format = arguments.pop("output_format", "verbose")
         discount_pct, discount_specified, used_default = self._resolve_discount(arguments)
 
         result = await self._pricing_service.search_prices(**arguments)
         self._attach_discount_metadata(result, discount_pct, discount_specified, used_default)
 
+        if output_format == "compact":
+            return [TextContent(type="text", text=format_compact(result))]
+
         response_text = format_price_search_response(result)
 
-        # Add discount tip if appropriate
         discount_tip = _get_discount_tip(result)
         if discount_tip:
             response_text += f"\n\n{discount_tip}"
@@ -109,56 +151,109 @@ class ToolHandlers:
 
     async def handle_price_compare(self, arguments: dict[str, Any]) -> list[TextContent]:
         """Handle azure_price_compare tool calls."""
+        return await self._safe_handle("azure_price_compare", arguments, self._do_price_compare)
+
+    async def _do_price_compare(self, arguments: dict[str, Any]) -> list[TextContent]:
+        output_format = arguments.pop("output_format", "verbose")
         discount_pct, discount_specified, used_default = self._resolve_discount(arguments)
 
         result = await self._pricing_service.compare_prices(**arguments)
         self._attach_discount_metadata(result, discount_pct, discount_specified, used_default)
+
+        if output_format == "compact":
+            return [TextContent(type="text", text=format_compact(result))]
 
         response_text = format_price_compare_response(result)
         return [TextContent(type="text", text=response_text)]
 
     async def handle_region_recommend(self, arguments: dict[str, Any]) -> list[TextContent]:
         """Handle azure_region_recommend tool calls."""
+        return await self._safe_handle("azure_region_recommend", arguments, self._do_region_recommend)
+
+    async def _do_region_recommend(self, arguments: dict[str, Any]) -> list[TextContent]:
+        output_format = arguments.pop("output_format", "verbose")
         discount_pct, discount_specified, used_default = self._resolve_discount(arguments)
 
         result = await self._pricing_service.recommend_regions(**arguments)
         self._attach_discount_metadata(result, discount_pct, discount_specified, used_default)
+
+        if output_format == "compact":
+            return [TextContent(type="text", text=format_compact(result))]
 
         response_text = format_region_recommend_response(result)
         return [TextContent(type="text", text=response_text)]
 
     async def handle_cost_estimate(self, arguments: dict[str, Any]) -> list[TextContent]:
         """Handle azure_cost_estimate tool calls."""
+        return await self._safe_handle("azure_cost_estimate", arguments, self._do_cost_estimate)
+
+    async def _do_cost_estimate(self, arguments: dict[str, Any]) -> list[TextContent]:
+        output_format = arguments.pop("output_format", "verbose")
         discount_pct, discount_specified, used_default = self._resolve_discount(arguments)
 
         result = await self._pricing_service.estimate_costs(**arguments)
         self._attach_discount_metadata(result, discount_pct, discount_specified, used_default)
+
+        if output_format == "compact":
+            return [TextContent(type="text", text=format_compact(result))]
 
         response_text = format_cost_estimate_response(result)
         return [TextContent(type="text", text=response_text)]
 
     async def handle_discover_skus(self, arguments: dict[str, Any]) -> list[TextContent]:
         """Handle azure_discover_skus tool calls."""
+        return await self._safe_handle("azure_discover_skus", arguments, self._do_discover_skus)
+
+    async def _do_discover_skus(self, arguments: dict[str, Any]) -> list[TextContent]:
         result = await self._sku_service.discover_skus(**arguments)
         response_text = format_discover_skus_response(result)
         return [TextContent(type="text", text=response_text)]
 
     async def handle_sku_discovery(self, arguments: dict[str, Any]) -> list[TextContent]:
         """Handle azure_sku_discovery tool calls."""
+        return await self._safe_handle("azure_sku_discovery", arguments, self._do_sku_discovery)
+
+    async def _do_sku_discovery(self, arguments: dict[str, Any]) -> list[TextContent]:
         result = await self._sku_service.discover_service_skus(**arguments)
         response_text = format_sku_discovery_response(result)
         return [TextContent(type="text", text=response_text)]
 
     async def handle_customer_discount(self, arguments: dict[str, Any]) -> list[TextContent]:
         """Handle get_customer_discount tool calls."""
+        return await self._safe_handle("get_customer_discount", arguments, self._do_customer_discount)
+
+    async def _do_customer_discount(self, arguments: dict[str, Any]) -> list[TextContent]:
         result = await self._pricing_service.get_customer_discount(**arguments)
         response_text = format_customer_discount_response(result)
         return [TextContent(type="text", text=response_text)]
 
     async def handle_ri_pricing(self, arguments: dict[str, Any]) -> list[TextContent]:
         """Handle azure_ri_pricing tool calls."""
+        return await self._safe_handle("azure_ri_pricing", arguments, self._do_ri_pricing)
+
+    async def _do_ri_pricing(self, arguments: dict[str, Any]) -> list[TextContent]:
         result = await self._pricing_service.get_ri_pricing(**arguments)
         response_text = format_ri_pricing_response(result)
+        return [TextContent(type="text", text=response_text)]
+
+    async def handle_bulk_estimate(self, arguments: dict[str, Any]) -> list[TextContent]:
+        """Handle azure_bulk_estimate tool calls."""
+        return await self._safe_handle("azure_bulk_estimate", arguments, self._do_bulk_estimate)
+
+    async def _do_bulk_estimate(self, arguments: dict[str, Any]) -> list[TextContent]:
+        output_format = arguments.pop("output_format", "verbose")
+        discount_pct, discount_specified, used_default = self._resolve_discount(arguments)
+
+        if self._bulk_service is None:
+            err = error_response(ErrorCode.SERVICE_NOT_INITIALIZED, "BulkEstimateService not initialized")
+            return [TextContent(type="text", text=json.dumps(err))]
+
+        result = await self._bulk_service.bulk_estimate(**arguments)
+
+        if output_format == "compact":
+            return [TextContent(type="text", text=format_compact(result))]
+
+        response_text = format_bulk_estimate_response(result)
         return [TextContent(type="text", text=response_text)]
 
     def _get_spot_service(self) -> SpotService:
@@ -169,6 +264,9 @@ class ToolHandlers:
 
     async def handle_spot_eviction_rates(self, arguments: dict[str, Any]) -> list[TextContent]:
         """Handle spot_eviction_rates tool calls."""
+        return await self._safe_handle("spot_eviction_rates", arguments, self._do_spot_eviction_rates)
+
+    async def _do_spot_eviction_rates(self, arguments: dict[str, Any]) -> list[TextContent]:
         spot_service = self._get_spot_service()
         result = await spot_service.get_eviction_rates(
             skus=arguments["skus"],
@@ -179,6 +277,9 @@ class ToolHandlers:
 
     async def handle_spot_price_history(self, arguments: dict[str, Any]) -> list[TextContent]:
         """Handle spot_price_history tool calls."""
+        return await self._safe_handle("spot_price_history", arguments, self._do_spot_price_history)
+
+    async def _do_spot_price_history(self, arguments: dict[str, Any]) -> list[TextContent]:
         spot_service = self._get_spot_service()
         result = await spot_service.get_price_history(
             sku=arguments["sku"],
@@ -190,6 +291,9 @@ class ToolHandlers:
 
     async def handle_simulate_eviction(self, arguments: dict[str, Any]) -> list[TextContent]:
         """Handle simulate_eviction tool calls."""
+        return await self._safe_handle("simulate_eviction", arguments, self._do_simulate_eviction)
+
+    async def _do_simulate_eviction(self, arguments: dict[str, Any]) -> list[TextContent]:
         spot_service = self._get_spot_service()
         result = await spot_service.simulate_eviction(
             vm_resource_id=arguments["vm_resource_id"],
@@ -197,56 +301,13 @@ class ToolHandlers:
         response_text = format_simulate_eviction_response(result)
         return [TextContent(type="text", text=response_text)]
 
+    async def handle_cache_stats(
+        self, arguments: dict[str, Any], stats: dict[str, int]
+    ) -> list[TextContent]:
+        """Handle azure_cache_stats tool calls.
 
-def register_tool_handlers(server: Any, tool_handlers: ToolHandlers) -> None:
-    """Register all tool call handlers with the server.
-
-    Args:
-        server: The MCP server instance
-        tool_handlers: The ToolHandlers instance
-    """
-
-    @server.call_tool()
-    async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
-        """Handle tool calls."""
-        try:
-            if name == "azure_price_search":
-                return await tool_handlers.handle_price_search(arguments)
-
-            elif name == "azure_price_compare":
-                return await tool_handlers.handle_price_compare(arguments)
-
-            elif name == "azure_cost_estimate":
-                return await tool_handlers.handle_cost_estimate(arguments)
-
-            elif name == "azure_discover_skus":
-                return await tool_handlers.handle_discover_skus(arguments)
-
-            elif name == "azure_sku_discovery":
-                return await tool_handlers.handle_sku_discovery(arguments)
-
-            elif name == "azure_region_recommend":
-                return await tool_handlers.handle_region_recommend(arguments)
-
-            elif name == "azure_ri_pricing":
-                return await tool_handlers.handle_ri_pricing(arguments)
-
-            elif name == "get_customer_discount":
-                return await tool_handlers.handle_customer_discount(arguments)
-
-            # Spot VM tools (require Azure authentication)
-            elif name == "spot_eviction_rates":
-                return await tool_handlers.handle_spot_eviction_rates(arguments)
-
-            elif name == "spot_price_history":
-                return await tool_handlers.handle_spot_price_history(arguments)
-
-            elif name == "simulate_eviction":
-                return await tool_handlers.handle_simulate_eviction(arguments)
-
-            else:
-                return [TextContent(type="text", text=f"Unknown tool: {name}")]
-
-        except Exception as e:
-            logger.error(f"Error handling tool call {name}: {e}")
-            return [TextContent(type="text", text=f"Error: {str(e)}")]
+        ``stats`` is passed in by the server router because the cache
+        lives on the HTTP client, not on the handler layer.
+        """
+        response_text = format_cache_stats_response(stats)
+        return [TextContent(type="text", text=response_text)]

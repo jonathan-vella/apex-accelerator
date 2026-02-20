@@ -1,5 +1,5 @@
 {
-  "name": "Agentic InfraOps",
+  "name": "Agentic InfraOps Accelerator",
   "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
 
   "features": {
@@ -23,12 +23,8 @@
   },
 
   // Lifecycle commands - chain apt operations to avoid lock conflicts
-  "onCreateCommand": "sudo rm -f /etc/apt/sources.list.d/yarn.list 2>/dev/null && sudo apt-get update && sudo apt-get install -y graphviz dos2unix && sudo gpg -k && sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69 && echo 'deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main' | sudo tee /etc/apt/sources.list.d/k6.list && sudo apt-get update && sudo apt-get install -y k6 && curl -LsSf https://astral.sh/uv/install.sh | sh",
-  "postCreateCommand": {
-    "npm-install": "npm install",
-    "npm-global": "npm install -g markdownlint-cli2",
-    "post-create": "bash .devcontainer/post-create.sh"
-  },
+  "onCreateCommand": "set -e; sudo rm -f /etc/apt/sources.list.d/yarn.list 2>/dev/null; sudo apt-get update; sudo apt-get install -y graphviz dos2unix; ARCH=$(dpkg --print-architecture); if [ \"$ARCH\" = \"amd64\" ]; then curl -fsSL https://dl.k6.io/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg; echo 'deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main' | sudo tee /etc/apt/sources.list.d/k6.list; sudo apt-get update; sudo apt-get install -y k6; else echo \"Skipping k6 install on unsupported architecture: $ARCH\"; fi; curl -LsSf https://astral.sh/uv/install.sh | sh",
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
   "postStartCommand": {
     "lefthook": "npx lefthook install 2>/dev/null || true"
   },
@@ -47,7 +43,6 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        "GitHub.copilot",
         "GitHub.copilot-chat",
         "ms-azuretools.vscode-azureresourcegroups",
         "ms-azuretools.vscode-bicep",
@@ -60,19 +55,28 @@
         "ms-azuretools.vscode-azurecontainerapps",
         "ms-azuretools.vscode-azurestaticwebapps",
         "ms-azuretools.azure-dev",
-        "ms-azuretools.vscode-docker",
+        "ms-azuretools.vscode-containers",
         "ms-kubernetes-tools.vscode-kubernetes-tools",
         "ms-kubernetes-tools.vscode-aks-tools",
         "github.vscode-github-actions",
         "github.vscode-pull-request-github",
-        "ms-azuretools.vscode-azure-github-copilot",
+        "ms-azuretools.vscode-azure-mcp-server",
         "ms-vscode.vscode-websearchforcopilot",
-        "teamsdevapp.vscode-ai-foundry",
         "esbenp.prettier-vscode",
         "mechatroner.rainbow-csv",
-        "redhat.vscode-yaml"
+        "redhat.vscode-yaml",
+        "mutantdino.resourcemonitor"
       ],
       "settings": {
+        "chat.customAgentInSubagent.enabled": true,
+        "chat.agentFilesLocations": {
+          ".github/agents": true,
+          ".github/agents/_subagents": true
+        },
+        "chat.agentSkillsLocations": {
+          ".github/skills": true
+        },
+        "chat.useAgentSkills": true,
         "editor.formatOnSave": true,
         "editor.defaultFormatter": "esbenp.prettier-vscode",
         "editor.rulers": [120],
