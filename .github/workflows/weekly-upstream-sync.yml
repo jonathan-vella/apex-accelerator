@@ -35,7 +35,6 @@ name: Upstream Sync
 permissions:
   contents: write
   pull-requests: write
-  workflows: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -64,6 +63,7 @@ jobs:
         with:
           ref: ${{ github.ref_name }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Configure git
         run: |
@@ -118,6 +118,7 @@ jobs:
             changed=true
           fi
 
+          echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
 
       - name: Log changed files
@@ -135,12 +136,26 @@ jobs:
         if: steps.sync.outputs.changed == 'true' || github.event.inputs.force_sync == 'true'
         run: |
           git add -A
+
           git commit -m "chore(sync): upstream sync from ${UPSTREAM_REPO}@${UPSTREAM_REF}
 
           Synced at $(date -u +"%Y-%m-%d %H:%M UTC")
           Excluded: agent-output/ infra/bicep/ .github/workflows/weekly-upstream-sync.yml" \
             --allow-empty
-          git push --force origin "${SYNC_BRANCH}"
+
+          set +e
+          push_output=$(git push --force origin "${SYNC_BRANCH}" 2>&1)
+          push_exit=$?
+          set -e
+
+          if [ "$push_exit" -ne 0 ]; then
+            echo "$push_output"
+            if echo "$push_output" | grep -q 'without `workflows` permission'; then
+              echo "::error::Push failed because workflow files changed and GITHUB_TOKEN cannot update workflows in this repo policy."
+              echo "::error::Use a PAT with workflow scope, or exclude .github/workflows/ from sync."
+            fi
+            exit "$push_exit"
+          fi
 
       - name: Ensure PR labels exist
         if: steps.sync.outputs.changed == 'true' || github.event.inputs.force_sync == 'true'
