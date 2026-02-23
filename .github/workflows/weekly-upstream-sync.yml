@@ -111,6 +111,20 @@ jobs:
             fi
           done <<< "${EXCLUDE_PATHS}"
 
+          # Special-case excluded workflows directory:
+          # remove any upstream-added workflow files that don't exist in BASE_SHA.
+          if [ -d ".github/workflows" ]; then
+            while IFS= read -r wf; do
+              [ -z "$wf" ] && continue
+              if ! git cat-file -e "${BASE_SHA}:${wf}" 2>/dev/null; then
+                git rm --cached --ignore-unmatch -- "$wf" > /dev/null 2>&1 || true
+                rm -f -- "$wf" 2>/dev/null || true
+              fi
+            done < <(git diff --cached --name-only -- '.github/workflows/' || true)
+
+            git checkout "${BASE_SHA}" -- '.github/workflows/' 2>/dev/null || true
+          fi
+
           # Detect whether anything changed relative to the base branch
           changed=false
           if ! git diff --quiet "${BASE_SHA}" -- || ! git diff --cached --quiet "${BASE_SHA}" --; then
