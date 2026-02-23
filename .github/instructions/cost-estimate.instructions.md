@@ -32,26 +32,11 @@ The canonical cost-estimate structure is defined in these templates:
 Agents MUST start from the appropriate template and fill it in.
 Do not re-embed long templates in agent bodies.
 
-### Core Heading Contract (Stable)
+### Core Heading Contract
 
-Both templates MUST contain these exact H2 headings (`##`) in this order:
-
-1. `## 💰 Cost At-a-Glance`
-2. `## ✅ Decision Summary`
-3. `## 🔁 Requirements → Cost Mapping`
-4. `## 📊 Top 5 Cost Drivers`
-5. `## Architecture Overview`
-6. `## 🧾 What We Are Not Paying For (Yet)`
-7. `## ⚠️ Cost Risk Indicators`
-8. `## 🎯 Quick Decision Matrix`
-9. `## 💰 Savings Opportunities`
-10. `## Detailed Cost Breakdown`
-
-Notes:
-
-- Emoji + spacing must match exactly.
-- Use the unicode arrow `→` (not `->`) in the Requirements heading.
-- Additional H2 headings are allowed, but discouraged (prefer H3s).
+The required H2 headings are defined in `azure-artifacts.instructions.md`
+and validated by `validate-artifact-templates.mjs`. Use the unicode
+arrow `→` (not `->`) in the Requirements heading.
 
 ## Required Header
 
@@ -65,12 +50,12 @@ Notes:
 **Architecture Reference**: {relative link to assessment doc, if available}
 ```
 
-## 💰 Cost At-a-Glance (Required)
+## 💵 Cost At-a-Glance (Required)
 
 Include immediately after the header:
 
 ````markdown
-## 💰 Cost At-a-Glance
+## 💵 Cost At-a-Glance
 
 > **Monthly Total: ~$X,XXX** | Annual: ~$XX,XXX
 >
@@ -203,7 +188,7 @@ Cost distribution is required for all workloads. Preferred format is a markdown 
 Optional: include a generated chart image (PNG/SVG) when available.
 
 ```markdown
-## Architecture Overview
+## 🏛️ Architecture Overview
 
 ### Cost Distribution
 
@@ -298,7 +283,7 @@ If already optimized, say so and list what is already applied.
 Break down by category, include subtotals.
 
 ```markdown
-## Detailed Cost Breakdown
+## 🧾 Detailed Cost Breakdown
 
 ### 💻 Compute Services
 

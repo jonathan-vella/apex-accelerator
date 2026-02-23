@@ -63,21 +63,26 @@ description: "<What it does>. Use when <specific triggers, scenarios, keywords u
 2. **WHEN** to use it (triggers, scenarios, file types)
 3. **Keywords** users might mention in prompts
 
-**Good example:**
+**Good example** — single-line inline string (required):
 
 ```yaml
-description: >
-  Toolkit for testing local web applications using Playwright.
-  Use when asked to verify frontend functionality, debug UI behavior,
-  capture browser screenshots, or view browser console logs.
-  Supports Chrome, Firefox, and WebKit.
+description: "Toolkit for testing local web applications using Playwright. Use when asked to verify frontend functionality, debug UI behavior, capture browser screenshots, or view browser console logs. Supports Chrome, Firefox, and WebKit."
 ```
 
-**Poor example:**
+**Poor examples** — NEVER use these:
 
 ```yaml
+# ❌ YAML block scalar — breaks Copilot skill discovery
+description: >
+  Toolkit for testing local web applications...
+
+# ❌ Too short — not enough context for skill routing
 description: "Web testing helpers"
 ```
+
+> **Rule**: `description` MUST be a single-line inline string. YAML block scalars
+> (`>` or `|`) cause the runtime to receive a literal `">"` instead of your text,
+> silently disabling skill auto-discovery.
 
 ### Step 3: Write the Skill Body
 
@@ -147,6 +152,109 @@ my-awesome-skill/
 | Validation fails on name | Ensure lowercase, no consecutive hyphens, matches folder |
 | Description too short    | Add capabilities, triggers, and keywords                 |
 | Assets not found         | Use relative paths from skill root                       |
+
+## Project-Specific Scaffold Templates
+
+When creating skills for *this* project, use one of these skeletons that match
+the conventions already established in the repository.
+
+### Azure Knowledge Skill Skeleton
+
+For skills that teach agents about Azure patterns, conventions, or diagnostics:
+
+```yaml
+---
+name: azure-{topic}
+description: {What it does including Azure context}. Use when {triggers and keywords}.
+compatibility: Requires Azure CLI with Bicep extension
+---
+```
+
+```markdown
+# Azure {Topic} Skill
+
+One-sentence overview of what this skill provides.
+
+---
+
+## Quick Reference
+
+| Pattern / Capability | When to Use |
+| -------------------- | ----------- |
+| ...                  | ...         |
+
+---
+
+## {Pattern/Section Name}
+
+Explanation and code example:
+
+\```bicep
+// example
+\```
+
+---
+
+## Learn More
+
+| Topic | How to Find |
+| ----- | ----------- |
+| ...   | `microsoft_docs_search(query="...")` |
+```
+
+### Integration Skill Skeleton
+
+For skills that wrap external tools, MCP servers, or CLIs:
+
+```yaml
+---
+name: {tool-name}
+description: {What it does}. Use when {triggers}.
+compatibility: Requires {tool/dependency}
+---
+```
+
+```markdown
+# {Tool Name} Skill
+
+Overview of the integration.
+
+---
+
+## Quick Reference
+
+| Tool / Command | Purpose |
+| -------------- | ------- |
+| ...            | ...     |
+
+---
+
+## Workflow
+
+### Step 1: ...
+### Step 2: ...
+
+---
+
+## Troubleshooting
+
+| Issue | Solution |
+| ----- | -------- |
+| ...   | ...      |
+```
+
+### Checklist: Before Committing a New Skill
+
+- [ ] Folder uses lowercase-hyphenated name matching `name:` field
+- [ ] `description` is a single-line inline string (no YAML block scalars)
+- [ ] `description` includes WHAT, WHEN, and keywords
+- [ ] Body uses `---` horizontal rules between major sections
+- [ ] Tables used for structured data instead of prose lists
+- [ ] Code examples are project-relevant (Bicep, KQL, Azure CLI)
+- [ ] `## Learn More` section references `microsoft_docs_search()` where applicable
+- [ ] Added to `.github/skills/README.md` under the correct category
+- [ ] Added to `.github/copilot-instructions.md` skills table
+- [ ] Wired into consuming agents via mandatory read list
 
 ## References
 

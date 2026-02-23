@@ -1,4 +1,12 @@
 {
+  "ignorePatterns": [
+    {
+      "pattern": "^mailto:"
+    },
+    {
+      "pattern": "^#"
+    }
+  ],
   "replacementPatterns": [
     {
       "pattern": "^/",
@@ -19,12 +27,6 @@
   "fallbackRetryDelay": "5s",
   "timeout": "15s",
   "ignorePatterns": [
-    {
-      "pattern": "^mailto:"
-    },
-    {
-      "pattern": "^#"
-    },
     {
       "pattern": "^https?://localhost"
     },

@@ -32,6 +32,7 @@ It includes all required tools, extensions, and configurations to build Azure in
 
 - **Azure MCP Server** - RBAC-aware Azure context for agents
 - **Azure Pricing MCP** - Real-time SKU pricing for cost estimates
+- **Microsoft Learn MCP** - Official Microsoft documentation search, code samples, and page fetching
 
 ### Python Libraries (Auto-installed)
 
@@ -83,8 +84,8 @@ az account set --subscription "<your-subscription-id>"
 # 3. Verify tools are installed (auto-displayed after setup)
 az bicep version && pwsh --version
 
-# 4. Explore agents and infrastructure
-cd .github/agents/ && ls -la
+# 4. Explore docs and infrastructure
+cd docs/prompt-guide/ && ls -la
 cd ../../infra/bicep/ && tree -L 2
 ```
 
@@ -92,9 +93,9 @@ cd ../../infra/bicep/ && tree -L 2
 
 ### Pre-configured Environment Variables
 
-| Variable                  | Value           | Purpose                                        |
-| ------------------------- | --------------- | ---------------------------------------------- |
-| `AZURE_DEFAULTS_LOCATION` | `swedencentral` | Default Azure region (matches repo guidelines) |
+| Variable                  | Value                           | Purpose                                        |
+| ------------------------- | ------------------------------- | ---------------------------------------------- |
+| `AZURE_DEFAULTS_LOCATION` | `swedencentral`                 | Default Azure region (matches repo guidelines) |
 
 ### Azure Credentials Mount
 
@@ -149,8 +150,7 @@ sudo npm update -g markdownlint-cli           # markdownlint
 | Azure auth fails      | Use `az login --use-device-code`                         |
 | Rebuild needed        | `F1` → `Dev Containers: Rebuild Container Without Cache` |
 
-📖 **Troubleshooting guidance:**
-[Main repository troubleshooting](https://github.com/jonathan-vella/azure-agentic-infraops/blob/main/docs/troubleshooting.md)
+📖 **Full troubleshooting guide:** [docs/troubleshooting.md](../docs/troubleshooting.md)
 
 ## 📊 Resource Usage
 
@@ -170,8 +170,8 @@ sudo npm update -g markdownlint-cli           # markdownlint
 
 ## 📚 Related Documentation
 
-- [Workflow Guide](https://github.com/jonathan-vella/azure-agentic-infraops/blob/main/docs/reference/workflow.md)
-- [Prompt Guide](https://github.com/jonathan-vella/azure-agentic-infraops/tree/main/docs/prompt-guide)
+- [Workflow Guide](../docs/workflow.md)
+- [Prompt Guide](../docs/prompt-guide/)
 - [Copilot Instructions](../.github/copilot-instructions.md)
 - [Repository README](../README.md)
 

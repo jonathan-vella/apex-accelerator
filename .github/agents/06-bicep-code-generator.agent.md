@@ -153,6 +153,12 @@ handoffs:
    - `.github/skills/azure-artifacts/templates/04-preflight-check.template.md`
    - `.github/skills/azure-artifacts/templates/05-implementation-reference.template.md`
      Use as structural skeletons (replicate badges, TOC, navigation, attribution exactly).
+4. **Read** `.github/skills/microsoft-code-reference/SKILL.md` — verify AVM module parameters,
+   check API versions, find correct Bicep patterns via official docs
+5. **Read** `.github/skills/azure-bicep-patterns/SKILL.md` — hub-spoke, private endpoints,
+   diagnostic settings, managed identity, module composition patterns
+6. **Read** `.github/instructions/bicep-policy-compliance.instructions.md` — governance
+   compliance mandate, dynamic tag list, anti-patterns
 
 These skills are your single source of truth. Do NOT use hardcoded values.
 
@@ -163,7 +169,8 @@ These skills are your single source of truth. Do NOT use hardcoded values.
 - ✅ Run preflight check BEFORE writing any Bicep (Phase 1 below)
 - ✅ Use AVM modules for EVERY resource that has one — never raw Bicep when AVM exists
 - ✅ Generate `uniqueSuffix` ONCE in `main.bicep`, pass to ALL modules
-- ✅ Apply all 4 required tags (`Environment`, `ManagedBy`, `Project`, `Owner`) to every resource
+- ✅ Apply baseline tags (`Environment`, `ManagedBy`, `Project`, `Owner`) plus any extras from governance
+- ✅ Parse `04-governance-constraints.json` and map every Deny policy to specific Bicep parameters
 - ✅ Apply security baseline (TLS 1.2, HTTPS-only, no public blob access, managed identity)
 - ✅ Follow CAF naming conventions (from azure-defaults skill)
 - ✅ Use `take()` for length-constrained resources (Key Vault ≤24, Storage ≤24)
@@ -186,16 +193,23 @@ These skills are your single source of truth. Do NOT use hardcoded values.
 - ❌ Skip `bicep build` / `bicep lint` validation
 - ❌ Deploy — that's the Deploy agent's job
 - ❌ Proceed without checking AVM parameter types (known type mismatches exist)
+- ❌ Use hardcoded tag lists when governance constraints specify additional tags
+- ❌ Skip governance compliance mapping — this is a HARD GATE
 
 ## Prerequisites Check
 
-Before starting, validate `04-implementation-plan.md` exists in `agent-output/{project}/`.
-If missing, STOP and request handoff to Bicep Plan agent.
+Before starting, validate these files exist in `agent-output/{project}/`:
+
+1. `04-implementation-plan.md` — **REQUIRED**. If missing, STOP and request handoff to Bicep Plan agent.
+2. `04-governance-constraints.json` — **REQUIRED**. If missing, STOP and request governance discovery.
+   This file is consumed in Phase 1.5 for programmatic compliance mapping.
+3. `04-governance-constraints.md` — **REQUIRED**. Human-readable governance constraints.
 
 Read these for context:
 
 - `04-implementation-plan.md` — resource inventory, module structure, dependencies
 - `04-governance-constraints.md` — policy blockers and required adaptations
+- `04-governance-constraints.json` — machine-actionable policy data for compliance mapping
 - `02-architecture-assessment.md` — SKU recommendations and WAF considerations
 
 ## Workflow
@@ -212,6 +226,34 @@ Before writing ANY Bicep code, validate AVM compatibility:
 2. Check region limitations for all services
 3. Save results to `agent-output/{project}/04-preflight-check.md`
 4. If blockers found → STOP and report to user
+
+### Phase 1.5: Governance Compliance Mapping (MANDATORY)
+
+> [!CAUTION]
+> This is a **HARD GATE**. Do NOT proceed to Phase 2 with unresolved policy violations.
+> See `.github/instructions/bicep-policy-compliance.instructions.md` for the full mandate.
+
+1. **Read** `agent-output/{project}/04-governance-constraints.json`
+2. **Extract** all `Deny` policies and their `bicepPropertyPath` + `requiredValue` fields
+3. **Build a compliance map** — for each Deny policy, identify:
+   - Target resource type(s)
+   - Bicep property that must be set
+   - Required value to avoid policy denial
+4. **Extract tag requirements** — merge governance-discovered tags with the 4 baseline defaults.
+   Governance constraints always win (the 4 defaults are a MINIMUM)
+5. **Validate** that every resource in `04-implementation-plan.md` can be configured to comply
+6. **Document** the compliance map in the implementation reference
+7. If any Deny policy **cannot** be satisfied → STOP and report to user
+
+**Policy Effect → Code Generator Action:**
+
+| Effect              | Code Generator Action                                          |
+| ------------------- | -------------------------------------------------------------- |
+| `Deny`              | MUST set property to compliant value                           |
+| `Modify`            | Document expected modification — do NOT set conflicting values |
+| `DeployIfNotExists` | Document auto-deployed resource in implementation reference    |
+| `Audit`             | Set compliant value where feasible (best effort)               |
+| `Disabled`          | No action required                                             |
 
 ### Phase 2: Progressive Implementation
 
@@ -356,7 +398,9 @@ Include attribution header from the template file (do not hardcode).
 - [ ] Preflight check completed and saved to `04-preflight-check.md`
 - [ ] AVM modules used for all resources with AVM availability
 - [ ] `uniqueSuffix` generated once in `main.bicep`, passed to all modules
-- [ ] All 4 required tags applied to every resource
+- [ ] Governance compliance mapping completed (Phase 1.5)
+- [ ] All tags from governance constraints applied to every resource (4 baseline + discovered)
+- [ ] Every Deny policy in `04-governance-constraints.json` is satisfied in Bicep code
 - [ ] Security baseline applied (TLS 1.2, HTTPS, managed identity)
 - [ ] CAF naming conventions followed (from azure-defaults skill)
 - [ ] Length constraints respected (Key Vault ≤24, Storage ≤24)
