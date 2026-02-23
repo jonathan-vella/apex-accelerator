@@ -1,8 +1,24 @@
-# Weekly Upstream Sync
-# Syncs selected changes from upstream template source into this repository.
-# Runs weekly and on manual dispatch, always opening a review PR when changes or conflicts exist.
+# Upstream Sync
+# This repository is a downstream accelerator of jonathan-vella/azure-agentic-infraops.
+# Upstream ALWAYS wins for all files EXCEPT the three paths listed in EXCLUDE_PATHS below.
+#
+# ALWAYS synced from upstream (upstream wins):
+#   .devcontainer/          .vscode/               .github/agents/
+#   .github/skills/         .github/instructions/  .github/prompts/
+#   .github/data/           .github/workflows/*    .github/copilot-instructions.md
+#   .github/CODEOWNERS      .github/ISSUE_TEMPLATE/ .github/PULL_REQUEST_TEMPLATE.md
+#   docs/                   scripts/               mcp/azure-pricing-mcp/
+#   package.json            lefthook.yml           commitlint.config.js
+#   *.md (root)             *.json/.yml/.toml/.txt (root config files)
+#
+# NEVER synced (accelerator-specific, excluded):
+#   agent-output/           → user-generated project outputs
+#   infra/bicep/            → user project Bicep templates
+#   .github/workflows/weekly-upstream-sync.yml  → this file itself
+#
+# Runs weekly and on manual dispatch. Always opens a PR for human review — no auto-merge.
 
-name: Weekly Upstream Sync
+name: Upstream Sync
 
 "on":
   schedule:
@@ -27,8 +43,8 @@ concurrency:
 env:
   UPSTREAM_REPO: jonathan-vella/azure-agentic-infraops
   UPSTREAM_REF: main
-  SYNC_BRANCH: automation/weekly-upstream-sync
-  # scripts/ is intentionally NOT excluded — it is always synced from upstream
+  SYNC_BRANCH: automation/upstream-sync
+  # Only these three paths are excluded — everything else syncs from upstream.
   EXCLUDE_PATHS: |
     .git
     .github/workflows/weekly-upstream-sync.yml
@@ -148,15 +164,21 @@ jobs:
           delete-branch: true
           title: "chore(sync): weekly upstream sync from ${{ env.UPSTREAM_REPO }}"
           body: |
-            Automated selective sync from `${{ env.UPSTREAM_REPO }}@${{ env.UPSTREAM_REF }}`.
+            Automated full sync from `${{ env.UPSTREAM_REPO }}@${{ env.UPSTREAM_REF }}`. **Upstream always wins.**
 
-            - Schedule: weekly (`0 23 * * 0`)
             - Conflict detected: `${{ steps.sync.outputs.conflict }}`
-            - Syncs: `scripts/`, `.github/agents/`, `.github/skills/`, `.github/instructions/`, `mcp/`, config files
-            - Excludes: `agent-output/`, `infra/bicep/`, `node_modules/`, workflow self-file
-            - Policy: always manual review, no auto-merge
+            - Triggered by: `${{ github.event_name }}`
 
-            Triggered by `${{ github.event_name }}`.
+            **Synced from upstream (upstream wins everything):**
+            `.devcontainer/` · `.vscode/` · `.github/agents/` · `.github/skills/` · `.github/instructions/`
+            `.github/prompts/` · `.github/data/` · `.github/workflows/*` · `.github/copilot-instructions.md`
+            `.github/CODEOWNERS` · `.github/ISSUE_TEMPLATE/` · `.github/PULL_REQUEST_TEMPLATE.md`
+            `docs/` · `scripts/` · `mcp/azure-pricing-mcp/` · all root config files
+
+            **Excluded (accelerator-specific, never overwritten):**
+            `agent-output/` · `infra/bicep/` · `.github/workflows/weekly-upstream-sync.yml`
+
+            > Policy: always manual review, no auto-merge.
           labels: |
             automation
             upstream-sync
