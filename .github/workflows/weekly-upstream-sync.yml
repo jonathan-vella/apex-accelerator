@@ -28,6 +28,7 @@ env:
   UPSTREAM_REPO: jonathan-vella/azure-agentic-infraops
   UPSTREAM_REF: main
   SYNC_BRANCH: automation/weekly-upstream-sync
+  # scripts/ is intentionally NOT excluded — it is always synced from upstream
   EXCLUDE_PATHS: |
     .git
     .github/workflows/weekly-upstream-sync.yml
@@ -117,6 +118,12 @@ jobs:
           echo "conflict=$conflict" >> "$GITHUB_OUTPUT"
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
 
+      - name: Log synced script files
+        if: steps.sync.outputs.changed == 'true'
+        run: |
+          echo "📁 scripts/ changes included in this sync:"
+          git diff --cached --name-only -- 'scripts/' | sed 's/^/  /' || echo "  (no script changes)"
+
       - name: Skip when no changes are present
         if: steps.sync.outputs.changed != 'true' && github.event.inputs.force_sync != 'true'
         run: |
@@ -145,6 +152,7 @@ jobs:
 
             - Schedule: weekly (`0 23 * * 0`)
             - Conflict detected: `${{ steps.sync.outputs.conflict }}`
+            - Syncs: `scripts/`, `.github/agents/`, `.github/skills/`, `.github/instructions/`, `mcp/`, config files
             - Excludes: `agent-output/`, `infra/bicep/`, `node_modules/`, workflow self-file
             - Policy: always manual review, no auto-merge
 
