@@ -81,43 +81,59 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Strategy: take EVERYTHING from upstream, then restore our exclusions
-          # from HEAD. No merge means no conflicts — upstream always wins.
+          # Strategy: create the sync branch, overwrite everything from upstream,
+          # restore our 3 exclusions from the base branch, commit, push.
+          # No merge = no conflicts. Upstream always wins unconditionally.
 
-          # Step 1: Stage everything from upstream into the working tree
-          git restore --source="upstream/${UPSTREAM_REF}" --staged --worktree -- .
+          BASE_SHA=$(git rev-parse HEAD)
 
-          # Step 2: Restore excluded paths from HEAD (our local copy wins here)
+          # Create (or reset) the sync branch from our current base
+          git checkout -B "${SYNC_BRANCH}"
+
+          # Take EVERYTHING from upstream into the working tree and index
+          git checkout "upstream/${UPSTREAM_REF}" -- .
+
+          # Restore only the excluded paths from the base branch
           while IFS= read -r path; do
             [ -z "$path" ] && continue
-            if git ls-files --error-unmatch "$path" > /dev/null 2>&1 || [ -e "$path" ]; then
-              git restore --source=HEAD --staged --worktree -- "$path" 2>/dev/null || true
+            # Restore from base if it exists there; otherwise remove any upstream addition
+            if git ls-tree --name-only "${BASE_SHA}" -- "$path" | grep -q .; then
+              git checkout "${BASE_SHA}" -- "$path" 2>/dev/null || true
             else
-              # Path doesn't exist in HEAD either — unstage any upstream addition
-              git restore --staged -- "$path" 2>/dev/null || true
-              git checkout HEAD -- "$path" 2>/dev/null || true
+              git rm -r --cached --ignore-unmatch -- "$path" > /dev/null 2>&1 || true
+              rm -rf "$path" 2>/dev/null || true
             fi
           done <<< "${EXCLUDE_PATHS}"
 
-          # Step 3: Detect whether anything actually changed
+          # Detect whether anything changed relative to the base branch
           changed=false
-          if ! git diff --quiet || ! git diff --cached --quiet; then
+          if ! git diff --quiet "${BASE_SHA}" -- || ! git diff --cached --quiet "${BASE_SHA}" --; then
             changed=true
           fi
 
-          echo "conflict=false" >> "$GITHUB_OUTPUT"
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
 
-      - name: Log synced script files
+      - name: Log changed files
         if: steps.sync.outputs.changed == 'true'
         run: |
-          echo "📁 scripts/ changes included in this sync:"
-          git diff --cached --name-only -- 'scripts/' | sed 's/^/  /' || echo "  (no script changes)"
+          echo "Files changed in this sync:"
+          git diff --cached --name-only | head -100 | sed 's/^/  /'
+          echo "  (showing first 100; may be more)"
 
       - name: Skip when no changes are present
         if: steps.sync.outputs.changed != 'true' && github.event.inputs.force_sync != 'true'
+        run: echo "No upstream changes after applying exclusions. Skipping PR."
+
+      - name: Commit and push sync branch
+        if: steps.sync.outputs.changed == 'true' || github.event.inputs.force_sync == 'true'
         run: |
-          echo "No upstream changes after applying exclusions."
+          git add -A
+          git commit -m "chore(sync): upstream sync from ${UPSTREAM_REPO}@${UPSTREAM_REF}
+
+          Synced at $(date -u +"%Y-%m-%d %H:%M UTC")
+          Excluded: agent-output/ infra/bicep/ .github/workflows/weekly-upstream-sync.yml" \
+            --allow-empty
+          git push --force origin "${SYNC_BRANCH}"
 
       - name: Ensure PR labels exist
         if: steps.sync.outputs.changed == 'true' || github.event.inputs.force_sync == 'true'
@@ -127,32 +143,48 @@ jobs:
           gh label create "automation" --color "0075ca" --description "Automated workflow changes" --repo "${{ github.repository }}" 2>/dev/null || true
           gh label create "upstream-sync" --color "e4e669" --description "Upstream template sync" --repo "${{ github.repository }}" 2>/dev/null || true
 
-      - name: Create pull request for upstream sync
+      - name: Create or update pull request
         if: steps.sync.outputs.changed == 'true' || github.event.inputs.force_sync == 'true'
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "chore(sync): weekly upstream sync from ${{ env.UPSTREAM_REPO }}"
-          branch: ${{ env.SYNC_BRANCH }}
-          base: ${{ github.ref_name }}
-          delete-branch: true
-          title: "chore(sync): weekly upstream sync from ${{ env.UPSTREAM_REPO }}"
-          body: |
-            Automated full sync from `${{ env.UPSTREAM_REPO }}@${{ env.UPSTREAM_REF }}`. **Upstream always wins.**
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          UPSTREAM_SHA=$(git rev-parse "upstream/${UPSTREAM_REF}" 2>/dev/null | cut -c1-7 || echo "unknown")
 
-            - Conflict detected: `${{ steps.sync.outputs.conflict }}`
-            - Triggered by: `${{ github.event_name }}`
+          PR_BODY="Automated full sync from \`${UPSTREAM_REPO}@${UPSTREAM_REF}\` (\`${UPSTREAM_SHA}\`). **Upstream always wins.**
 
-            **Synced from upstream (upstream wins everything):**
-            `.devcontainer/` · `.vscode/` · `.github/agents/` · `.github/skills/` · `.github/instructions/`
-            `.github/prompts/` · `.github/data/` · `.github/workflows/*` · `.github/copilot-instructions.md`
-            `.github/CODEOWNERS` · `.github/ISSUE_TEMPLATE/` · `.github/PULL_REQUEST_TEMPLATE.md`
-            `docs/` · `scripts/` · `mcp/azure-pricing-mcp/` · all root config files
+          Triggered by: \`${{ github.event_name }}\`
 
-            **Excluded (accelerator-specific, never overwritten):**
-            `agent-output/` · `infra/bicep/` · `.github/workflows/weekly-upstream-sync.yml`
+          **Always synced from upstream:**
+          \`.devcontainer/\` · \`.vscode/\` · \`.github/agents/\` · \`.github/skills/\` · \`.github/instructions/\`
+          \`.github/prompts/\` · \`.github/data/\` · \`.github/workflows/*\` · \`.github/copilot-instructions.md\`
+          \`docs/\` · \`scripts/\` · \`mcp/azure-pricing-mcp/\` · all root config files
 
-            > Policy: always manual review, no auto-merge.
-          labels: |
-            automation
-            upstream-sync
+          **Excluded (accelerator-specific, never overwritten):**
+          \`agent-output/\` · \`infra/bicep/\` · \`.github/workflows/weekly-upstream-sync.yml\`
+
+          > Policy: always manual review, no auto-merge."
+
+          # Update existing open PR or create new one
+          EXISTING_PR=$(gh pr list \
+            --repo "${{ github.repository }}" \
+            --head "${SYNC_BRANCH}" \
+            --state open \
+            --json number \
+            --jq '.[0].number' 2>/dev/null || echo "")
+
+          if [ -n "$EXISTING_PR" ]; then
+            echo "Updating existing PR #${EXISTING_PR}"
+            gh pr edit "$EXISTING_PR" \
+              --repo "${{ github.repository }}" \
+              --body "$PR_BODY"
+          else
+            echo "Creating new PR"
+            gh pr create \
+              --repo "${{ github.repository }}" \
+              --head "${SYNC_BRANCH}" \
+              --base "${{ github.ref_name }}" \
+              --title "chore(sync): upstream sync from ${UPSTREAM_REPO}" \
+              --body "$PR_BODY" \
+              --label "automation" \
+              --label "upstream-sync"
+          fi
