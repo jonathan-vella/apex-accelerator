@@ -5,7 +5,7 @@
 # ALWAYS synced from upstream (upstream wins):
 #   .devcontainer/          .vscode/               .github/agents/
 #   .github/skills/         .github/instructions/  .github/prompts/
-#   .github/data/           .github/workflows/*    .github/copilot-instructions.md
+#   .github/data/                                .github/copilot-instructions.md
 #   .github/CODEOWNERS      .github/ISSUE_TEMPLATE/ .github/PULL_REQUEST_TEMPLATE.md
 #   docs/                   scripts/               mcp/azure-pricing-mcp/
 #   package.json            lefthook.yml           commitlint.config.js
@@ -14,7 +14,7 @@
 # NEVER synced (accelerator-specific, excluded):
 #   agent-output/           → user-generated project outputs
 #   infra/bicep/            → user project Bicep templates
-#   .github/workflows/weekly-upstream-sync.yml  → this file itself
+#   .github/workflows/      → keep repository workflows as-is
 #
 # Runs weekly and on manual dispatch. Always opens a PR for human review — no auto-merge.
 
@@ -47,7 +47,7 @@ env:
   # Only these paths are excluded — everything else syncs from upstream.
   # Note: .git is never listed here — git checkout cannot overwrite it.
   EXCLUDE_PATHS: |
-    .github/workflows/weekly-upstream-sync.yml
+    .github/workflows/
     agent-output/
     infra/bicep/
     node_modules/
@@ -139,7 +139,7 @@ jobs:
           git commit -m "chore(sync): upstream sync from ${UPSTREAM_REPO}@${UPSTREAM_REF}
 
           Synced at $(date -u +"%Y-%m-%d %H:%M UTC")
-          Excluded: agent-output/ infra/bicep/ .github/workflows/weekly-upstream-sync.yml" \
+          Excluded: agent-output/ infra/bicep/ .github/workflows/" \
             --allow-empty
 
           set +e
@@ -177,11 +177,11 @@ jobs:
 
           **Always synced from upstream:**
           \`.devcontainer/\` · \`.vscode/\` · \`.github/agents/\` · \`.github/skills/\` · \`.github/instructions/\`
-          \`.github/prompts/\` · \`.github/data/\` · \`.github/workflows/*\` · \`.github/copilot-instructions.md\`
+          \`.github/prompts/\` · \`.github/data/\` · \`.github/copilot-instructions.md\`
           \`docs/\` · \`scripts/\` · \`mcp/azure-pricing-mcp/\` · all root config files
 
           **Excluded (accelerator-specific, never overwritten):**
-          \`agent-output/\` · \`infra/bicep/\` · \`.github/workflows/weekly-upstream-sync.yml\`
+          \`agent-output/\` · \`infra/bicep/\` · \`.github/workflows/\`
 
           > Policy: always manual review, no auto-merge."
 
