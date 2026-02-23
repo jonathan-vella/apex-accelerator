@@ -44,9 +44,9 @@ env:
   UPSTREAM_REPO: jonathan-vella/azure-agentic-infraops
   UPSTREAM_REF: main
   SYNC_BRANCH: automation/upstream-sync
-  # Only these three paths are excluded — everything else syncs from upstream.
+  # Only these paths are excluded — everything else syncs from upstream.
+  # Note: .git is never listed here — git checkout cannot overwrite it.
   EXCLUDE_PATHS: |
-    .git
     .github/workflows/weekly-upstream-sync.yml
     agent-output/
     infra/bicep/
@@ -96,12 +96,15 @@ jobs:
           # Restore only the excluded paths from the base branch
           while IFS= read -r path; do
             [ -z "$path" ] && continue
+            # Safety: never touch .git or any path starting with .git
+            [[ "$path" == .git* ]] && continue
             # Restore from base if it exists there; otherwise remove any upstream addition
             if git ls-tree --name-only "${BASE_SHA}" -- "$path" | grep -q .; then
               git checkout "${BASE_SHA}" -- "$path" 2>/dev/null || true
             else
+              # Path not in our base — remove it (upstream added it but we don't want it)
               git rm -r --cached --ignore-unmatch -- "$path" > /dev/null 2>&1 || true
-              rm -rf "$path" 2>/dev/null || true
+              rm -rf -- "$path" 2>/dev/null || true
             fi
           done <<< "${EXCLUDE_PATHS}"
 
