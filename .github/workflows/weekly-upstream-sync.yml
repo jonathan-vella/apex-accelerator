@@ -126,6 +126,14 @@ jobs:
         run: |
           echo "No upstream changes after applying exclusions."
 
+      - name: Ensure PR labels exist
+        if: steps.sync.outputs.changed == 'true' || github.event.inputs.force_sync == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create "automation" --color "0075ca" --description "Automated workflow changes" --repo "${{ github.repository }}" 2>/dev/null || true
+          gh label create "upstream-sync" --color "e4e669" --description "Upstream template sync" --repo "${{ github.repository }}" 2>/dev/null || true
+
       - name: Create pull request for upstream sync
         if: steps.sync.outputs.changed == 'true' || github.event.inputs.force_sync == 'true'
         uses: peter-evans/create-pull-request@v7
