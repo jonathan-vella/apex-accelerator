@@ -58,10 +58,6 @@ jobs:
           git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
           git fetch upstream "${UPSTREAM_REF}" --prune
 
-      - name: Prepare sync branch
-        run: |
-          git checkout -B "${SYNC_BRANCH}" "origin/${GITHUB_REF_NAME}"
-
       - name: Apply upstream changes with conflict detection
         id: sync
         shell: bash
