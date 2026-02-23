@@ -35,6 +35,7 @@ name: Upstream Sync
 permissions:
   contents: write
   pull-requests: write
+  workflows: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -93,18 +94,21 @@ jobs:
           # Take EVERYTHING from upstream into the working tree and index
           git checkout "upstream/${UPSTREAM_REF}" -- .
 
-          # Restore only the excluded paths from the base branch
+          # Restore only the excluded paths from the base branch.
+          # For directories: upstream may have added files we don't want,
+          # so we must wipe the path first, then restore our version.
           while IFS= read -r path; do
             [ -z "$path" ] && continue
-            # Safety: never touch .git or any path starting with .git
+            # Safety: never touch .git internals
             [[ "$path" == .git* ]] && continue
-            # Restore from base if it exists there; otherwise remove any upstream addition
+
+            # Step A: Remove everything upstream put in this path
+            git rm -r --cached --ignore-unmatch -- "$path" > /dev/null 2>&1 || true
+            rm -rf -- "$path" 2>/dev/null || true
+
+            # Step B: Restore our base version (if the path existed in our repo)
             if git ls-tree --name-only "${BASE_SHA}" -- "$path" | grep -q .; then
               git checkout "${BASE_SHA}" -- "$path" 2>/dev/null || true
-            else
-              # Path not in our base — remove it (upstream added it but we don't want it)
-              git rm -r --cached --ignore-unmatch -- "$path" > /dev/null 2>&1 || true
-              rm -rf -- "$path" 2>/dev/null || true
             fi
           done <<< "${EXCLUDE_PATHS}"
 
