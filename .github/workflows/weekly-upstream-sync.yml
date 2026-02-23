@@ -141,6 +141,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "chore(sync): weekly upstream sync from ${{ env.UPSTREAM_REPO }}"
           branch: ${{ env.SYNC_BRANCH }}
+          base: ${{ github.ref_name }}
           delete-branch: true
           title: "chore(sync): weekly upstream sync from ${{ env.UPSTREAM_REPO }}"
           body: |
