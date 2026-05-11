@@ -13,18 +13,10 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import {
-  getAgents,
-  getSkills,
-  getInstructions,
-  getSkillNames as getSkillNamesFromIndex,
-} from "./_lib/workspace-index.mjs";
+import { getAgents, getSkills, getInstructions } from "./_lib/workspace-index.mjs";
 import { Reporter } from "./_lib/reporter.mjs";
-import {
-  MAX_SKILL_LINES_WITHOUT_REFS,
-  SKILLS_DIR,
-  INSTRUCTIONS_DIR,
-} from "./_lib/paths.mjs";
+import { getRawFrontmatter } from "./_lib/parse-frontmatter.mjs";
+import { MAX_SKILL_LINES_WITHOUT_REFS, SKILLS_DIR, INSTRUCTIONS_DIR } from "./_lib/paths.mjs";
 
 let overallFailed = false;
 
@@ -35,9 +27,7 @@ let overallFailed = false;
 const FORBIDDEN_PATTERNS = [
   {
     pattern: /^description:\s*[>|][-\s]*$/m,
-    message:
-      "description uses a YAML block scalar (>, >-, | or |-). " +
-      "Use a single-line inline string instead.",
+    message: "description uses a YAML block scalar (>, >-, | or |-). " + "Use a single-line inline string instead.",
   },
 ];
 
@@ -52,11 +42,7 @@ const DEPRECATED_PATTERNS = [
   },
 ];
 
-const KNOWN_OVERSIZED = new Set([
-  "azure-adr",
-  "github-operations",
-  "make-skill-template",
-]);
+const KNOWN_OVERSIZED = new Set(["azure-adr", "github-operations", "make-skill-template"]);
 
 function runFormatValidation() {
   const r = new Reporter("Skills Format Validator");
@@ -65,9 +51,7 @@ function runFormatValidation() {
   const skills = getSkills();
 
   if (skills.size === 0) {
-    console.log(
-      "No .github/skills directory found - skipping skill validation",
-    );
+    console.log("No .github/skills directory found - skipping skill validation");
     return;
   }
 
@@ -82,8 +66,7 @@ function runFormatValidation() {
       continue;
     }
 
-    const rawFrontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
-    const rawFrontmatter = rawFrontmatterMatch ? rawFrontmatterMatch[1] : "";
+    const rawFrontmatter = getRawFrontmatter(content);
 
     if (!frontmatter) {
       r.error(skillName, "No frontmatter found in SKILL.md");
@@ -106,28 +89,17 @@ function runFormatValidation() {
       }
     }
 
-    const jsonFiles = fs
-      .readdirSync(skillDir)
-      .filter((f) => f.endsWith(".skill.json"));
+    const jsonFiles = fs.readdirSync(skillDir).filter((f) => f.endsWith(".skill.json"));
     if (jsonFiles.length > 0) {
-      r.warn(
-        skillName,
-        `Found deprecated .skill.json file(s): ${jsonFiles.join(", ")}`,
-      );
+      r.warn(skillName, `Found deprecated .skill.json file(s): ${jsonFiles.join(", ")}`);
     }
 
     if (frontmatter.name && frontmatter.name !== skillName) {
-      r.error(
-        skillName,
-        `Frontmatter 'name' ("${frontmatter.name}") does not match directory name ("${skillName}")`,
-      );
+      r.error(skillName, `Frontmatter 'name' ("${frontmatter.name}") does not match directory name ("${skillName}")`);
     }
 
     if (frontmatter.description && frontmatter.description.length < 10) {
-      r.warn(
-        skillName,
-        `Description is too short (${frontmatter.description.length} chars)`,
-      );
+      r.warn(skillName, `Description is too short (${frontmatter.description.length} chars)`);
     }
 
     const lineCount = content.split("\n").length;
@@ -138,10 +110,7 @@ function runFormatValidation() {
           `SKILL.md is ${lineCount} lines (>${MAX_SKILL_LINES_WITHOUT_REFS}) without references/ (known — tracked)`,
         );
       } else {
-        r.error(
-          skillName,
-          `SKILL.md is ${lineCount} lines (>${MAX_SKILL_LINES_WITHOUT_REFS}) without references/`,
-        );
+        r.error(skillName, `SKILL.md is ${lineCount} lines (>${MAX_SKILL_LINES_WITHOUT_REFS}) without references/`);
       }
     } else if (lineCount > MAX_SKILL_LINES_WITHOUT_REFS && hasRefs) {
       r.warn(
@@ -203,33 +172,26 @@ function runReferencesValidation() {
           path.join(refsDir, refFile),
           `${refRelPath} is not referenced by any agent, skill, or instruction`,
         );
-        console.log(
-          `  Fix: Add a loading directive in ${skill}/SKILL.md or remove the orphaned file.`,
-        );
+        console.log(`  Fix: Add a loading directive in ${skill}/SKILL.md or remove the orphaned file.`);
       }
     }
   }
 
   const instrRefsDir = path.join(INSTRUCTIONS_DIR, "references");
   if (fs.existsSync(instrRefsDir)) {
-    const instrRefFiles = fs
-      .readdirSync(instrRefsDir)
-      .filter((f) => f.endsWith(".md"));
+    const instrRefFiles = fs.readdirSync(instrRefsDir).filter((f) => f.endsWith(".md"));
 
     for (const refFile of instrRefFiles) {
       r.tick();
       const refName = refFile.replace(/\.md$/, "");
-      const isReferenced =
-        allContent.includes(refFile) || allContent.includes(refName);
+      const isReferenced = allContent.includes(refFile) || allContent.includes(refName);
 
       if (!isReferenced) {
         r.warnAnnotation(
           path.join(instrRefsDir, refFile),
           `instructions/references/${refFile} is not referenced anywhere`,
         );
-        console.log(
-          `  Fix: Add a reference in the parent instruction file or remove the orphaned file.`,
-        );
+        console.log(`  Fix: Add a reference in the parent instruction file or remove the orphaned file.`);
       }
     }
   }
@@ -285,20 +247,7 @@ function runStaleReferenceDetection() {
     if (!stat.isFile()) return;
 
     const ext = path.extname(filePath);
-    const textExts = [
-      ".md",
-      ".json",
-      ".jsonc",
-      ".mjs",
-      ".js",
-      ".ts",
-      ".yml",
-      ".yaml",
-      ".sh",
-      ".ps1",
-      ".py",
-      ".txt",
-    ];
+    const textExts = [".md", ".json", ".jsonc", ".mjs", ".js", ".ts", ".yml", ".yaml", ".sh", ".ps1", ".py", ".txt"];
     if (!textExts.includes(ext)) return;
 
     const content = fs.readFileSync(filePath, "utf-8");

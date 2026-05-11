@@ -62,9 +62,7 @@ function collectFiles(extensions, excludePatterns) {
       const relPath = path.relative(ROOT, fullPath).replace(/\\/g, "/");
 
       // Skip excluded directories/files
-      if (
-        excludeNormalized.some((ex) => relPath === ex || relPath.startsWith(ex))
-      ) {
+      if (excludeNormalized.some((ex) => relPath === ex || relPath.startsWith(ex))) {
         continue;
       }
       // Skip common dirs
@@ -147,36 +145,24 @@ if (!config) {
   r.exitOnError();
 }
 
-const files = collectFiles(
-  config.fileExtensions || [".md"],
-  config.excludePatterns || [],
-);
+const files = collectFiles(config.fileExtensions || [".md"], config.excludePatterns || []);
 
 if (VERBOSE) {
-  console.log(
-    `  Scanning ${files.length} files against ${config.rules.length} rules...\n`,
-  );
+  console.log(`  Scanning ${files.length} files against ${config.rules.length} rules...\n`);
 }
 
 const allViolations = [];
 
 for (const { fullPath, relPath } of files) {
   r.tick();
-  const violations = scanFile(
-    fullPath,
-    relPath,
-    config.rules,
-    config.excludeLinePatterns || [],
-  );
+  const violations = scanFile(fullPath, relPath, config.rules, config.excludeLinePatterns || []);
   allViolations.push(...violations);
 }
 
 // ─── Report ─────────────────────────────────────────────────────────────────
 
 if (allViolations.length === 0) {
-  console.log(
-    `  ✅ No deprecated terminology found (${files.length} files, ${config.rules.length} rules)\n`,
-  );
+  console.log(`  ✅ No deprecated terminology found (${files.length} files, ${config.rules.length} rules)\n`);
 } else {
   // Group by file for readability
   const byFile = new Map();
@@ -188,7 +174,7 @@ if (allViolations.length === 0) {
   for (const [file, violations] of byFile) {
     console.log(`\n  📄 ${file}`);
     for (const v of violations) {
-      const icon = v.severity === "error" ? "❌" : "⚠️";
+      const _icon = v.severity === "error" ? "❌" : "⚠️";
       const msg = `L${v.line}: "${v.pattern}" → "${v.replacement}" (${v.reason})`;
       if (v.severity === "error") {
         r.error(file, msg);

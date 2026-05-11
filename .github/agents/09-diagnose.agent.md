@@ -1,6 +1,6 @@
 ---
 name: 09-Diagnose
-model: ["Claude Opus 4.6"]
+model: ["Claude Opus 4.7"]
 description: Interactive diagnostic agent that guides users through Azure resource health assessment, issue identification, and remediation planning. Uses approval-first execution for safety, analyzes single resources, and saves reports to agent-output/{project}/.
 user-invocable: true
 agents: []
@@ -16,10 +16,8 @@ tools:
     web,
     "azure-mcp/*",
     "microsoft-learn/*",
-    "bicep/*",
     todo,
     vscode.mermaid-chat-features/renderMermaidDiagram,
-    ms-azuretools.vscode-azure-github-copilot/azure_recommend_custom_modes,
     ms-azuretools.vscode-azure-github-copilot/azure_query_azure_resource_graph,
     ms-azuretools.vscode-azure-github-copilot/azure_get_auth_context,
     ms-azuretools.vscode-azure-github-copilot/azure_set_auth_context,
@@ -34,15 +32,15 @@ tools:
 handoffs:
   - label: "▶ Expand Scope"
     agent: 09-Diagnose
-    prompt: "Expand the diagnostic scope to include related resources. Query resource dependencies and assess health of connected resources."
+    prompt: "Expand the diagnostic scope to include related resources. Query resource dependencies and assess health of connected resources. Input: current resource under diagnosis + sibling resource group. Output: expanded findings in agent-output/{project}/diagnose-report-*.md."
     send: true
   - label: "▶ Deep Dive Logs"
     agent: 09-Diagnose
-    prompt: "Perform deep log analysis on the current resource. Query activity logs and diagnostic logs for detailed error information."
+    prompt: "Perform deep log analysis on the current resource. Query activity logs and diagnostic logs for detailed error information. Input: Application Insights / Log Analytics workspace ID. Output: log analysis section appended to agent-output/{project}/diagnose-report-*.md."
     send: true
   - label: "▶ Re-run Health Check"
     agent: 09-Diagnose
-    prompt: "Re-run the resource health assessment to check for status changes after remediation actions."
+    prompt: "Re-run the resource health assessment to check for status changes after remediation actions. Input: current diagnostic target resource ID. Output: refreshed health snapshot in agent-output/{project}/diagnose-report-*.md."
     send: true
   - label: "▶ Generate Workload Documentation"
     agent: 08-As-Built
@@ -59,8 +57,6 @@ handoffs:
 ---
 
 # Azure Resource Health Diagnostician Agent
-
-<!-- Recommended reasoning_effort: medium -->
 
 This agent is **supplementary** to the multi-step workflow. Use it after Step 6 (Deploy) or
 for troubleshooting existing deployments.
@@ -80,6 +76,21 @@ If an Azure Resource Graph query or diagnostic command returns empty results:
 4. Try alternative discovery methods (az resource list, activity log).
    Do not report "no issues found" when the real problem is missing telemetry.
    </empty_result_recovery>
+
+<output_contract>
+Produce `agent-output/{project}/08-resource-health-report.md` with these
+sections:
+
+- Target resource (id, type, region, resource group)
+- Diagnostic findings (severity-tagged: critical / warning / info)
+- Evidence (KQL queries run, command outputs cited inline)
+- Remediation recommendations (actionable, one per finding)
+- Open questions for the user (if any blocked the diagnosis)
+
+Save the file via `apex-recall finding <project> --add` per finding so
+session state stays current. Do not embed the artifact body in chat —
+return the path plus a one-line summary.
+</output_contract>
 
 **HARD RULE — ASK BEFORE YOU READ**
 
@@ -131,7 +142,7 @@ diagnostics (e.g., which resources were deployed, which SKUs were chosen).
 **After Phase 1 resource confirmation**, read:
 
 1. **Read** `.github/skills/azure-defaults/SKILL.digest.md` — regions, tags, security baseline
-2. **Read** `.github/skills/azure-diagnostics/SKILL.md` — KQL templates, per-resource health checks,
+2. **Read** `.github/skills/azure-diagnostics/SKILL.digest.md` — KQL templates, per-resource health checks,
    severity classification, remediation playbooks
 
 ## 6-Phase Diagnostic Workflow

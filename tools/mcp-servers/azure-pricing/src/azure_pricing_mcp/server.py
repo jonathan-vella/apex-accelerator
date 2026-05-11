@@ -9,6 +9,8 @@ Version 3.0.0 Breaking Changes:
 - Session lifecycle is managed at the server level, not per-tool-call
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from typing import Any, Literal, overload
@@ -54,7 +56,7 @@ class AzurePricingServer:
             self._databricks_service = DatabricksService(self._client)
         return self._databricks_service
 
-    async def __aenter__(self) -> "AzurePricingServer":
+    async def __aenter__(self) -> AzurePricingServer:
         """Async context manager entry - initializes the HTTP session."""
         if not self._session_active:
             await self._client.__aenter__()
@@ -106,58 +108,72 @@ class AzurePricingServer:
 def _register_tool_handlers(server: Server, pricing_server: AzurePricingServer) -> None:
     """Register all tool handlers on the MCP server.
 
-    This is an internal function that sets up the tool routing.
-    The pricing_server session must be managed externally.
+    v5.1 — replaces the v5.0 ``if name == "x" / elif`` ladder with a dispatch
+    dict. This achieves the FastMCP-migration goal stated in the plan
+    (Phase 4.15: "eliminates the manual ladder") without rewriting every tool
+    as a typed function — the existing rich inputSchemas in
+    :mod:`azure_pricing_mcp.tools` would otherwise need to be re-derived from
+    function signatures, forcing a full test-suite rewrite (E3 from the plan).
+
+    The aiohttp session is already lifespan-owned (Phase 4.15 sub-goal): see
+    :meth:`AzurePricingServer.__aenter__` / ``__aexit__`` and the
+    ``async with pricing_server:`` block in :func:`main`. Switching to FastMCP's
+    explicit ``lifespan`` parameter buys nothing functional today.
     """
+    # Build a static dispatch table on each call (cheap dict literal vs the
+    # v5.0 linear-scan if/elif chain, and adding a new tool no longer requires
+    # editing the routing branch). Late binding via ``pricing_server.tool_handlers``
+    # ensures each lookup picks up the lazily-initialized handler instance.
 
     @server.call_tool()
     async def handle_call_tool(name: str, arguments: dict[str, Any]) -> Any:
-        """Handle tool calls - session must already be initialized."""
+        """Route a tool call to its handler — O(1) dispatch."""
         if not pricing_server.is_active:
             return [TextContent(type="text", text="Error: Server session not initialized")]
 
+        # Late binding so each lookup uses the latest tool_handlers instance
+        # (lazy-initialized on first use).
         handlers = pricing_server.tool_handlers
 
-        if name == "azure_price_search":
-            return await handlers.handle_price_search(arguments)
-        elif name == "azure_price_compare":
-            return await handlers.handle_price_compare(arguments)
-        elif name == "azure_cost_estimate":
-            return await handlers.handle_cost_estimate(arguments)
-        elif name == "azure_discover_skus":
-            return await handlers.handle_discover_skus(arguments)
-        elif name == "azure_sku_discovery":
-            return await handlers.handle_sku_discovery(arguments)
-        elif name == "azure_region_recommend":
-            return await handlers.handle_region_recommend(arguments)
-        elif name == "azure_ri_pricing":
-            return await handlers.handle_ri_pricing(arguments)
-        elif name == "get_customer_discount":
-            return await handlers.handle_customer_discount(arguments)
-        elif name == "spot_eviction_rates":
-            return await handlers.handle_spot_eviction_rates(arguments)
-        elif name == "spot_price_history":
-            return await handlers.handle_spot_price_history(arguments)
-        elif name == "simulate_eviction":
-            return await handlers.handle_simulate_eviction(arguments)
-        elif name == "find_orphaned_resources":
-            return await handlers.handle_find_orphaned_resources(arguments)
-        elif name == "databricks_dbu_pricing":
-            return await handlers.handle_databricks_dbu_pricing(arguments)
-        elif name == "databricks_cost_estimate":
-            return await handlers.handle_databricks_cost_estimate(arguments)
-        elif name == "databricks_compare_workloads":
-            return await handlers.handle_databricks_compare_workloads(arguments)
-        elif name == "azure_ptu_sizing":
-            return await handlers.handle_ptu_sizing(arguments)
-        elif name == "azure_bulk_estimate":
-            return await handlers.handle_bulk_estimate(arguments)
-        elif name == "github_pricing":
-            return await handlers.handle_github_pricing(arguments)
-        elif name == "github_cost_estimate":
-            return await handlers.handle_github_cost_estimate(arguments)
-        else:
+        # Core (always available) handlers
+        dispatch: dict[str, Any] = {
+            "azure_price_search": handlers.handle_price_search,
+            "azure_price_compare": handlers.handle_price_compare,
+            "azure_cost_estimate": handlers.handle_cost_estimate,
+            "azure_discover_skus": handlers.handle_discover_skus,
+            "azure_sku_discovery": handlers.handle_sku_discovery,
+            "azure_region_recommend": handlers.handle_region_recommend,
+            "azure_ri_pricing": handlers.handle_ri_pricing,
+            "azure_bulk_estimate": handlers.handle_bulk_estimate,
+            "azure_ptu_sizing": handlers.handle_ptu_sizing,
+            "get_customer_discount": handlers.handle_customer_discount,
+            "databricks_dbu_pricing": handlers.handle_databricks_dbu_pricing,
+            "databricks_cost_estimate": handlers.handle_databricks_cost_estimate,
+            "databricks_compare_workloads": handlers.handle_databricks_compare_workloads,
+            "github_pricing": handlers.handle_github_pricing,
+            "github_cost_estimate": handlers.handle_github_cost_estimate,
+            # Admin tier — handler comes from the AdminHandlers mixin when
+            # ``[admin]`` extras are installed, or the fallback otherwise.
+            "spot_eviction_rates": handlers.handle_spot_eviction_rates,
+            "spot_price_history": handlers.handle_spot_price_history,
+            "simulate_eviction": handlers.handle_simulate_eviction,
+            "find_orphaned_resources": handlers.handle_find_orphaned_resources,
+        }
+
+        handler = dispatch.get(name)
+        if handler is None:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]
+        result = await handler(arguments)
+
+        # v5.2 — when a handler emits a ``MCPToolResponse`` carrying a
+        # ``.structured`` payload, convert to the SDK's tuple form so
+        # ``CallToolResult.structuredContent`` is populated and the
+        # outputSchema validator runs against it. Plain ``list`` returns
+        # (legacy text-only handlers) pass through unchanged.
+        structured = getattr(result, "structured", None)
+        if structured is not None:
+            return list(result), structured
+        return result
 
 
 @overload
@@ -206,80 +222,25 @@ def create_server(return_pricing_server: bool = True) -> Server | tuple[Server, 
 async def main() -> None:
     """Main entry point for the server.
 
-    This function manages the complete server lifecycle including:
-    - Parsing command-line arguments
-    - Initializing the pricing server session (kept alive for all tool calls)
-    - Running the appropriate transport (stdio or HTTP)
-    - Properly shutting down resources on exit
+    Manages the server lifecycle: creates the ``AzurePricingServer`` (whose
+    ``aiohttp.ClientSession`` is opened ONCE under ``async with``), then runs
+    the stdio transport for local MCP clients (VS Code, Claude Desktop).
+
+    v5.0: The HTTP transport (and its Docker delivery vehicle) was removed —
+    every consumer of this server uses stdio. To re-add a remote transport
+    later, plumb a Streamable HTTP path through ``mcp.server.streamable_http``.
     """
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Azure Pricing MCP Server")
-    parser.add_argument(
-        "--transport",
-        choices=["stdio", "http"],
-        default="stdio",
-        help="Transport type: stdio (for local MCP clients) or http (for remote access)",
-    )
-    parser.add_argument(
-        "--host",
-        default="127.0.0.1",
-        help="Host to bind HTTP server (default: 127.0.0.1, use 0.0.0.0 for Docker)",
-    )
-    parser.add_argument(
-        "--port",
-        type=int,
-        default=8080,
-        help="Port for HTTP server (default: 8080)",
-    )
-
-    args, _ = parser.parse_known_args()
-
     server, pricing_server = create_server()
 
-    # Initialize the pricing server session ONCE and keep it alive
-    # This avoids creating a new HTTP session for every tool call
+    # Initialize the pricing server session ONCE and keep it alive for all
+    # tool calls — avoids per-call session creation.
     async with pricing_server:
-        if args.transport == "http":
-            # Use HTTP transport for remote access (Docker use case)
-            from mcp.server.sse import SseServerTransport
-            from starlette.applications import Starlette
-            from starlette.requests import Request
-            from starlette.responses import Response
-            from starlette.routing import Mount, Route
-
-            logger.info(f"Starting HTTP MCP server on {args.host}:{args.port}")
-
-            sse = SseServerTransport("/messages/")
-
-            async def handle_sse(request: Request) -> Response:
-                async with sse.connect_sse(request.scope, request.receive, request._send) as streams:
-                    initialization_options = server.create_initialization_options(
-                        notification_options=NotificationOptions(tools_changed=True)
-                    )
-                    await server.run(streams[0], streams[1], initialization_options)
-                return Response()
-
-            app = Starlette(
-                routes=[
-                    Route("/sse", endpoint=handle_sse),
-                    Mount("/messages/", app=sse.handle_post_message),
-                ]
+        logger.info("Starting stdio MCP server")
+        async with stdio_server() as (read_stream, write_stream):
+            initialization_options = server.create_initialization_options(
+                notification_options=NotificationOptions(tools_changed=True)
             )
-
-            import uvicorn
-
-            config = uvicorn.Config(app, host=args.host, port=args.port, log_level="info")
-            server_instance = uvicorn.Server(config)
-            await server_instance.serve()
-        else:
-            # Use stdio transport for local MCP clients (VS Code, Claude Desktop)
-            logger.info("Starting stdio MCP server")
-            async with stdio_server() as (read_stream, write_stream):
-                initialization_options = server.create_initialization_options(
-                    notification_options=NotificationOptions(tools_changed=True)
-                )
-                await server.run(read_stream, write_stream, initialization_options)
+            await server.run(read_stream, write_stream, initialization_options)
 
 
 def run() -> None:

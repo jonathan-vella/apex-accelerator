@@ -1,9 +1,49 @@
 """Tool definitions for Azure Pricing MCP Server."""
 
-from mcp.types import Tool
+from mcp.types import Tool, ToolAnnotations
 
+# Phase 4.17 — admin-tier tools (spot/simulate/find_orphaned). The admin
+# subpackage is always importable, but admin tools are only registered when the
+# ``[admin]`` extras are installed (azure-identity is needed at runtime).
+from .admin import get_admin_tool_definitions as _get_admin_tool_definitions
+from .admin import is_admin_available
 from .databricks.tools import get_databricks_tool_definitions
 from .github_pricing.tools import get_github_pricing_tool_definitions
+from .response_format import RESPONSE_FORMAT_SCHEMA
+from .schemas import get_output_schema
+
+_ADMIN_AVAILABLE = is_admin_available()
+
+
+def get_admin_tool_definitions() -> list[Tool]:
+    """Return admin-tier tool definitions, or empty list when [admin] extras
+    aren't installed."""
+    return _get_admin_tool_definitions() if _ADMIN_AVAILABLE else []
+
+
+# v5.0 — Phase 4.13: shared MCP tool annotation presets. Read tools are
+# read-only + idempotent.
+_READ_ANNOTATIONS = ToolAnnotations(readOnlyHint=True, idempotentHint=True, destructiveHint=False)
+
+# v5.0 — Phase 2.6: shared inputSchema fragments. Repeating these descriptions
+# verbatim across 4+ tools wastes tokens in agent ``tools/list`` responses.
+_DISCOUNT_PERCENTAGE_SCHEMA: dict = {
+    "type": "number",
+    "description": (
+        "Discount percentage to apply to retail prices (e.g. 10 for 10%). "
+        "If omitted and ``show_with_discount`` is false, no discount is applied."
+    ),
+}
+_SHOW_WITH_DISCOUNT_SCHEMA: dict = {
+    "type": "boolean",
+    "description": "Apply the default discount when ``discount_percentage`` is not given.",
+    "default": False,
+}
+_CURRENCY_CODE_SCHEMA: dict = {
+    "type": "string",
+    "description": "Currency code (default: USD).",
+    "default": "USD",
+}
 
 
 def get_tool_definitions() -> list[Tool]:
@@ -36,32 +76,24 @@ def get_tool_definitions() -> list[Tool]:
                             "type": "string",
                             "description": "Price type: 'Consumption', 'Reservation', or 'DevTestConsumption'",
                         },
-                        "currency_code": {
-                            "type": "string",
-                            "description": "Currency code (default: USD)",
-                            "default": "USD",
-                        },
+                        "currency_code": _CURRENCY_CODE_SCHEMA,
                         "limit": {
                             "type": "integer",
                             "description": "Maximum number of results (default: 50)",
                             "default": 50,
                         },
-                        "discount_percentage": {
-                            "type": "number",
-                            "description": "Discount percentage to apply to prices (e.g., 10 for 10% discount). If not specified and show_with_discount is false, no discount is applied. If show_with_discount is true, defaults to 10%.",
-                        },
-                        "show_with_discount": {
-                            "type": "boolean",
-                            "description": "Set to true to apply a discount; uses default 10% unless discount_percentage is explicitly specified.",
-                            "default": False,
-                        },
+                        "discount_percentage": _DISCOUNT_PERCENTAGE_SCHEMA,
+                        "show_with_discount": _SHOW_WITH_DISCOUNT_SCHEMA,
                         "validate_sku": {
                             "type": "boolean",
                             "description": "Whether to validate SKU names and provide suggestions (default: true)",
                             "default": True,
                         },
+                        "response_format": RESPONSE_FORMAT_SCHEMA,
                     },
                 },
+                outputSchema=get_output_schema("azure_price_search"),
+                annotations=_READ_ANNOTATIONS,
             ),
             Tool(
                 name="azure_price_compare",
@@ -82,23 +114,15 @@ def get_tool_definitions() -> list[Tool]:
                             "items": {"type": "string"},
                             "description": "List of regions to compare (if not provided, compares SKUs)",
                         },
-                        "currency_code": {
-                            "type": "string",
-                            "description": "Currency code (default: USD)",
-                            "default": "USD",
-                        },
-                        "discount_percentage": {
-                            "type": "number",
-                            "description": "Discount percentage to apply to prices (e.g., 10 for 10% discount). If not specified and show_with_discount is false, no discount is applied. If show_with_discount is true, defaults to 10%.",
-                        },
-                        "show_with_discount": {
-                            "type": "boolean",
-                            "description": "Set to true to apply a discount; uses default 10% unless discount_percentage is explicitly specified.",
-                            "default": False,
-                        },
+                        "currency_code": _CURRENCY_CODE_SCHEMA,
+                        "discount_percentage": _DISCOUNT_PERCENTAGE_SCHEMA,
+                        "show_with_discount": _SHOW_WITH_DISCOUNT_SCHEMA,
+                        "response_format": RESPONSE_FORMAT_SCHEMA,
                     },
                     "required": ["service_name"],
                 },
+                outputSchema=get_output_schema("azure_price_compare"),
+                annotations=_READ_ANNOTATIONS,
             ),
             Tool(
                 name="azure_cost_estimate",
@@ -123,27 +147,24 @@ def get_tool_definitions() -> list[Tool]:
                             "description": "Expected hours of usage per month (default: 730 for full month)",
                             "default": 730,
                         },
-                        "currency_code": {
-                            "type": "string",
-                            "description": "Currency code (default: USD)",
-                            "default": "USD",
-                        },
-                        "discount_percentage": {
-                            "type": "number",
-                            "description": "Discount percentage to apply to prices (e.g., 10 for 10% discount). If not specified and show_with_discount is false, no discount is applied. If show_with_discount is true, defaults to 10%.",
-                        },
-                        "show_with_discount": {
-                            "type": "boolean",
-                            "description": "Set to true to apply a discount; uses default 10% unless discount_percentage is explicitly specified.",
-                            "default": False,
-                        },
+                        "currency_code": _CURRENCY_CODE_SCHEMA,
+                        "discount_percentage": _DISCOUNT_PERCENTAGE_SCHEMA,
+                        "show_with_discount": _SHOW_WITH_DISCOUNT_SCHEMA,
+                        "response_format": RESPONSE_FORMAT_SCHEMA,
                     },
                     "required": ["service_name", "sku_name", "region"],
                 },
+                outputSchema=get_output_schema("azure_cost_estimate"),
+                annotations=_READ_ANNOTATIONS,
             ),
             Tool(
                 name="azure_discover_skus",
-                description="Discover available SKUs for a specific Azure service",
+                description=(
+                    "[DEPRECATED v5.0 — use azure_sku_discovery] "
+                    "Discover available SKUs for a specific Azure service. "
+                    "This tool is now a thin alias of azure_sku_discovery and will be "
+                    "removed in v6.0."
+                ),
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -165,9 +186,12 @@ def get_tool_definitions() -> list[Tool]:
                             "description": "Maximum number of SKUs to return (default: 100)",
                             "default": 100,
                         },
+                        "response_format": RESPONSE_FORMAT_SCHEMA,
                     },
                     "required": ["service_name"],
                 },
+                outputSchema=get_output_schema("azure_discover_skus"),
+                annotations=_READ_ANNOTATIONS,
             ),
             Tool(
                 name="azure_sku_discovery",
@@ -183,19 +207,18 @@ def get_tool_definitions() -> list[Tool]:
                             "type": "string",
                             "description": "Optional Azure region to filter results",
                         },
-                        "currency_code": {
-                            "type": "string",
-                            "description": "Currency code (default: USD)",
-                            "default": "USD",
-                        },
+                        "currency_code": _CURRENCY_CODE_SCHEMA,
                         "limit": {
                             "type": "integer",
                             "description": "Maximum number of results (default: 30)",
                             "default": 30,
                         },
+                        "response_format": RESPONSE_FORMAT_SCHEMA,
                     },
                     "required": ["service_hint"],
                 },
+                outputSchema=get_output_schema("azure_sku_discovery"),
+                annotations=_READ_ANNOTATIONS,
             ),
             Tool(
                 name="azure_region_recommend",
@@ -216,23 +239,15 @@ def get_tool_definitions() -> list[Tool]:
                             "description": "Number of top recommendations to return (default: 10)",
                             "default": 10,
                         },
-                        "currency_code": {
-                            "type": "string",
-                            "description": "Currency code (default: USD)",
-                            "default": "USD",
-                        },
-                        "discount_percentage": {
-                            "type": "number",
-                            "description": "Discount percentage to apply to prices (e.g., 10 for 10% discount). If not specified and show_with_discount is false, no discount is applied. If show_with_discount is true, defaults to 10%.",
-                        },
-                        "show_with_discount": {
-                            "type": "boolean",
-                            "description": "Set to true to apply a discount; uses default 10% unless discount_percentage is explicitly specified.",
-                            "default": False,
-                        },
+                        "currency_code": _CURRENCY_CODE_SCHEMA,
+                        "discount_percentage": _DISCOUNT_PERCENTAGE_SCHEMA,
+                        "show_with_discount": _SHOW_WITH_DISCOUNT_SCHEMA,
+                        "response_format": RESPONSE_FORMAT_SCHEMA,
                     },
                     "required": ["service_name", "sku_name"],
                 },
+                outputSchema=get_output_schema("azure_region_recommend"),
+                annotations=_READ_ANNOTATIONS,
             ),
             Tool(
                 name="azure_ri_pricing",
@@ -257,11 +272,7 @@ def get_tool_definitions() -> list[Tool]:
                             "description": "Reservation term ('1 Year' or '3 Years')",
                             "enum": ["1 Year", "3 Years"],
                         },
-                        "currency_code": {
-                            "type": "string",
-                            "description": "Currency code (default: USD)",
-                            "default": "USD",
-                        },
+                        "currency_code": _CURRENCY_CODE_SCHEMA,
                         "compare_on_demand": {
                             "type": "boolean",
                             "description": "Compare with On-Demand prices to calculate savings (default: true)",
@@ -272,9 +283,12 @@ def get_tool_definitions() -> list[Tool]:
                             "description": "Maximum number of results (default: 50)",
                             "default": 50,
                         },
+                        "response_format": RESPONSE_FORMAT_SCHEMA,
                     },
                     "required": ["service_name"],
                 },
+                outputSchema=get_output_schema("azure_ri_pricing"),
+                annotations=_READ_ANNOTATIONS,
             ),
             Tool(
                 name="get_customer_discount",
@@ -288,85 +302,7 @@ def get_tool_definitions() -> list[Tool]:
                         }
                     },
                 },
-            ),
-            # Spot VM Tools (require Azure authentication)
-            Tool(
-                name="spot_eviction_rates",
-                description="Get Spot VM eviction rates for specified SKUs and regions. Requires Azure authentication (az login or environment variables). Returns eviction rate categories: 0-5%, 5-10%, 10-15%, 15-20%, 20%+.",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "skus": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": "List of VM SKU names (e.g., ['Standard_D2s_v4', 'Standard_D4s_v4'])",
-                        },
-                        "locations": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": "List of Azure regions (e.g., ['eastus', 'westus2'])",
-                        },
-                    },
-                    "required": ["skus", "locations"],
-                },
-            ),
-            Tool(
-                name="spot_price_history",
-                description="Get Spot VM price history for a specific SKU and region. Requires Azure authentication (az login or environment variables). Returns up to 90 days of historical Spot pricing data.",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "sku": {
-                            "type": "string",
-                            "description": "VM SKU name (e.g., 'Standard_D2s_v4')",
-                        },
-                        "location": {
-                            "type": "string",
-                            "description": "Azure region (e.g., 'eastus')",
-                        },
-                        "os_type": {
-                            "type": "string",
-                            "description": "Operating system type ('linux' or 'windows')",
-                            "enum": ["linux", "windows"],
-                            "default": "linux",
-                        },
-                    },
-                    "required": ["sku", "location"],
-                },
-            ),
-            Tool(
-                name="simulate_eviction",
-                description="Simulate eviction of a Spot VM for testing application resilience. Requires Azure authentication with 'Virtual Machine Contributor' role. The VM will receive a 30-second eviction notice via Scheduled Events.",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "vm_resource_id": {
-                            "type": "string",
-                            "description": "Full Azure resource ID of the Spot VM (e.g., '/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Compute/virtualMachines/{vmName}')",
-                        },
-                    },
-                    "required": ["vm_resource_id"],
-                },
-            ),
-            # Orphaned Resources Tool (requires Azure authentication)
-            Tool(
-                name="find_orphaned_resources",
-                description="Detect orphaned Azure resources (unattached disks, public IPs, App Service Plans, SQL Elastic Pools, Application Gateways, NAT Gateways, Load Balancers, Private DNS Zones, Private Endpoints, Virtual Network Gateways, DDoS Protection Plans) across subscriptions and compute their real historical cost via Azure Cost Management. Requires Azure authentication (az login or environment variables).",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "days": {
-                            "type": "integer",
-                            "description": "Number of days to look back for cost data (default: 60)",
-                            "default": 60,
-                        },
-                        "all_subscriptions": {
-                            "type": "boolean",
-                            "description": "Scan all accessible subscriptions (default: true). Set to false to scan only the first subscription.",
-                            "default": True,
-                        },
-                    },
-                },
+                annotations=_READ_ANNOTATIONS,
             ),
             # PTU Sizing + Cost Planner (no auth required for sizing; public API for cost)
             Tool(
@@ -430,6 +366,7 @@ def get_tool_definitions() -> list[Tool]:
                     },
                     "required": ["model", "deployment_type", "rpm", "avg_input_tokens", "avg_output_tokens"],
                 },
+                annotations=_READ_ANNOTATIONS,
             ),
             # Bulk cost estimation
             Tool(
@@ -438,7 +375,9 @@ def get_tool_definitions() -> list[Tool]:
                     "Estimate costs for multiple Azure resources in a single call. "
                     "Returns per-resource and total monthly/yearly costs. "
                     "Ideal for full-stack cost estimates. Supports service-name aliases, "
-                    "request deduplication, and concurrent pricing lookups."
+                    "request deduplication, concurrent pricing lookups, and v5.4 "
+                    "usage-aware projection (transactions_per_month, gb_stored, etc.) "
+                    "for transaction-based and storage-retention meters."
                 ),
                 inputSchema={
                     "type": "object",
@@ -447,7 +386,9 @@ def get_tool_definitions() -> list[Tool]:
                             "type": "array",
                             "description": (
                                 "List of resources to estimate. Each must have service_name, sku_name, region. "
-                                "Optional: quantity (default 1), hours_per_month (default 730)."
+                                "Optional: quantity (default 1), hours_per_month (default 730), "
+                                "usage (transactions_per_month / gb_stored / gb_transferred / seconds_runtime), "
+                                "product_filter (substring of productName, e.g. 'Tables' for Storage Account)."
                             ),
                             "items": {
                                 "type": "object",
@@ -465,24 +406,55 @@ def get_tool_definitions() -> list[Tool]:
                                         "description": "Usage hours per month (default: 730)",
                                         "default": 730,
                                     },
+                                    "usage": {
+                                        "type": "object",
+                                        "description": (
+                                            "Workload estimates for non-time-based meters. "
+                                            "Keys: transactions_per_month, gb_stored, gb_transferred, "
+                                            "seconds_runtime."
+                                        ),
+                                        "properties": {
+                                            "transactions_per_month": {
+                                                "type": "number",
+                                                "description": "Operations per month (e.g., 100K Key Vault ops, 2.6M Storage Tables write ops).",
+                                            },
+                                            "gb_stored": {
+                                                "type": "number",
+                                                "description": "GB of data retained per month.",
+                                            },
+                                            "gb_transferred": {
+                                                "type": "number",
+                                                "description": "GB of egress / data transfer per month.",
+                                            },
+                                            "seconds_runtime": {
+                                                "type": "number",
+                                                "description": "Seconds of per-second-billed compute (e.g., ACR build tasks).",
+                                            },
+                                        },
+                                    },
+                                    "product_filter": {
+                                        "type": "string",
+                                        "description": (
+                                            "Substring matched against productName. Use this to "
+                                            "disambiguate multi-product services like Storage Account "
+                                            "(Tables / Block Blob / Queue / Files share the same skuName)."
+                                        ),
+                                    },
                                 },
                                 "required": ["service_name", "sku_name", "region"],
                             },
                         },
-                        "currency_code": {
-                            "type": "string",
-                            "description": "Currency code (default: USD)",
-                            "default": "USD",
-                        },
-                        "discount_percentage": {
-                            "type": "number",
-                            "description": "Discount percentage to apply to all resources",
-                        },
+                        "currency_code": _CURRENCY_CODE_SCHEMA,
+                        "discount_percentage": _DISCOUNT_PERCENTAGE_SCHEMA,
+                        "response_format": RESPONSE_FORMAT_SCHEMA,
                     },
                     "required": ["resources"],
                 },
+                outputSchema=get_output_schema("azure_bulk_estimate"),
+                annotations=_READ_ANNOTATIONS,
             ),
         ]
+        + get_admin_tool_definitions()
         + get_databricks_tool_definitions()
         + get_github_pricing_tool_definitions()
     )

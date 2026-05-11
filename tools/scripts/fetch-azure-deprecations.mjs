@@ -7,7 +7,7 @@
  * Outputs: .github/data/azure-deprecations.json
  */
 
-import { writeFileSync, existsSync, readFileSync } from "fs";
+import { writeFileSync, existsSync, readFileSync } from "node:fs";
 import { XMLParser } from "fast-xml-parser";
 
 const OUTPUT_FILE = ".github/data/azure-deprecations.json";
@@ -108,12 +108,10 @@ async function fetchAzureUpdates() {
     for (const item of items) {
       const title = (item.title || "").toLowerCase();
       const description = (item.description || "").toLowerCase();
-      const content = title + " " + description;
+      const content = `${title} ${description}`;
 
       // Check if this update is about deprecation
-      const isDeprecation = DEPRECATION_KEYWORDS.some((keyword) =>
-        content.includes(keyword),
-      );
+      const isDeprecation = DEPRECATION_KEYWORDS.some((keyword) => content.includes(keyword));
 
       if (isDeprecation) {
         deprecations.push({
@@ -138,12 +136,8 @@ async function fetchAzureUpdates() {
 
 function extractServiceName(title) {
   // Extract service name from title (basic extraction)
-  const match = title?.match(
-    /Azure\s+([A-Za-z\s]+?)(?:\s+(?:is|will|retirement|deprecation))/i,
-  );
-  return match
-    ? match[1].trim()
-    : title?.split(" ").slice(0, 3).join(" ") || "Unknown";
+  const match = title?.match(/Azure\s+([A-Za-z\s]+?)(?:\s+(?:is|will|retirement|deprecation))/i);
+  return match ? match[1].trim() : title?.split(" ").slice(0, 3).join(" ") || "Unknown";
 }
 
 function extractSunsetDate(description) {
@@ -171,10 +165,10 @@ async function main() {
   console.log("🔍 Azure Deprecation Tracker\n");
 
   // Load existing data if available
-  let existingData = { deprecations: [], lastUpdated: null };
+  let _existingData = { deprecations: [], lastUpdated: null };
   if (existsSync(OUTPUT_FILE)) {
     try {
-      existingData = JSON.parse(readFileSync(OUTPUT_FILE, "utf8"));
+      _existingData = JSON.parse(readFileSync(OUTPUT_FILE, "utf8"));
     } catch {
       console.warn("Could not parse existing deprecation data");
     }
@@ -187,9 +181,7 @@ async function main() {
   const allDeprecations = [...KNOWN_DEPRECATIONS];
 
   for (const rss of rssDeprecations) {
-    const exists = allDeprecations.some(
-      (d) => d.service === rss.service && d.sku === rss.sku,
-    );
+    const exists = allDeprecations.some((d) => d.service === rss.service && d.sku === rss.sku);
     if (!exists) {
       allDeprecations.push(rss);
     }
@@ -211,9 +203,7 @@ async function main() {
 
   writeFileSync(OUTPUT_FILE, JSON.stringify(output, null, 2));
 
-  console.log(
-    `\n✅ Wrote ${allDeprecations.length} deprecations to ${OUTPUT_FILE}`,
-  );
+  console.log(`\n✅ Wrote ${allDeprecations.length} deprecations to ${OUTPUT_FILE}`);
 
   // Summary
   const upcoming = allDeprecations.filter((d) => {

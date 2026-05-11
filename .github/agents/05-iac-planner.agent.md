@@ -1,7 +1,7 @@
 ---
 name: 05-IaC Planner
 description: Expert Azure Infrastructure as Code planner that creates comprehensive, machine-readable implementation plans. Consults Microsoft documentation, evaluates Azure Verified Modules (Bicep or Terraform), and designs complete infrastructure solutions with architecture diagrams. Routes to the appropriate IaC track based on decisions.iac_tool in session state.
-model: ["Claude Opus 4.6"]
+model: ["Claude Opus 4.7"]
 user-invocable: true
 agents: ["challenger-review-subagent"]
 tools:
@@ -22,8 +22,6 @@ tools:
     "terraform/*",
     todo,
     vscode.mermaid-chat-features/renderMermaidDiagram,
-    "ms-python.python/*",
-    ms-azuretools.vscode-azure-github-copilot/azure_recommend_custom_modes,
     ms-azuretools.vscode-azure-github-copilot/azure_query_azure_resource_graph,
     ms-azuretools.vscode-azure-github-copilot/azure_get_auth_context,
     ms-azuretools.vscode-azure-github-copilot/azure_set_auth_context,
@@ -32,7 +30,7 @@ tools:
 handoffs:
   - label: "▶ Refresh Governance"
     agent: 04g-Governance
-    prompt: "Re-run governance discovery for this project. Query Azure Policy REST API and update 04-governance-constraints.md/.json in `agent-output/{project}/`."
+    prompt: "Re-run governance discovery for this project. Query Azure Policy REST API and update 04-governance-constraints.md/.json in `agent-output/{project}/`. Input: current Azure subscription policy state via REST. Output: agent-output/{project}/04-governance-constraints.md and .json."
     send: true
   - label: "▶ Revise Plan"
     agent: 05-IaC Planner
@@ -40,7 +38,7 @@ handoffs:
     send: true
   - label: "▶ Compare AVM Modules"
     agent: 05-IaC Planner
-    prompt: "Query AVM metadata for all planned resources. Compare available vs required parameters and flag any gaps."
+    prompt: "Query AVM metadata for all planned resources. Compare available vs required parameters and flag any gaps. Input: agent-output/{project}/04-implementation-plan.md current module choices. Output: AVM trade-off matrix appended to the implementation plan."
     send: true
   - label: "Step 5: Generate Bicep"
     agent: 06b-Bicep CodeGen
@@ -61,8 +59,6 @@ handoffs:
 ---
 
 # IaC Plan Agent
-
-<!-- Recommended reasoning_effort: high -->
 
 <investigate_before_answering>
 Before writing the implementation plan, verify AVM module availability for every resource.
@@ -104,8 +100,8 @@ Always specify Azure Storage Account backend only.
 3. **Read** artifact template files: `azure-artifacts/templates/04-implementation-plan.template.md` + `04-governance-constraints.template.md`
 4. **Read** `.github/skills/python-diagrams/SKILL.digest.md` — diagram conventions, design tokens, Azure component imports
 5. **IaC-specific skill** (read on-demand during Phase 2):
-   - Bicep → `.github/skills/azure-bicep-patterns/SKILL.md` — hub-spoke, PE, diagnostics, module composition
-   - Terraform → `.github/skills/terraform-patterns/SKILL.md` — hub-spoke, PE, diagnostics, AVM-TF patterns
+   - Bicep → `.github/skills/azure-bicep-patterns/SKILL.digest.md` — hub-spoke, PE, diagnostics, module composition
+   - Terraform → `.github/skills/terraform-patterns/SKILL.digest.md` — hub-spoke, PE, diagnostics, AVM-TF patterns
 
 ## DO / DON'T
 
@@ -240,7 +236,7 @@ Context usage reaches ~80% by the end of the deployment strategy gate.
    - Deployment strategy choice (phased/single, phase grouping)
    - Key decisions from `02-architecture-assessment.md` (resource list, SKUs)
 2. **Switch to minimal skill loading** — for any further skill reads, use
-   `SKILL.minimal.md` variants (see `context-shredding` skill, >80% tier)
+   `SKILL.minimal.md` variants (see `context-management` skill, Mode A, >80% tier)
 3. **Do NOT re-read predecessor artifacts** — rely on the summary above
    and the saved files on disk (`04-governance-constraints.md/json`)
 4. **Update session state** — run `apex-recall checkpoint <project> 4 phase_3.6_compacted --json`
@@ -283,7 +279,21 @@ skip pass 2 if pass 1 has 0 `must_fix` and <2 `should_fix`.
 **Model routing**: Pass 1 (security-governance) → `challenger-review-subagent`.
 Pass 2 → `challenger-review-subagent` with `review_focus = "architecture-reliability"`.
 
-Write results to `agent-output/{project}/challenge-findings-plan-pass{N}.json`.
+For each pass, pass these inputs to the subagent:
+
+- `artifact_path` = `agent-output/{project}/04-implementation-plan.md`
+- `project_name` = `{project}`
+- `artifact_type` = `implementation-plan`
+- `review_focus` = per-pass value (security-governance / architecture-reliability)
+- `pass_number` = `1` / `2`
+- `prior_findings` = `null` for pass 1; pass 1's `compact_for_parent` for pass 2
+- `output_path` = `agent-output/{project}/challenge-findings-plan-pass{N}.json`
+- `overwrite` = `false` (set to `true` only when re-running after revisions)
+
+The subagent writes the JSON file at `output_path` and returns a compact
+summary (≤15 lines). **Do NOT paste subagent JSON inline.** Read the file
+from disk only if you need full finding details for the Gate presentation.
+**Checkpoint** (MANDATORY) after each pass: `apex-recall checkpoint <project> 4 phase_4_challenger_pass{N} --json`
 
 **Review audit** (MANDATORY): `apex-recall review-audit <project> 4 --passes-executed <N> --json`
 
@@ -299,18 +309,25 @@ Write results to `agent-output/{project}/challenge-findings-plan-pass{N}.json`.
 3. Show aggregate totals: `N must-fix, N should-fix`
 4. Reference the JSON file paths for machine-readable details
 
-Then use `askQuestions` to gather the decision:
+Then run the **Per-Finding Decision Protocol** from
+[.github/skills/azure-defaults/references/adversarial-review-protocol.md](../skills/azure-defaults/references/adversarial-review-protocol.md).
 
-- Question description: `"Challenger found N must-fix and N should-fix. See details in chat above. Revise or proceed?"`
-- Ask a single-select question: _"How would you like to proceed?"_
-  with options:
-  1. **Revise plan** — address must-fix findings before proceeding
-     (recommended if any must-fix findings exist, mark as `recommended`)
-  2. **Proceed to Code Generation** — accept findings as-is and move to Step 5
-- If the user chooses to revise: apply fixes to
-  `04-implementation-plan.md`, re-run the challenger review, then repeat
-- If the user chooses to proceed: present final handoff to the appropriate
-  CodeGen agent (Bicep or Terraform based on `decisions.iac_tool`)
+- **Sources merged for the panel** (per protocol section 2e): in this
+  order — `challenge-findings-plan-pass1.json` → `pass2.json`
+  (omit passes that did not run; max 2 passes per Phase 4.3–4.4).
+- **Sidecar**:
+  `agent-output/{project}/challenge-findings-plan-decisions.json`
+  (`artifact_type: "plan"`).
+- **On Revise** (matrix row 4): apply Accepted fixes to
+  `04-implementation-plan.md` using a **single
+  `multi_replace_string_in_file` call** that bundles every Accepted
+  finding's edit — do NOT re-emit the plan via `create_file`. See
+  azure-artifacts skill "Revision Workflow". Then re-run all relevant
+  passes of the challenger (`overwrite: true`), then re-build the
+  panel skipping issues whose `issue_id` already has a sidecar entry
+  (protocol section 2c).
+- **On Proceed**: present final handoff to the appropriate CodeGen
+  agent (Bicep or Terraform based on `decisions.iac_tool`).
   **On completion** (MANDATORY): `apex-recall complete-step <project> 4 --json`
 
 ## Output Files

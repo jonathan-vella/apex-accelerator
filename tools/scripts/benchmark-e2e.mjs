@@ -16,6 +16,7 @@
  *   - Cost accuracy
  *   - Session state integrity
  *   - Timing performance
+ *   - Regeneration rate (Draw.io diagrams; reported, weight 0 until baseline lands per T-012)
  *
  * Usage:
  *   node tools/scripts/benchmark-e2e.mjs [project]
@@ -37,14 +38,8 @@ const TF_DIR = path.join("infra", "terraform", PROJECT);
 // Detect IaC tool from session state
 function detectIacTool() {
   try {
-    const state = JSON.parse(
-      fs.readFileSync(path.join(OUTPUT_DIR, "00-session-state.json"), "utf-8"),
-    );
-    return (
-      state.iac_tool ||
-      state.decisions?.iac_tool ||
-      "Bicep"
-    ).toLowerCase();
+    const state = JSON.parse(fs.readFileSync(path.join(OUTPUT_DIR, "00-session-state.json"), "utf-8"));
+    return (state.iac_tool || state.decisions?.iac_tool || "Bicep").toLowerCase();
   } catch {
     return "bicep";
   }
@@ -120,6 +115,11 @@ const WEIGHTS = {
   cost_accuracy: 0.05,
   session_state_integrity: 0.1,
   timing_performance: 0.1,
+  // Reported but not yet weighted into composite. T-012 captures the
+  // pre-uplift baseline, then T-033 rebalances weights so this dimension
+  // gates the >=40% reduction target. Existing project benchmark scores
+  // are unaffected at weight 0.
+  regeneration_rate: 0,
 };
 
 function fileExists(fp) {
@@ -133,7 +133,7 @@ function fileExists(fp) {
 function globMatch(dir, pattern) {
   try {
     const files = fs.readdirSync(dir);
-    const re = new RegExp("^" + pattern.replace(/\*/g, ".*") + "$");
+    const re = new RegExp(`^${pattern.replace(/\*/g, ".*")}$`);
     return files.filter((f) => re.test(f));
   } catch {
     return [];
@@ -198,9 +198,7 @@ function scoreArtifactCompleteness() {
     },
   ];
 
-  const handledAlternatives = new Set(
-    alternativeGroups.flatMap((group) => group.names),
-  );
+  const handledAlternatives = new Set(alternativeGroups.flatMap((group) => group.names));
 
   for (const [name, spec] of Object.entries(EXPECTED_ARTIFACTS)) {
     if (handledAlternatives.has(name)) {
@@ -274,21 +272,15 @@ function scoreCodeQuality() {
       return { score: 0, details: "main.tf not found", grade: "F" };
     }
 
-    const initPass = runCmd(
-      `terraform -chdir=${TF_DIR} init -backend=false -input=false`,
-    );
-    const validatePass = initPass
-      ? runCmd(`terraform -chdir=${TF_DIR} validate`)
-      : false;
+    const initPass = runCmd(`terraform -chdir=${TF_DIR} init -backend=false -input=false`);
+    const validatePass = initPass ? runCmd(`terraform -chdir=${TF_DIR} validate`) : false;
     const fmtPass = runCmd(`terraform fmt -check -recursive ${TF_DIR}`);
 
     // Check for AVM-TF module usage
     let avmCount = 0;
     try {
       const content = fs.readFileSync(mainTf, "utf-8");
-      avmCount = (
-        content.match(/registry\.terraform\.io\/Azure\/avm-res-/g) || []
-      ).length;
+      avmCount = (content.match(/registry\.terraform\.io\/Azure\/avm-res-/g) || []).length;
     } catch {
       /* empty */
     }
@@ -343,8 +335,7 @@ function scoreCodeQuality() {
 
 function scoreReviewThoroughness() {
   const state = readJson(path.join(OUTPUT_DIR, "00-session-state.json"));
-  if (!state || !state.review_audit)
-    return { score: 0, details: "No review audit data", grade: "F" };
+  if (!state || !state.review_audit) return { score: 0, details: "No review audit data", grade: "F" };
 
   let stepsWithReview = 0;
   let totalSteps = 0;
@@ -360,28 +351,18 @@ function scoreReviewThoroughness() {
     }
   }
 
-  const score =
-    totalSteps > 0 ? Math.round((stepsWithReview / totalSteps) * 100) : 0;
+  const score = totalSteps > 0 ? Math.round((stepsWithReview / totalSteps) * 100) : 0;
   return { score, details, grade: gradeScore(score) };
 }
 
 function scoreWafCoverage() {
   const archFile = path.join(OUTPUT_DIR, "02-architecture-assessment.md");
-  if (!fileExists(archFile))
-    return { score: 0, details: "No architecture assessment", grade: "F" };
+  if (!fileExists(archFile)) return { score: 0, details: "No architecture assessment", grade: "F" };
 
   try {
     const content = fs.readFileSync(archFile, "utf-8");
-    const pillars = [
-      "Security",
-      "Reliability",
-      "Performance",
-      "Cost",
-      "Operations",
-    ];
-    const found = pillars.filter((p) =>
-      content.toLowerCase().includes(p.toLowerCase()),
-    );
+    const pillars = ["Security", "Reliability", "Performance", "Cost", "Operations"];
+    const found = pillars.filter((p) => content.toLowerCase().includes(p.toLowerCase()));
     const score = Math.round((found.length / pillars.length) * 100);
     return { score, pillars_found: found, grade: gradeScore(score) };
   } catch {
@@ -397,8 +378,7 @@ function scoreCostAccuracy() {
   const state = readJson(path.join(OUTPUT_DIR, "00-session-state.json"));
   const budget = state?.decisions?.budget || "";
   const budgetMatch = budget.match(/(\d+)/);
-  if (!budgetMatch)
-    return { score: 50, details: "No budget in decisions", grade: "D" };
+  if (!budgetMatch) return { score: 50, details: "No budget in decisions", grade: "D" };
 
   // Check if cost estimate exists
   const costFile = path.join(OUTPUT_DIR, "03-des-cost-estimate.md");
@@ -448,9 +428,7 @@ function scoreSessionStateIntegrity() {
     checks.push("decision_log: empty or missing");
   }
   if (state.steps) {
-    const completedSteps = Object.values(state.steps).filter(
-      (s) => s.status === "complete",
-    ).length;
+    const completedSteps = Object.values(state.steps).filter((s) => s.status === "complete").length;
     const stepScore = Math.min(40, Math.round((completedSteps / 8) * 40));
     score += stepScore;
     checks.push(`steps completed: ${completedSteps}/8`);
@@ -464,8 +442,7 @@ function scoreTimingPerformance() {
   if (!iterLog || !iterLog.entries || iterLog.entries.length === 0) {
     return {
       score: 0,
-      details:
-        "No iteration log data — orchestrator failed to populate 08-iteration-log.json",
+      details: "No iteration log data — orchestrator failed to populate 08-iteration-log.json",
       grade: "F",
     };
   }
@@ -486,6 +463,121 @@ function scoreTimingPerformance() {
     score,
     within_threshold: withinThreshold,
     total,
+    grade: gradeScore(score),
+  };
+}
+
+// Path to the Draw.io regen-rate baseline. Captured by T-012 before any
+// uplift code change lands; the post-change reduction target is >=40%.
+// Path matches the rubric's `regen_rate.baseline_path` and the golden-
+// scenario fixture pack location (tools/tests/drawio-golden/).
+const REGEN_BASELINE_PATH = path.join("tools", "tests", "drawio-baseline", "regen-baseline.json");
+
+function scoreRegenerationRate() {
+  const iterLog = readJson(path.join(OUTPUT_DIR, "08-iteration-log.json"));
+  if (!iterLog || !Array.isArray(iterLog.entries) || iterLog.entries.length === 0) {
+    return {
+      score: 0,
+      details: "No iteration log data; cannot compute regeneration rate",
+      grade: "F",
+    };
+  }
+
+  // Aggregate retry + friction counts across all entries, scoped to *.drawio
+  // artifacts. Schema fields: entries[].artifact_retries (object) and
+  // optional entries[].artifact_friction (object), keyed by filename.
+  let totalRetries = 0;
+  let totalFriction = 0;
+  const drawioArtifacts = new Set();
+  for (const entry of iterLog.entries) {
+    const retries = entry?.artifact_retries;
+    if (retries && typeof retries === "object") {
+      for (const [filename, count] of Object.entries(retries)) {
+        if (!filename.endsWith(".drawio")) continue;
+        drawioArtifacts.add(filename);
+        const n = Number(count);
+        if (Number.isFinite(n) && n >= 0) totalRetries += n;
+      }
+    }
+    const friction = entry?.artifact_friction;
+    if (friction && typeof friction === "object") {
+      for (const [filename, count] of Object.entries(friction)) {
+        if (!filename.endsWith(".drawio")) continue;
+        drawioArtifacts.add(filename);
+        const n = Number(count);
+        if (Number.isFinite(n) && n >= 0) totalFriction += n;
+      }
+    }
+  }
+
+  if (drawioArtifacts.size === 0) {
+    return {
+      score: null,
+      details: "No .drawio artifacts recorded with artifact_retries; dimension not applicable to this run",
+      drawio_artifacts: 0,
+      total_retries: 0,
+      total_friction: 0,
+      grade: "N/A",
+    };
+  }
+
+  const currentRetryMean = totalRetries / drawioArtifacts.size;
+  const currentFrictionMean = totalFriction / drawioArtifacts.size;
+  const currentCostMean = currentRetryMean + currentFrictionMean;
+
+  // Compare against captured baseline (T-012). When absent, report the raw
+  // current means and skip scoring rather than failing the run.
+  const baseline = readJson(REGEN_BASELINE_PATH);
+  if (!baseline || typeof baseline.mean_retries_per_drawio !== "number") {
+    return {
+      score: null,
+      details: `No regen-rate baseline at ${REGEN_BASELINE_PATH} (captured by T-012); reporting raw current means only`,
+      drawio_artifacts: drawioArtifacts.size,
+      total_retries: totalRetries,
+      total_friction: totalFriction,
+      current_mean_retries_per_drawio: Number(currentRetryMean.toFixed(3)),
+      current_mean_friction_per_drawio: Number(currentFrictionMean.toFixed(3)),
+      current_mean_cost_per_drawio: Number(currentCostMean.toFixed(3)),
+      baseline_available: false,
+      grade: "N/A",
+    };
+  }
+
+  // Composite cost = retries + friction. Falls back to retries-only when
+  // baseline lacks the friction field (older baselines).
+  const baselineRetryMean = baseline.mean_retries_per_drawio;
+  const baselineFrictionMean =
+    typeof baseline.mean_friction_per_drawio === "number" ? baseline.mean_friction_per_drawio : 0;
+  const baselineCostMean =
+    typeof baseline.mean_cost_per_drawio === "number"
+      ? baseline.mean_cost_per_drawio
+      : baselineRetryMean + baselineFrictionMean;
+
+  // Score formula (plan §Validation Strategy): 100 * max(0, 1 - current/baseline),
+  // capped at 100. Uses the composite cost metric so it remains meaningful
+  // when strict retries are 0 but friction is non-zero. When baseline cost
+  // is 0 we cannot compute reduction; treat as perfect.
+  let score;
+  if (baselineCostMean <= 0) {
+    score = currentCostMean <= 0 ? 100 : 0;
+  } else {
+    const ratio = currentCostMean / baselineCostMean;
+    score = Math.round(Math.max(0, Math.min(1, 1 - ratio)) * 100);
+  }
+
+  return {
+    score,
+    drawio_artifacts: drawioArtifacts.size,
+    total_retries: totalRetries,
+    total_friction: totalFriction,
+    current_mean_retries_per_drawio: Number(currentRetryMean.toFixed(3)),
+    current_mean_friction_per_drawio: Number(currentFrictionMean.toFixed(3)),
+    current_mean_cost_per_drawio: Number(currentCostMean.toFixed(3)),
+    baseline_mean_retries_per_drawio: baselineRetryMean,
+    baseline_mean_friction_per_drawio: baselineFrictionMean,
+    baseline_mean_cost_per_drawio: baselineCostMean,
+    baseline_commit_sha: baseline.commit_sha || baseline.captured_on_commit || null,
+    target_reduction_pct: baseline.target_reduction_pct || 40,
     grade: gradeScore(score),
   };
 }
@@ -527,8 +619,10 @@ function generateBenchmarkReport(scores, composite) {
 
   for (const [dim, weight] of Object.entries(WEIGHTS)) {
     const s = scores[dim];
-    const weighted = Math.round(s.score * weight);
-    report += `| ${dim.replace(/_/g, " ")} | ${s.score}/100 | ${s.grade} | ${(weight * 100).toFixed(0)}% | ${weighted} |\n`;
+    const isNum = typeof s.score === "number";
+    const display = isNum ? `${s.score}/100` : "N/A";
+    const weighted = isNum ? Math.round(s.score * weight) : 0;
+    report += `| ${dim.replace(/_/g, " ")} | ${display} | ${s.grade} | ${(weight * 100).toFixed(0)}% | ${weighted} |\n`;
   }
 
   report += `| **Composite** | **${composite.score}/100** | **${composite.grade}** | 100% | ${composite.score} |\n`;
@@ -540,8 +634,7 @@ function generateBenchmarkReport(scores, composite) {
 
   if (state?.steps) {
     for (const [num, step] of Object.entries(state.steps)) {
-      const stepIters =
-        iterLog?.entries?.filter((e) => String(e.step) === num).length || 0;
+      const stepIters = iterLog?.entries?.filter((e) => String(e.step) === num).length || 0;
       report += `| ${num} | ${step.name} | ${step.status} | ${stepIters} | ${step.artifacts?.length || 0} artifacts |\n`;
     }
   }
@@ -571,11 +664,7 @@ function generateBenchmarkReport(scores, composite) {
     report += `| - | -------- | -------- | ----- | ---------- |\n`;
 
     for (const lesson of sorted) {
-      const appliesTo = (
-        lesson.applies_to_paths ||
-        lesson.applies_to ||
-        []
-      ).join(", ");
+      const appliesTo = (lesson.applies_to_paths || lesson.applies_to || []).join(", ");
       report += `| ${lesson.id} | ${lesson.severity} | ${lesson.category} | ${lesson.title} | ${appliesTo} |\n`;
     }
   }
@@ -613,18 +702,11 @@ function runCompare() {
 
   const results = [];
   for (const proj of projects) {
-    const scoresPath = path.join(
-      agentOutputDir,
-      proj,
-      "08-benchmark-scores.json",
-    );
+    const scoresPath = path.join(agentOutputDir, proj, "08-benchmark-scores.json");
     const existingScores = readJson(scoresPath);
     if (existingScores?.composite) {
-      const state = readJson(
-        path.join(agentOutputDir, proj, "00-session-state.json"),
-      );
-      const iacTool =
-        state?.iac_tool || state?.decisions?.iac_tool || "Unknown";
+      const state = readJson(path.join(agentOutputDir, proj, "00-session-state.json"));
+      const iacTool = state?.iac_tool || state?.decisions?.iac_tool || "Unknown";
       results.push({
         project: proj,
         iac_tool: iacTool,
@@ -636,9 +718,7 @@ function runCompare() {
   }
 
   if (results.length === 0) {
-    console.log(
-      "  ⚠️  No benchmark scores found. Run benchmarks on individual projects first.",
-    );
+    console.log("  ⚠️  No benchmark scores found. Run benchmarks on individual projects first.");
     process.exit(0);
   }
 
@@ -651,9 +731,7 @@ function runCompare() {
     );
   }
 
-  const avgScore = Math.round(
-    results.reduce((sum, r) => sum + r.score, 0) / results.length,
-  );
+  const avgScore = Math.round(results.reduce((sum, r) => sum + r.score, 0) / results.length);
   console.log(`\n  📊 Average composite: ${avgScore}/100`);
   process.exit(0);
 }
@@ -676,21 +754,25 @@ const scores = {
   cost_accuracy: scoreCostAccuracy(),
   session_state_integrity: scoreSessionStateIntegrity(),
   timing_performance: scoreTimingPerformance(),
+  regeneration_rate: scoreRegenerationRate(),
 };
 
-// Compute weighted composite
+// Compute weighted composite. Dimensions whose score is null (e.g., regen
+// rate before T-012 baseline lands, or runs with no .drawio artifacts) are
+// skipped — their weight is 0 today, but this guard keeps composite stable
+// when T-033 rebalances.
 let compositeScore = 0;
 for (const [dim, weight] of Object.entries(WEIGHTS)) {
-  compositeScore += scores[dim].score * weight;
+  const s = scores[dim].score;
+  if (typeof s === "number") compositeScore += s * weight;
 }
 compositeScore = Math.round(compositeScore);
 const composite = { score: compositeScore, grade: gradeScore(compositeScore) };
 
 // Print summary
 for (const [dim, result] of Object.entries(scores)) {
-  console.log(
-    `  ${result.grade} ${dim.replace(/_/g, " ")}: ${result.score}/100`,
-  );
+  const display = typeof result.score === "number" ? `${result.score}/100` : "N/A";
+  console.log(`  ${result.grade} ${dim.replace(/_/g, " ")}: ${display}`);
 }
 console.log(`\n  🏆 Composite: ${composite.score}/100 (${composite.grade})`);
 
@@ -701,10 +783,7 @@ const scoresJson = {
   scores,
   composite,
 };
-fs.writeFileSync(
-  path.join(OUTPUT_DIR, "08-benchmark-scores.json"),
-  JSON.stringify(scoresJson, null, 2),
-);
+fs.writeFileSync(path.join(OUTPUT_DIR, "08-benchmark-scores.json"), JSON.stringify(scoresJson, null, 2));
 
 // Write markdown report
 const report = generateBenchmarkReport(scores, composite);
