@@ -2,13 +2,17 @@
 /**
  * Workflow Table Sync Validator
  *
- * Validates that the markdown workflow tables in copilot-instructions.md
- * and AGENTS.md stay in sync with the authoritative workflow-graph.json.
+ * Validates that the markdown workflow table in AGENTS.md stays in sync with
+ * the authoritative workflow-graph.json. AGENTS.md is the single source of
+ * truth for the per-step row data; .github/copilot-instructions.md is required
+ * to link to `AGENTS.md#agent-workflow` (drift protection without duplicating
+ * the table — Phase 4 context-window trim removed the duplicate copy).
  *
  * Checks:
- * - Every agent-step in the JSON has a matching row in each table
+ * - Every agent-step in the JSON has a matching row in AGENTS.md
  * - Gate types match (approval/validation/null → Approval/Validation/—)
  * - No table rows reference steps absent from the JSON (except "Post")
+ * - .github/copilot-instructions.md contains a link to AGENTS.md#agent-workflow
  *
  * @example
  * node tools/scripts/validate-workflow-table-sync.mjs
@@ -17,9 +21,14 @@
 import fs from "node:fs";
 import { Reporter } from "./_lib/reporter.mjs";
 
-const GRAPH_PATH =
-  ".github/skills/workflow-engine/templates/workflow-graph.json";
-const TABLE_FILES = [".github/copilot-instructions.md", "AGENTS.md"];
+const GRAPH_PATH = ".github/skills/workflow-engine/templates/workflow-graph.json";
+const TABLE_FILES = ["AGENTS.md"];
+const LINK_FILES = [
+  {
+    path: ".github/copilot-instructions.md",
+    pattern: /AGENTS\.md#agent-workflow/i,
+  },
+];
 
 const r = new Reporter("Workflow Table Sync");
 
@@ -32,15 +41,12 @@ function loadGraphSteps() {
   const steps = new Map();
 
   for (const [id, node] of Object.entries(graph.nodes)) {
-    if (node.type !== "agent-step" && node.type !== "subagent-fan-out")
-      continue;
+    if (node.type !== "agent-step" && node.type !== "subagent-fan-out") continue;
 
     // step-1 → "1", step-3_5 → "3.5", step-5b → "5", step-6t → "6"
     const num = id.replace("step-", "").replace("_", ".").replace(/[bt]$/, "");
 
-    const gate = node.gate
-      ? node.gate.charAt(0).toUpperCase() + node.gate.slice(1)
-      : "—";
+    const gate = node.gate ? node.gate.charAt(0).toUpperCase() + node.gate.slice(1) : "—";
 
     // Merge Bicep/Terraform branches into one step number
     if (steps.has(num)) {
@@ -169,10 +175,7 @@ function validate() {
     for (const { stepNum } of tableSteps) {
       if (stepNum.toLowerCase() === "post") continue;
       if (!graphSteps.has(stepNum)) {
-        r.error(
-          file,
-          `Table row "${stepNum}" not found in workflow-graph.json`,
-        );
+        r.error(file, `Table row "${stepNum}" not found in workflow-graph.json`);
       }
     }
 
@@ -185,19 +188,31 @@ function validate() {
 
       const jsonGate = jsonStep.gate;
       // Normalize for comparison: both sides to lowercase
-      if (
-        gate.toLowerCase().replace("—", "—") !==
-        jsonGate.toLowerCase().replace("—", "—")
-      ) {
-        r.error(
-          file,
-          `Step ${stepNum} gate mismatch: table="${gate}" vs graph="${jsonGate}"`,
-        );
+      if (gate.toLowerCase().replace("—", "—") !== jsonGate.toLowerCase().replace("—", "—")) {
+        r.error(file, `Step ${stepNum} gate mismatch: table="${gate}" vs graph="${jsonGate}"`);
       }
     }
 
     if (r.errors === 0) {
       r.ok(file, `${tableSteps.length} rows in sync with workflow-graph.json`);
+    }
+  }
+
+  // Drift protection: files that delegate to AGENTS.md must keep the link.
+  for (const { path: file, pattern } of LINK_FILES) {
+    if (!fs.existsSync(file)) {
+      r.warn(file, "File not found — skipping link check");
+      continue;
+    }
+    r.tick();
+    const content = fs.readFileSync(file, "utf-8");
+    if (!pattern.test(content)) {
+      r.error(
+        file,
+        `Missing link to AGENTS.md#agent-workflow — required so the workflow table stays discoverable from this file.`,
+      );
+    } else {
+      r.ok(file, "Links to AGENTS.md#agent-workflow");
     }
   }
 

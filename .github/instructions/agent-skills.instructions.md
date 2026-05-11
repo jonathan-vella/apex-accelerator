@@ -106,6 +106,35 @@ If the file is used as-is in output → `assets/`.
 - No hardcoded credentials or secrets
 - Include `--help` documentation and error handling in scripts
 
+## Wiring a Skill to an Agent
+
+Skills are wired by referencing them in the agent body, **not** by an entry
+in `tools/registry/agent-registry.json`. The orphan-content validator
+(`tools/scripts/validate-orphaned-content.mjs`) discovers references at
+runtime by scanning agent bodies, other skills, and instruction files for
+the canonical pattern:
+
+```text
+.github/skills/{name}/SKILL.md
+.github/skills/{name}/SKILL.digest.md
+.github/skills/{name}/SKILL.minimal.md
+```
+
+Any of these three filenames count as a wiring reference. Use whichever
+tier matches the agent's context budget — `SKILL.digest.md` is the default
+for context-window-optimized agents; `SKILL.minimal.md` is reserved for
+>80% utilization or explicit minimal-mode flags; full `SKILL.md` is for
+skill-authoring or debugging contexts.
+
+The validator also accepts:
+
+- References without the leading `.github/` prefix (`skills/{name}/SKILL.md`)
+- References inside fenced shell code blocks (e.g., `cat .github/skills/{name}/SKILL.digest.md`)
+
+References to `references/` or `templates/` subpaths inside the same skill
+are picked up via fallback containment checks but are not the preferred
+wiring form. Use the canonical SKILL[.tier].md pattern for explicit wiring.
+
 ## Validation Checklist
 
 - [ ] Valid frontmatter with `name` and `description`
@@ -114,6 +143,36 @@ If the file is used as-is in output → `assets/`.
 - [ ] Body ≤500 lines; large content in `references/`
 - [ ] Scripts include help docs and error handling
 - [ ] No hardcoded credentials
+
+## Per-Step File Re-Read Budget (HARD LIMIT)
+
+Agents driving a workflow step (`.github/agents/0*-*.agent.md`) MUST treat
+predecessor artifacts as session-cached. The rule:
+
+- Read `agent-output/{project}/04-implementation-plan.md`,
+  `agent-output/{project}/04-governance-constraints.{md,json}`, and
+  `agent-output/{project}/02-architecture-assessment.md` at most **twice**
+  per Step (once at boot, once during a re-validation pass at most). Every
+  further lookup against these artifacts MUST use
+  `apex-recall show <project> --json` (or
+  `apex-recall search <project> '<term>' --json`) against the cached
+  session state — NOT a fresh `read_file` of the disk artifact.
+- Subagents (`bicep-validate-subagent`, `terraform-validate-subagent`,
+  `challenger-review-subagent`) receive a **compressed digest** of the
+  plan + governance constraints from their parent agent — they do not
+  re-read the source artifacts unless the parent explicitly omits the
+  digest and the prompt instructs them to.
+- The May 2026 nordic-foods retro showed `04-implementation-plan.md` read
+  6× and `04-governance-constraints.md` read 4× in a single Step 5 run.
+  Each redundant read shipped ~7 KB into a 200 K context. The cache
+  contract closes that hole.
+
+**Validator**: `npm run validate:context-budget` enforces a structural
+floor — every agent that declares one of the frozen artifacts under a
+"Prerequisites Check" / "Read at startup" / "Context budget" heading must
+also reference `apex-recall show` (the cached read path) and contain a
+phrase forbidding redundant reads ("do not re-read predecessor artifacts",
+"frozen_inputs", or "plan_readonly").
 
 ## Resources
 

@@ -1,10 +1,10 @@
 ---
 name: 07b-Bicep Deploy
-model: ["GPT-5.4"]
+model: ["GPT-5.5"]
 description: Executes Azure deployments using generated Bicep templates. Uses azd provision (default). deploy.ps1 is deprecated and retained only as a fallback for legacy projects without azure.yaml. Performs what-if analysis and manages deployment lifecycle. Step 6 of the agentic workflow.
 argument-hint: Deploy the Bicep templates for a specific project
 user-invocable: true
-agents: ["bicep-whatif-subagent", "challenger-review-subagent"]
+agents: ["bicep-whatif-subagent", "policy-precheck-subagent", "challenger-review-subagent"]
 tools:
   [
     vscode,
@@ -20,7 +20,6 @@ tools:
     "microsoft-learn/*",
     todo,
     vscode.mermaid-chat-features/renderMermaidDiagram,
-    ms-azuretools.vscode-azure-github-copilot/azure_recommend_custom_modes,
     ms-azuretools.vscode-azure-github-copilot/azure_query_azure_resource_graph,
     ms-azuretools.vscode-azure-github-copilot/azure_get_auth_context,
     ms-azuretools.vscode-azure-github-copilot/azure_set_auth_context,
@@ -29,7 +28,7 @@ tools:
 handoffs:
   - label: "▶ Run What-If Only"
     agent: 07b-Bicep Deploy
-    prompt: "Execute az deployment what-if analysis without actually deploying. Show the expected changes to the target resource group."
+    prompt: "Execute az deployment what-if analysis without actually deploying. Show the expected changes to the target resource group. Input: infra/bicep/{project}/main.bicep + parameters. Output: preview report (chat) — no resources deployed."
     send: true
   - label: "▶ Deploy Next Phase"
     agent: 07b-Bicep Deploy
@@ -41,11 +40,11 @@ handoffs:
     send: true
   - label: "▶ Retry Deployment"
     agent: 07b-Bicep Deploy
-    prompt: "Retry the last deployment operation. Re-run preflight validation and deployment with the same parameters."
+    prompt: "Retry the last deployment operation. Re-run preflight validation and deployment with the same parameters. Input: previous deployment error + agent-output/{project}/06-deployment-summary.md. Output: updated 06-deployment-summary.md with retry status."
     send: true
   - label: "▶ Verify Resources"
     agent: 07b-Bicep Deploy
-    prompt: "Query deployed resources using Azure Resource Graph to verify successful deployment. Check resource health status."
+    prompt: "Query deployed resources using Azure Resource Graph to verify successful deployment. Check resource health status. Input: deployed Azure resource group inventory. Output: verification table appended to agent-output/{project}/06-deployment-summary.md."
     send: true
   - label: "Step 7: As-Built Documentation"
     agent: 08-As-Built
@@ -53,11 +52,11 @@ handoffs:
     send: true
   - label: "▶ Generate As-Built Diagram"
     agent: 08-As-Built
-    prompt: "Use the drawio skill and MCP tools to generate an as-built architecture diagram documenting deployed infrastructure. Use transactional mode. Output `agent-output/{project}/07-ab-diagram.drawio` with quality score >= 9/10. Follow batch-only workflow from the drawio skill."
+    prompt: "Use the drawio skill and MCP tools to generate an as-built architecture diagram documenting deployed infrastructure. Use transactional mode. Output `agent-output/{project}/07-ab-diagram.drawio` with quality score >= 9/10. Follow batch-only workflow from the drawio skill. Input: deployed resource state via az resource list / terraform show. Output: agent-output/{project}/07-as-built-diagram.drawio + .png."
     send: true
   - label: "↩ Fix Deployment Issues"
     agent: 06b-Bicep CodeGen
-    prompt: "The deployment encountered errors. Review the error messages and fix the Bicep templates in `infra/bicep/{project}/` to resolve the issues."
+    prompt: "The deployment encountered errors. Review the error messages and fix the Bicep templates in `infra/bicep/{project}/` to resolve the issues. Input: deployment error log. Output: patched infra files + new what-if/plan preview."
     send: true
   - label: "↩ Return to Step 2"
     agent: 03-Architect
@@ -71,7 +70,71 @@ handoffs:
 
 # Bicep Deploy Agent
 
-Context tiers: follow context-shredding skill.
+Role: Step 6 deployment executor. Provisions Bicep templates to Azure via `azd
+provision` (default) or `az deployment group create`, manages preflight + what-if
+gating, and produces the deployment summary handoff.
+
+# Goal
+
+Take an approved Bicep workspace at `infra/bicep/{project}/` and bring the target
+Azure subscription to the desired state for the next uncompleted phase, returning
+a verified `06-deployment-summary.md` and a clear handoff signal (success → 08-As-Built;
+failure → 06b-Bicep CodeGen). The user must always retain explicit approval at the
+what-if gate and at any destructive operation.
+
+# Success criteria
+
+- `06-deployment-summary.md` written with deployed resource IDs, phase identifier,
+  duration, and subscription/resource-group context.
+- `az deployment group what-if` (or `azd provision --preview`) ran cleanly and the
+  user explicitly approved before any apply step.
+- Post-deploy verification confirms each resource exists in Azure Resource Graph
+  and matches the declared SKU + region.
+- Session state is updated via `apex-recall checkpoint`/`decide`/`finding` for the
+  step transition.
+- A handoff label is rendered: success path → 08-As-Built; failure path → 06b-Bicep
+  CodeGen with a structured error excerpt.
+
+# Constraints
+
+- Require explicit approval for any Delete (`-`) operation surfaced by what-if.
+- Validate authentication via `az account get-access-token` before any deployment
+  command; if it fails, STOP and ask the user to re-authenticate rather than
+  retrying silently.
+- If `infra/bicep/{project}/` is missing, malformed, or fails `bicep build`, STOP
+  and request handoff to the Bicep Code agent. Do not attempt to author template
+  fixes from this agent.
+- Prefer `azd` for projects with `azure.yaml`; fall back to `az deployment` only
+  for legacy projects without an azd manifest. Do not introduce `deploy.ps1`.
+- Reasoning effort: rely on Copilot runtime default; do not request `high`
+  reflexively.
+
+# Output
+
+The artifact contract is captured below in `## Output` and `## Validation
+Checklist`. Use the templates in `.github/skills/azure-artifacts/templates/` for
+`06-deployment-summary.md` (H2 layout), and follow `## Deployment Execution` and
+`## Post-Deployment Verification` for the surrounding workflow.
+
+# Stop rules
+
+- Stop after `06-deployment-summary.md` is written and the success/failure handoff
+  label is rendered. Do not loop back into another deployment without a fresh user
+  prompt.
+- Stop and ask the user before any what-if-detected destructive change applies.
+- Stop and request handoff to 06b-Bicep CodeGen if `bicep build` fails or the
+  preflight detects a template defect; do not patch templates from this agent.
+- Stop and surface the verification failure verbatim if Azure Resource Graph does
+  not confirm the deployed resource state.
+
+Context tiers: follow context-management skill (Mode A: Runtime Compression).
+
+## Subagent Budget
+
+This agent runs on `GPT-5.5`. The `bicep-whatif-subagent` it delegates to runs on
+`Claude Sonnet 4.6` (cross-family call) after the 2026-05 IaC subagent migration
+— the JSON-shaped what-if contract was preserved verbatim, so no parsing changes
+are required here.
 
 ## Read Skills First
 
@@ -79,6 +142,10 @@ Context tiers: follow context-shredding skill.
 2. Read `.github/skills/azure-artifacts/SKILL.digest.md` — H2 template for `06-deployment-summary.md`
 3. Read `.github/skills/iac-common/references/circuit-breaker.md` — failure taxonomy and stopping rules
 4. Read `.github/skills/iac-common/references/deploy-shared-workflow.md` — shared deploy protocol
+5. Read `.github/skills/iac-common/references/policy-precheck-contract.md` — L3 subagent I/O contract
+   (required before invoking `policy-precheck-subagent`)
+6. Read `.github/skills/iac-common/references/governance-drift-routing.md` — four-layer drift routing
+   matrix; consumed on every precheck result
 
 ## Shared Deploy Protocol
 
@@ -237,6 +304,59 @@ Then use `askQuestions` to gather the decision:
   **Checkpoint** (MANDATORY): `apex-recall checkpoint <project> 6 phase_2_preview --json`
   **Decisions** (MANDATORY):
   `apex-recall decide <project> --decision "Deploy approved" --rationale "<change summary>" --step 6 --json`
+
+### Step 5.6: Live Policy Precheck (L3 — MANDATORY before deploy)
+
+Before executing `az deployment ... create` or `azd provision`, invoke
+`policy-precheck-subagent` via `#runSubagent`. This is the L3
+attestation in the four-layer governance stack — the only layer that
+talks to the live Azure Policy API, so the only layer that catches
+"discovery was wrong" failures.
+
+Pass these inputs per
+[`iac-common/references/policy-precheck-contract.md`](../skills/iac-common/references/policy-precheck-contract.md):
+
+- `project` = `{project}`
+- `iac_tool` = `bicep`
+- `template_path` = `infra/bicep/{project}/main.bicep`
+- `parameter_file` = `infra/bicep/{project}/main.bicepparam`
+- `target_scope` = derived from `main.bicep` `targetScope`
+- `resource_group` = `rg-{project}-{env}` (rg-scope only)
+- `subscription_id` = `az account show --query id -o tsv`
+- `location` = chosen deploy region
+- `constraints_path` = `agent-output/{project}/04-governance-constraints.json`
+- `phase` = current phase label (when phased)
+- `output_path` = `agent-output/{project}/06-policy-precheck.json`
+
+The subagent writes the JSON file and returns a compact
+`POLICY PRECHECK RESULT` block. Route per the verdict using
+[`iac-common/references/governance-drift-routing.md`](../skills/iac-common/references/governance-drift-routing.md)
+(L3 rows):
+
+| Verdict   | Action                                                                                                                       |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `CLEAN`   | Proceed to Deployment Execution.                                                                                             |
+| `DRIFT`   | STOP and traverse `▶ Refresh Governance` (live policy missing / envelope stale).                                             |
+| `BLOCKED` | If the violating policy has a matrix row → `↩ Fix Deployment Issues` to 06b-Bicep CodeGen; otherwise → `↩ Return to Step 4`. |
+| `FAILED`  | STOP, surface the precheck error to the user; do not deploy.                                                                 |
+
+**Governance trace attestation (MANDATORY on `CLEAN`)** — before any
+`az deployment ... create` or `azd provision`, emit the full L0→L3
+attestation chain:
+
+```bash
+apex-recall decide <project> \
+  --key governance_trace \
+  --value "L0-pass,L1-mapped:<N>,L2-validated:<N>,L3-precheck:clean" \
+  --rationale "<envelope_sig>+<matrix_row_count>+<whatif_clean>" \
+  --step 6 \
+  --json
+```
+
+Replace `<N>` with the matrix row count from
+`04-implementation-plan.md` and the validator output count from Step 5. **Deploy is blocked until this decision is recorded.**
+`validate-governance-trace.mjs` enforces the chain before
+`complete-step 6`.
 
 ## Deployment Execution
 

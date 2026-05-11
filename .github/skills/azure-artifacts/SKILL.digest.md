@@ -4,15 +4,13 @@
 
 Compact reference for agent startup. Read full `SKILL.md` for details.
 
-## Artifact Generation Rules
+## Rules
 
 ### Mandatory Compliance
 
 | Rule                  | Requirement                                         |
 | --------------------- | --------------------------------------------------- |
 | **Template skeleton** | Read step template from `references/` and replicate |
-| **Exact text**        | Use H2 text from templates verbatim                 |
-
 > _See SKILL.md for full content._
 
 ## Mandatory: Project README
@@ -21,16 +19,27 @@ Every project in `agent-output/{project}/` **MUST** have a
 `README.md`.
 
 After saving step artifact(s), update the README:
-
-1. Mark your step as **complete** in `## ✅ Workflow Progress`
-
 > _See SKILL.md for full content._
+
+## Steps
+
+Artifact generation flow (per Step N):
+
+1. **Read template** — load the matching `references/0N-*-template.md` for the step you are generating
+2. **Copy H2 skeleton** — replicate every required H2 in the listed order, character-for-character
+3. **Fill content** — replace `{placeholder}` tokens; never use "TBD" or "Insert here"
+> _See SKILL.md for full content._
+
+## Revision Workflow (Targeted Edits)
+
+**Initial draft** uses `create_file`. **All subsequent revisions** MUST use targeted edit tools. Bundle every accepted fix from a review pass into a single `multi_replace_string_in_file` call (a 24-finding revision is one tool call, not 24). Full procedure, rationale, and structural-rewrite exception in [`references/revision-workflow.md`](./references/revision-workflow.md).
 
 ## Placeholder Syntax
 
-All templates use single-brace `{placeholder-name}` syntax (lowercase, hyphen-separated). No Mustache `{{double-braces}}`.
+All templates use single-brace `{placeholder-name}` syntax:
 
-> _See SKILL.md for full content._
+- Lowercase, hyphen-separated: `{project-name}`, `{monthly-cost}`
+- No Mustache/Handlebars `{{double-braces}}`
 
 ## Automated Validation
 
@@ -40,20 +49,10 @@ npm run lint:h2-sync              # Template ↔ artifact sync
 npm run validate:all              # All validators together
 ```
 
-> _See SKILL.md for full content._
-
 ## Quality Checklist
 
 - [ ] H2 headings match template exactly (text + order)
 - [ ] Attribution header present with agent name and date
-- [ ] No placeholder text ("TBD", "Insert here", "TODO")
+- [ ] No placeholder text (e.g. "TBD", "Insert here", task markers)
 - [ ] File saved to `agent-output/{project}/` with correct name
-- [ ] Collapsible TOC present (`<details open>` block after badge row)
-- [ ] Cross-navigation table present (⬅️ Previous / 📑 Index / Next ➡️)
-- [ ] Mermaid diagram included (if template contains one)
-- [ ] Traffic-light indicators used (✅ / ⚠️ / ❌ where template shows status columns)
-- [ ] Collapsible `<details>` blocks present (if template contains them)
-
----
-
 > _See SKILL.md for full content._

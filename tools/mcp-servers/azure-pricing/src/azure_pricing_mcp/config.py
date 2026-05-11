@@ -34,10 +34,49 @@ HTTP_POOL_PER_HOST = int(os.environ.get("AZURE_PRICING_HTTP_POOL_PER_HOST", "10"
 # Override via AZURE_PRICING_DEDUP_TTL for longer/shorter horizons.
 REQUEST_DEDUP_TTL = float(os.environ.get("AZURE_PRICING_DEDUP_TTL", "300.0"))
 
+# Negative-result TTL (Phase 3.11).
+#
+# Empty pricing responses (``Items: []``) cache for a much shorter window than
+# successful hits because agents often retry within seconds when an SKU name
+# is wrong. 60 s avoids paying full HTTP latency on retries while staying
+# short enough that a corrected SKU is not poisoned by the previous miss.
+NEGATIVE_CACHE_TTL = float(os.environ.get("AZURE_PRICING_NEG_TTL", "60.0"))
+
 # Max in-memory dedup cache entries. When exceeded, entries older than
 # REQUEST_DEDUP_TTL are evicted. 512 covers typical multi-SKU bulk
 # estimates (10-20 SKUs x 3-5 regions) with headroom.
 REQUEST_DEDUP_MAX_ENTRIES = int(os.environ.get("AZURE_PRICING_DEDUP_MAX_ENTRIES", "512"))
+
+# Disk-backed retirement cache path (Phase 3.8).
+#
+# Retirement docs come from a public MicrosoftDocs/azure-compute-docs file
+# that changes only when Microsoft updates the retirement schedule
+# (typically <1x/month). Caching to disk avoids the GitHub round-trip on
+# every cold start of the server.
+RETIREMENT_DISK_CACHE_DIR = os.environ.get(
+    "AZURE_PRICING_CACHE_DIR",
+    os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")), "azure-pricing-mcp"),
+)
+RETIREMENT_DISK_CACHE_FILE = "retirement.json"
+
+# Disk-backed pricing-response cache (v5.5).
+#
+# Mirrors successful Retail Prices API responses to ``<CACHE_DIR>/prices/``
+# keyed by a hash of ``(filter, currency, limit)``. Survives process restart,
+# so cold-start tool calls in CI / fresh dev containers skip the HTTP round-
+# trip (~200-800 ms) for any filter seen in a prior run. Sits *below* the
+# in-memory dedup cache: in-memory hits are still served first; disk is
+# checked only on in-memory miss. Empty (``Items: []``) responses are NOT
+# persisted to avoid baking typos into the cache for days.
+PRICE_DISK_CACHE_ENABLED = os.environ.get("AZURE_PRICING_DISK_CACHE_ENABLED", "true").lower() != "false"
+# 24h matches the retirement-cache cadence and the Retail Prices API's
+# practical update frequency (hourly at most, but most SKUs change <1x/week).
+PRICE_DISK_CACHE_TTL = timedelta(seconds=int(os.environ.get("AZURE_PRICING_DISK_CACHE_TTL", str(24 * 3600))))
+# Total cache size cap. On overflow, oldest entries (by mtime) are evicted
+# at write time. 500 MB covers ~10000 typical filtered responses; raise for
+# heavier workloads.
+PRICE_DISK_CACHE_MAX_BYTES = int(os.environ.get("AZURE_PRICING_DISK_CACHE_MAX_BYTES", str(500 * 1024 * 1024)))
+PRICE_DISK_CACHE_SUBDIR = "prices"
 
 # SSL verification configuration
 # Set to False if behind a corporate proxy with self-signed certificates

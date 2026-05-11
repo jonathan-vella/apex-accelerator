@@ -1,49 +1,69 @@
 ---
 description: "Resume the multi-step workflow from where it left off by reading session state and routing to the correct agent."
 agent: "01-Orchestrator"
-model: "Claude Opus 4.6"
 ---
 
 # Resume Workflow
 
 Resume the multi-step Azure platform engineering workflow from the last checkpoint.
 
-## Prerequisites
+# Goal
 
-- At least one project folder exists under `agent-output/` with `00-session-state.json`
-- The session state file contains `current_step` and step statuses
+Read session state for an existing project under `agent-output/`, determine
+the next workflow node from the DAG, and hand off to the correct agent —
+without re-executing completed work or losing earlier decisions.
 
-## Session State Detection
+# Success criteria
 
-The agent reads `00-session-state.json` to determine:
+- Correct project identified (auto-selected if only one; otherwise user-picked).
+- `current_step`, step statuses, sub-step checkpoint, and `decisions.iac_tool`
+  read from session state.
+- Next workflow node resolved against
+  `.github/skills/workflow-engine/templates/workflow-graph.json`.
+- User shown the current workflow status before any agent invocation.
+- Next agent surfaced as a **handoff button** (matching the label in the
+  `01-Orchestrator` agent's `handoffs:` frontmatter). The user clicks the
+  button to enter the next agent. The orchestrator never auto-invokes a step
+  agent or the challenger via `#runSubagent` (Bicep vs Terraform routing
+  respected when picking which handoff label to surface).
 
-- Which step to resume from (`current_step`)
-- Whether to use Bicep or Terraform agents (`decisions.iac_tool`)
-- Any in-progress sub-step checkpoints (`steps.{N}.sub_step`)
+# Constraints
 
-## Instructions
+- At least one project folder exists under `agent-output/` with
+  `00-session-state.json`.
+- Read `agent-output/{project}/00-session-state.json` and the workflow graph
+  on every resume — do not cache stale state.
+- **Handoff-only routing.** The `01-Orchestrator` runs at codex tier; per the
+  VS Code [subagent cost-tier rule](https://code.visualstudio.com/docs/copilot/agents/subagents),
+  any `#runSubagent` call would silently downgrade higher-tier step agents.
+  This prompt therefore **never** wraps a step agent or the challenger in
+  `#runSubagent`. After resolving the next node, present its matching
+  handoff button (from the orchestrator's `handoffs:` list) and stop.
+- Routing rules:
+  - `complete` → follow `on_complete` edges → find next node.
+  - `in_progress` → resume from `sub_step` checkpoint.
+  - `pending` → execute this node.
+  - `skipped` → follow `on_skip` edges.
+- Gate nodes require user approval before continuing.
+- Do not re-execute completed steps unless the user explicitly asks.
+- Do not change decisions made in earlier steps (IaC tool, region, compliance).
 
-1. Scan `agent-output/` for project folders containing `00-session-state.json`.
-2. If multiple projects exist, ask the user which project to resume.
-3. Read `agent-output/{project}/00-session-state.json` to determine:
-   - `current_step` — the step number to resume from.
-   - `steps.{N}.status` — whether it is `pending`, `in_progress`, `complete`, or `skipped`.
-   - `steps.{N}.sub_step` — the checkpoint within an in-progress step.
-   - `decisions.iac_tool` — routes to Bicep or Terraform agents for Steps 4-6.
-4. Read `.github/skills/workflow-engine/templates/workflow-graph.json` for the DAG model.
-5. Follow the DAG to determine the next node:
-   - If `complete` → follow `on_complete` edges → find next node.
-   - If `in_progress` → resume from `sub_step` checkpoint.
-   - If `pending` → execute this node.
-   - If `skipped` → follow `on_skip` edges.
-6. If the next node is a gate → present status to user and wait for approval.
-7. Hand off to the correct agent for the next step.
+# Output
 
-## Constraints
+- A status summary printed for the user (project, current step, next agent).
+- The matching **handoff button** for the next workflow node, surfaced from
+  the orchestrator's `handoffs:` list. No content is auto-injected into the
+  next agent — the user clicks the button to enter that agent at its native
+  tier.
 
-- Do NOT re-execute completed steps unless the user explicitly requests re-run.
-- Do NOT change decisions made in earlier steps (IaC tool, region, compliance).
-- Always present the current workflow status before resuming.
+# Stop rules
+
+- Stop and ask if multiple projects exist and the user did not specify one.
+- Stop if `00-session-state.json` is missing or fails schema validation.
+- Stop at any gate node that requires approval.
+- Stop after surfacing the next handoff button — do not call `#runSubagent`.
+- Do not invent a `decisions.iac_tool` value when it is missing — ask the
+  user (or route back to the relevant Step 4 agent).
 
 ## Graph Node → State Key Mapping
 
@@ -62,3 +82,27 @@ Step 3_5 (Governance) uses underscores in both systems to avoid `parseInt("3.5")
 | `step-6b`     | `"6"`           | `step_6`               | 07b-Bicep Deploy      | `decisions.iac_tool == "Bicep"`     |
 | `step-6t`     | `"6"`           | `step_6`               | 07t-Terraform Deploy  | `decisions.iac_tool == "Terraform"` |
 | `step-7`      | `"7"`           | (none)                 | 08-As-Built           | —                                   |
+
+## Graph Node → Handoff Button Label
+
+When the next node has been resolved, surface the matching handoff button
+from the `01-Orchestrator` `handoffs:` frontmatter — never call
+`#runSubagent`.
+
+| Graph Node ID | Handoff button label                                                                                      |
+| ------------- | --------------------------------------------------------------------------------------------------------- |
+| `step-1`      | `Step 1: Gather Requirements`                                                                             |
+| `step-2`      | `Step 2: Architecture Assessment`                                                                         |
+| `step-3`      | `Step 3: Design Artifacts` (optional — may be skipped to `step-3_5`)                                      |
+| `step-3_5`    | `Step 3.5: Governance Discovery`                                                                          |
+| `step-4`      | `Step 4: Implementation Plan` (Bicep) **or** `Step 4: IaC Plan (Terraform)` based on `decisions.iac_tool` |
+| `step-5b`     | `Step 5: Generate Bicep`                                                                                  |
+| `step-5t`     | `Step 5: Generate Terraform`                                                                              |
+| `step-6b`     | `Step 6: Deploy`                                                                                          |
+| `step-6t`     | `Step 6: Deploy (Terraform)`                                                                              |
+| `step-7`      | `Step 7: As-Built Documentation`                                                                          |
+| Challenger    | `🔍 Run Challenger Review` — surface at any gate that needs review                                        |
+
+If the resolved node has no matching handoff label (e.g., a custom or
+deprecated node), STOP and ask the user how to proceed instead of falling
+back to `#runSubagent`.

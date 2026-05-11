@@ -87,6 +87,14 @@ tools: [read/readFile, edit/createFile, agent, "azure-mcp/*"]
 - Do not set `model` on individual handoff entries unless the target agent requires a specific
   model that differs from the agent's own frontmatter `model` value.
 
+> **Schema note:** VS Code Copilot's handoff schema permits only
+> `label`, `agent`, `prompt`, and the optional `send`,
+> `showContinueOn`, `model` properties. Any other property (including
+> `kind:`) is flagged as "Unknown property" by the editor. Workflow-
+> handoff validation derives the relationship to the DAG structurally
+> from `(label, agent)` instead of relying on an inline taxonomy
+> field — see `.github/skills/workflow-engine/references/handoff-validation-rules.md`.
+
 #### `user-invocable`
 
 - Boolean (default `true`). Controls whether the agent appears in the agents dropdown.
@@ -101,39 +109,122 @@ tools: [read/readFile, edit/createFile, agent, "azure-mcp/*"]
 
 **Model selection is intentional and must not be changed without explicit approval.**
 
-Agents that specify `Claude Opus 4.6` as priority model do so deliberately:
+**Source of truth:** the agent's frontmatter `model` field is canonical. The
+[`tools/registry/agent-registry.json`](../../tools/registry/agent-registry.json) entry
+mirrors it (verified by `validate-model-consistency.mjs`). The
+[`.github/model-catalog.json`](../model-catalog.json) file is documentation only —
+it records authorized models and intended use cases but is **not** enforced by any
+validator. To change a model, update the agent frontmatter first, then mirror the
+change in the registry.
 
-- **Opus-first agents** (orchestrator, requirements, architect, iac-plan, diagnose,
-  context-optimizer) require deeper reasoning for orchestration, architecture decisions,
-  WAF assessments, planning accuracy, and complex analysis
-- **Claude Sonnet 4.6 agents** (orchestrator fast path, design, bicep codegen,
-  terraform codegen) balance speed with strong execution quality for implementation
-  and code generation
-- **GPT-5.4 workflow and execution agents** (governance, as-built, challenger wrapper,
-  e2e-orchestrator, deploy, and bicep/terraform validation/preview subagents) prioritize
-  strong general reasoning for governance synthesis, documentation generation,
-  deployment execution, structured reviews, and isolated validation
+**Frontmatter form:**
+
+- Agents (`*.agent.md`): array form — `model: ["Claude Opus 4.7"]`
+- Prompts (`*.prompt.md`): string form — `model: "Claude Opus 4.7"`
+- Registry JSON: string form — `"model": "Claude Opus 4.7"`
+
+**Do not** use the YAML bareword form (e.g., `model: Claude Opus 4.7`) when a
+label contains parenthetical qualifiers — YAML misparses parens and breaks
+frontmatter loading. Always quote (or use the array form for agents).
+
+Agents that specify `Claude Opus 4.7` as priority model do so deliberately:
+
+- **Opus-first agents** (requirements, architect, iac-plan, context-optimizer,
+  diagnose) use `Claude Opus 4.7` for architecture decisions, WAF assessments,
+  planning accuracy, and complex analysis. Reasoning effort is a per-agent
+  policy (see "Reasoning-effort policy" below) — not encoded in the model
+  label.
+- **Claude Sonnet 4.6 agents** (design, plus the four IaC validation/preview
+  subagents `bicep-validate`, `bicep-whatif`, `terraform-validate`,
+  `terraform-plan`): Anthropic prompting style (XML-tagged blocks, role-first,
+  quote-grounded review, checklist-driven structured output) suits both ADR +
+  diagram authoring and the structured PASS/FAIL findings produced by the
+  validation subagents. Default Sonnet 4.6 effort is `high`; the Design agent
+  and the four subagents pin effort to `medium` for typical work and only
+  raise it for large change sets.
+- **GPT-5.5 agents** (orchestrator, orchestrator fast path, governance,
+  bicep codegen, terraform codegen, challenger wrapper, challenger-review-subagent,
+  deploy (Bicep + Terraform), as-built, e2e-orchestrator)
+  use the OpenAI GPT-5.5 prompting style: explicit Role / Personality / Goal /
+  Success / Constraints / Output / Stop sections, retrieval budgets, decision rules
+  over absolutes, and stopping conditions. GPT-5.5 reasons more efficiently than
+  predecessors — re-evaluate `low`/`medium` reasoning effort before escalating
 - **GPT-5.3-Codex subagents** handle narrow, high-throughput tasks (cost estimation)
+
+#### GPT-5.5 prompting style (summary)
+
+The migrated GPT-5.5 cohort follows the OpenAI GPT-5.5 prompting guide:
+
+- Outcome-first body skeleton: `Role` → `Personality` (user-facing agents only) →
+  `Goal` → `Success criteria` → `Constraints` → `Output` → `Stop rules`.
+- Existing required sections (`output_contract`, security baseline, workflow
+  contracts, examples) stay verbatim — the skeleton wraps them, it does not
+  replace them.
+- Constraints replace ALWAYS/NEVER absolutes with scoped decision rules; gate
+  enforcement language and security-baseline language stay verbatim.
+- Personality blocks are present only on the user-facing Orchestrator and
+  Orchestrator (Fast Path); internal pipeline agents (CodeGen, Governance,
+  Challenger, subagent) get no personality block — output contracts rule.
+- Reasoning effort defaults to the Copilot runtime default; do not request
+  `high` reflexively.
 
 Current model assignments:
 
-| Agent / Group            | Model             | Rationale                 |
-| ------------------------ | ----------------- | ------------------------- |
-| Orchestrator             | Claude Opus 4.6   | Deep orchestration        |
-| Orchestrator (Fast Path) | Claude Sonnet 4.6 | Streamlined orchestration |
-| Requirements             | Claude Opus 4.6   | Deep understanding        |
-| Architect                | Claude Opus 4.6   | WAF analysis + cost       |
-| Design                   | Claude Sonnet 4.6 | Diagram generation        |
-| Governance               | Claude Sonnet 4.6 | Procedural discovery      |
-| IaC Planner (unified)    | Claude Opus 4.6   | Planning accuracy         |
-| Bicep / Terraform Code   | Claude Sonnet 4.6 | Code generation           |
-| Deploy                   | GPT-5.4           | Deployment execution      |
-| As-Built                 | GPT-5.4           | Documentation generation  |
-| Diagnose                 | Claude Opus 4.6   | Complex troubleshooting   |
-| Context Optimizer        | Claude Opus 4.6   | Deep analysis             |
-| Challenger wrapper       | Claude Sonnet 4.6 | Structured review         |
-| Bicep/TF subagents       | GPT-5.4           | Isolated validation       |
-| Cost estimate subagent   | GPT-5.3-Codex     | High-throughput pricing   |
+| Agent / Group                       | Model             | Rationale                                    |
+| ----------------------------------- | ----------------- | -------------------------------------------- |
+| Orchestrator                        | GPT-5.5           | Outcome-first orchestration                  |
+| Orchestrator (Fast Path)            | GPT-5.5           | Streamlined orchestration                    |
+| Requirements                        | Claude Opus 4.7   | Deep understanding (high effort)             |
+| Architect                           | Claude Opus 4.7   | WAF analysis + cost (high effort)            |
+| Design                              | Claude Sonnet 4.6 | Diagram + ADR (Anthropic style)              |
+| Governance                          | GPT-5.5           | Procedural discovery                         |
+| IaC Planner (unified)               | Claude Opus 4.7   | Planning accuracy (high effort)              |
+| Bicep / Terraform Code              | GPT-5.5           | Code generation                              |
+| Deploy (Bicep + TF)                 | GPT-5.5           | Deployment execution (outcome-first)         |
+| As-Built                            | GPT-5.5           | Documentation generation (outcome-first)     |
+| Diagnose                            | Claude Opus 4.7   | Interactive troubleshooting (default effort) |
+| Context Optimizer                   | Claude Opus 4.7   | Deep analysis (high effort)                  |
+| E2E Orchestrator                    | GPT-5.5           | Autonomous benchmark loop                    |
+| Challenger wrapper                  | GPT-5.5           | Structured review                            |
+| Challenger subagent                 | GPT-5.5           | Structured review                            |
+| Bicep/TF validate+preview subagents | Claude Sonnet 4.6 | Isolated validation (Anthropic style)        |
+| Cost estimate subagent              | GPT-5.3-Codex     | High-throughput pricing                      |
+
+#### Reasoning-effort policy
+
+Reasoning effort is a **per-agent** policy, not a model-label suffix. The
+catalog records one entry per Anthropic SKU (`Claude Opus 4.7`,
+`Claude Sonnet 4.6`); whether an agent runs at default or high reasoning
+effort is documented in this section and inferred from the agent's role:
+
+- **High effort** — Requirements, Architect, IaC Planner, Context Optimizer.
+  These agents tackle creative, multi-artifact decisions where extra
+  reasoning produces measurably better outcomes (WAF trade-offs, plan
+  accuracy, deep audits). Sonnet-tier agents pin to `medium` for typical work
+  and only escalate for large change sets.
+- **Default effort** — Diagnose. The interactive approval-first flow benefits
+  from default effort: Diagnose alternates short reasoning bursts with user
+  confirmations, so deep multi-step deliberation per turn would just slow the
+  flow without improving accuracy.
+- **Effort tuning is a per-call concern** — Copilot Chat / VS Code respects
+  the user's per-turn reasoning-effort selector and any harness-level
+  override. The policy above is the project's recommended default; no
+  validator enforces it. If you change an agent's effort policy, update this
+  table and the agent's body if the body explicitly references effort.
+
+**Source-of-truth chain:**
+
+- Agent frontmatter is canonical (`.github/agents/**/*.agent.md`).
+- The agent registry mirrors frontmatter (enforced by
+  `validate-model-consistency.mjs`).
+- The model catalog (`.github/model-catalog.json`) authorizes labels via its
+  hand-maintained `models` block and mirrors the canonical assignments via
+  its auto-generated `assignments` block (enforced by
+  `validate-model-catalog.mjs`).
+- The `assignments` block is regenerated by
+  `node tools/scripts/generate-model-catalog.mjs` and refreshed automatically
+  by the lefthook pre-commit hook whenever an agent frontmatter file is
+  staged.
 
 **Rules:**
 
@@ -342,7 +433,7 @@ apply the patterns below based on the `model:` field in the file's YAML frontmat
 Read the `model:` field from frontmatter and classify:
 
 - **Claude family**: any value containing `Claude Opus`, `Claude Sonnet`, or `Claude Haiku`
-- **GPT family**: any value containing `GPT-5.4`, `GPT-5.3-Codex`, or `GPT-4o`
+- **GPT family**: any value containing `GPT-5.5`, `GPT-5.4`, `GPT-5.3-Codex`, or `GPT-4o`
 
 If `model:` is an array, classify by the first entry.
 
@@ -367,16 +458,6 @@ be 3-5 lines. Place them after the first `#` heading, before the body content.
 **Never add**: `<use_parallel_tool_calls>` (Claude does this natively),
 `<avoid_overengineering>` on comprehensive-analysis agents.
 
-#### Reasoning Effort
-
-Add an HTML comment after the first `#` heading:
-
-```markdown
-<!-- Recommended reasoning_effort: high -->
-```
-
-Use `high` for planning/architecture agents, `medium` for execution/validation agents.
-
 #### Language Calibration
 
 - Keep absolute language (`MUST`, `NEVER`, `HARD RULE`) at: approval gates,
@@ -386,7 +467,7 @@ Use `high` for planning/architecture agents, `medium` for execution/validation a
 
 ### GPT-Specific Patterns
 
-Sources: OpenAI prompt engineering documentation, GPT-5.4 system prompt guidance.
+Sources: OpenAI prompt engineering documentation, GPT-5.5 system prompt guidance.
 
 #### Structure Over XML
 
@@ -434,7 +515,7 @@ Output: 02-architecture-assessment.md and 03-des-cost-estimate.md."`
 #### Prompt File Model Sync
 
 The `model:` field in a `.prompt.md` file must match the corresponding agent's
-frontmatter `model:` value. If the agent uses `GPT-5.4`, the prompt must too.
+frontmatter `model:` value. If the agent uses `GPT-5.5`, the prompt must too.
 
 Run `npm run lint:model-alignment` to catch mismatches.
 
@@ -449,4 +530,4 @@ in `<example>` tags (Claude) or a fenced block (GPT) showing:
 
 Keep examples under 12 lines. Place them at the end of the agent body.
 
-[claude-guide]: https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/overview
+[claude-guide]: https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices

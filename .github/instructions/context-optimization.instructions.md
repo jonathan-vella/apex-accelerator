@@ -76,7 +76,13 @@ Available for conversation: ~169,625 tokens
 Per-turn budget: ~169,625 / 20 turns = ~8,481 tokens/turn average
 ```
 
-Adjust per model. GPT-5.3-Codex has 128K, so budget is tighter.
+Adjust per model. The 200,000-token figure above is the VS Code Copilot Chat
+per-turn budget for the Claude family (Opus 4.7, Sonnet 4.6, Haiku 4.5). The
+GPT-5 family (GPT-5.5, GPT-5.3-Codex) has a 400,000-token per-turn
+budget in VS Code Copilot Chat, so the available conversation pool roughly
+doubles. See
+[`context-management/references/token-estimation.md`](../skills/context-management/references/token-estimation.md)
+for the per-model breakdown including request multipliers.
 
 ## Anti-Patterns
 
@@ -87,14 +93,48 @@ Adjust per model. GPT-5.3-Codex has 128K, so budget is tighter.
 | Repeating instructions across agents | Single instruction file + `applyTo` glob   |
 | Reading entire files when grep works | Use `grep_search` for targeted extraction  |
 | No hand-offs in 30+ turn sessions    | Split at logical boundaries with subagents |
+| `create_file` to revise a file       | Use `multi_replace_string_in_file` (below) |
+
+## Targeted Edits Over Full Rewrites
+
+**Rule**: Use `create_file` only for first-time artifact creation.
+All revisions MUST use `replace_string_in_file` or
+`multi_replace_string_in_file`.
+
+| Situation                                       | Correct tool                    |
+| ----------------------------------------------- | ------------------------------- |
+| Initial draft of any file                       | `create_file`                   |
+| Single-spot fix                                 | `replace_string_in_file`        |
+| Multiple fixes across one or more files         | `multi_replace_string_in_file`  |
+| Structural rewrite (≥ 50 % lines or H2 reorder) | `create_file` (with logged ADR) |
+
+**Bundle all accepted findings into one call.** A 24-finding revision
+is one `multi_replace_string_in_file` call, not 24 sequential edits.
+
+**Cost model** (measured empirically against a Step-2 Architect run
+that consumed 200 K of input tokens):
+
+- Full rewrite of a 200-line artifact: **8–18 K output tokens**, all of
+  which re-enter the context window as input on every subsequent turn.
+- Equivalent multi-edit patch (24 findings): **200–800 tokens** total.
+- Multiplier: **20–60× cheaper per revision**.
+
+For any agent that runs adversarial review and applies fixes
+(`03-Architect`, `05-IaC Planner`, `04g-Governance`), the revision
+phase is the dominant context-bloat risk. Use targeted edits.
+
+**Exception logging**: when a full rewrite is genuinely required
+(template bump, > 50 % of lines changed, H2 reordering), record the
+rationale via `apex-recall decide ... --rationale "Full rewrite: <reason>"`
+so the choice is auditable.
 
 ## Runtime Compression
 
 When loading an artifact file, check conversation length. If estimated context
 usage exceeds 60% of the model limit, use the compression tier system from the
-`context-shredding` skill:
+`context-management` skill (Mode A: Runtime Compression):
 
-1. **Read** `.github/skills/context-shredding/SKILL.md` for tier definitions
+1. **Read** `.github/skills/context-management/SKILL.md` for tier definitions
 2. Select tier: `full` (<60%), `summarized` (60-80%), `minimal` (>80%)
 3. Apply compression template for the specific artifact being loaded
 4. Compress older/less-critical artifacts first when loading multiple files
@@ -102,4 +142,4 @@ usage exceeds 60% of the model limit, use the compression tier system from the
 ## Skill Loading
 
 Load skills referenced in the agent body's "Read Skills" section.
-Use context-shredding tiers to select the right compression level.
+Use context-management runtime tiers to select the right compression level.

@@ -84,6 +84,10 @@ freshness-report.json
 # Baseline snapshots (local working data for context optimizer)
 agent-output/_baselines/
 
+# Draw.io quality bench runs (working data; commit only the canonical
+# baseline at tools/tests/drawio-baseline/regen-baseline.json)
+agent-output/_bench/
+
 # Astro Starlight (site/ is source code; only ignore build artifacts)
 site/dist/
 site/node_modules/
@@ -105,3 +109,10 @@ crash.*.log
 
 # Governance baseline raw debug file (not committed — local troubleshooting only)
 .github/data/governance-policy-raw.json
+
+# Vendor-prompting raw fetched snapshots (committed canonical prose lives one level up)
+.github/skills/vendor-prompting/references/.snapshots/
+
+# ESLint + Prettier caches
+.eslintcache
+node_modules/.cache/

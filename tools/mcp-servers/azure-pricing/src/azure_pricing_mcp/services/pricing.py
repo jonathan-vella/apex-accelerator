@@ -1,12 +1,13 @@
 """Pricing service for Azure Pricing MCP Server."""
 
+import asyncio
 import json
 import logging
 from datetime import datetime
 from typing import Any
 
 from ..client import AzurePricingClient
-from ..config import DEFAULT_CUSTOMER_DISCOUNT, REQUEST_DEDUP_TTL, SERVICE_NAME_MAPPINGS
+from ..config import DEFAULT_CUSTOMER_DISCOUNT, NEGATIVE_CACHE_TTL, REQUEST_DEDUP_TTL, SERVICE_NAME_MAPPINGS
 from .retirement import RetirementService
 
 logger = logging.getLogger(__name__)
@@ -48,6 +49,187 @@ def normalize_sku_name(sku_name: str) -> tuple[list[str], str]:
     return (search_terms, display_name)
 
 
+# v5.3 — Suffix words that users append to service names but that the Azure
+# Retail Prices API does NOT include in its canonical ``serviceName`` field.
+# Stripping these turns "Storage Account" into "Storage" before alias lookup.
+_SERVICE_NAME_SUFFIXES = (" account", " accounts", " service", " services")
+
+
+def _resolve_service_name(name: str) -> str:
+    """Resolve a free-form service name to the canonical Azure ``serviceName``.
+
+    Pipeline:
+    1. Strip common user-facing suffixes ("Account", "Service", …).
+    2. Lowercase + alias-table lookup.
+    3. Title-case fallback for inputs that already match the canonical form.
+
+    Examples (verified against the Azure Retail Prices API):
+    >>> _resolve_service_name("Storage Account")
+    'Storage'
+    >>> _resolve_service_name("Container Registry")
+    'Container Registry'
+    >>> _resolve_service_name("Azure DNS")
+    'Azure DNS'  # (callers should also try "Virtual Network" — Private DNS Zone
+                  # meters actually live there. See `_FALLBACK_SERVICE_NAMES`.)
+    """
+    candidate = name.strip()
+    if not candidate:
+        return name
+
+    lowered = candidate.lower()
+
+    # Strip user-facing suffixes once, then re-check the alias table.
+    for suffix in _SERVICE_NAME_SUFFIXES:
+        if lowered.endswith(suffix) and len(lowered) > len(suffix):
+            stripped = lowered[: -len(suffix)].rstrip()
+            if stripped in SERVICE_NAME_MAPPINGS:
+                return SERVICE_NAME_MAPPINGS[stripped]
+            # Direct match against the canonical-form table.
+            if stripped in {v.lower() for v in SERVICE_NAME_MAPPINGS.values()}:
+                # Reverse-look-up the canonical case.
+                for v in SERVICE_NAME_MAPPINGS.values():
+                    if v.lower() == stripped:
+                        return v
+
+    # Direct alias hit.
+    if lowered in SERVICE_NAME_MAPPINGS:
+        return SERVICE_NAME_MAPPINGS[lowered]
+
+    # No alias — return the original (caller may have passed the canonical name).
+    return candidate
+
+
+# v5.3 — When a SKU is not found under the resolved service name, fall back
+# to these alternatives. Driven by empirical retail-prices API observations:
+# ``Private DNS Zone`` and ``Private Endpoint`` meters live under
+# ``Virtual Network``, not ``Azure DNS`` / ``Private Link``.
+_FALLBACK_SERVICE_NAMES: dict[str, tuple[str, ...]] = {
+    "Azure DNS": ("Virtual Network",),  # Private DNS Zone meter
+    "Private Link": ("Virtual Network",),  # Private Endpoint meter
+    "Private Endpoint": ("Virtual Network",),
+}
+
+
+# v5.3 — Suffix words that users append to SKU names but that the Azure
+# Retail Prices API doesn't carry in its ``skuName`` field. Stripping these
+# turns "Standard LRS GPv2" → "Standard LRS" before the contains() filter.
+_SKU_SUFFIXES_TO_STRIP = (
+    " GPv2",  # Storage account performance tier — lives in productName, not skuName
+    " GPv1",
+    " v2",  # generic
+)
+
+
+def _normalize_sku_for_search(sku_name: str) -> str:
+    """Strip variant suffixes that the Retail Prices API doesn't carry in its
+    ``skuName`` field but that users naturally include when describing a SKU.
+    """
+    if not sku_name:
+        return sku_name
+    cleaned = sku_name
+    for suffix in _SKU_SUFFIXES_TO_STRIP:
+        if cleaned.lower().endswith(suffix.lower()):
+            cleaned = cleaned[: -len(suffix)].rstrip()
+            break
+    return cleaned
+
+
+# v5.3 — Static-fallback prices for SKUs that the public Azure Retail Prices
+# API does NOT expose. These are typically flat-fee small-charge meters
+# (Private DNS Zone, Private Endpoint, NAT Gateway base hour) that Microsoft
+# documents on its pricing pages but does not surface through the API.
+#
+# Sourced from learn.microsoft.com pricing pages, current as of 2026-05.
+# Each entry maps ``(canonical_service_name, sku_substring)`` → price dict.
+# Match is case-insensitive ``in`` test against ``service_name`` and ``sku_name``.
+_STATIC_FALLBACK_PRICES: list[dict[str, Any]] = [
+    {
+        "service_match": "Azure DNS",
+        "sku_match": "Private DNS Zone",
+        "service_name": "Azure DNS",
+        "sku_name": "Private DNS Zone",
+        "product_name": "Azure DNS — Private DNS Zone (static fallback)",
+        "monthly_cost": 0.50,  # First 25 zones / month, billed per zone
+        "unit_of_measure": "1 Zone/Month",
+        "source": "learn.microsoft.com — azure DNS pricing page (2026-05)",
+        "note": "Public Retail Prices API does not surface this meter. Flat $0.50/zone/month; included free for first 25 zones across the subscription.",
+    },
+    {
+        "service_match": "Virtual Network",
+        "sku_match": "Private Endpoint",
+        "service_name": "Virtual Network",
+        "sku_name": "Private Endpoint Standard",
+        "product_name": "Private Link — Standard Endpoint (static fallback)",
+        "monthly_cost": 7.20,  # Microsoft's flat per-PE rate (matches public pricing page)
+        "unit_of_measure": "1 Endpoint/Month",
+        "source": "learn.microsoft.com — private link pricing page (2026-05)",
+        "note": "Public Retail Prices API does not surface this meter. Flat $7.20/endpoint/month + data processing; baseline assumes no data processing.",
+    },
+    # v5.4 — known zero-cost services. Without these, the meter selector
+    # picks an unrelated meter (e.g. "Virtual Network Standard" matched
+    # "Public IP Prefix Standard" at $0.006/hr → bogus $4.38/mo).
+    {
+        "service_match": "Virtual Network",
+        "sku_match": "Standard",
+        # Match must NOT be too broad — Private Endpoint Standard is also
+        # under "Virtual Network" service. The lookup function checks rules
+        # in declared order, so the more-specific Private Endpoint entry
+        # above wins for that case.
+        "service_name": "Virtual Network",
+        "sku_name": "Standard",
+        "product_name": "Virtual Network (no base charge)",
+        "monthly_cost": 0.0,
+        "unit_of_measure": "n/a",
+        "source": "learn.microsoft.com — virtual network pricing page (2026-05)",
+        "note": "Virtual Networks have no per-VNet base charge. Egress, peering, NAT Gateway, and VPN Gateway cost extra and must be priced separately.",
+    },
+    {
+        "service_match": "Resource Group",
+        "sku_match": "",  # any SKU
+        "service_name": "Resource Group",
+        "sku_name": "n/a",
+        "product_name": "Resource Group (no charge)",
+        "monthly_cost": 0.0,
+        "unit_of_measure": "n/a",
+        "source": "learn.microsoft.com — Azure resource model (2026-05)",
+        "note": "Resource Groups are organisational containers and have no cost.",
+    },
+    {
+        "service_match": "Managed Identity",
+        "sku_match": "",
+        "service_name": "Managed Identity",
+        "sku_name": "n/a",
+        "product_name": "Managed Identity (no charge)",
+        "monthly_cost": 0.0,
+        "unit_of_measure": "n/a",
+        "source": "learn.microsoft.com — managed identity pricing (2026-05)",
+        "note": "Managed Identities themselves are free; only the resources they authenticate to incur cost.",
+    },
+]
+
+
+def _lookup_static_fallback(service_name: str, sku_name: str) -> dict[str, Any] | None:
+    """Return a static fallback meter or None when no rule matches.
+
+    Rules with an empty ``sku_match`` apply to any SKU under the matching
+    service (used for "no-charge" services like Resource Group). The list is
+    iterated in declared order; more-specific rules (longer ``sku_match``)
+    should appear before more-general ones.
+    """
+    if not service_name:
+        return None
+    svc_lower = service_name.lower()
+    sku_lower = (sku_name or "").lower()
+    for entry in _STATIC_FALLBACK_PRICES:
+        if entry["service_match"].lower() not in svc_lower:
+            continue
+        sku_match = entry["sku_match"].lower()
+        if sku_match and sku_match not in sku_lower:
+            continue
+        return entry
+    return None
+
+
 class PricingService:
     """Service for Azure pricing operations."""
 
@@ -55,6 +237,10 @@ class PricingService:
         self._client = client
         self._retirement_service = retirement_service
         self._request_cache: dict[str, tuple[dict[str, Any], datetime]] = {}
+        # Phase 3.9: in-flight request coalescing. When N concurrent agent
+        # calls hit the same (filter, currency, limit) key, share one
+        # asyncio.Future so only one HTTP request is in flight.
+        self._inflight: dict[str, asyncio.Future[dict[str, Any]]] = {}
 
     async def _fetch_prices_cached(
         self,
@@ -62,22 +248,53 @@ class PricingService:
         currency_code: str = "USD",
         limit: int | None = None,
     ) -> dict[str, Any]:
-        """Fetch prices with request-level deduplication cache."""
+        """Fetch prices with request-level deduplication + in-flight coalescing.
+
+        Cache layers (Phase 3 hardening):
+        1. Completed-result cache (TTL: ``REQUEST_DEDUP_TTL`` for hits,
+           ``NEGATIVE_CACHE_TTL`` for empty results — Phase 3.11).
+        2. In-flight ``asyncio.Future`` map so concurrent callers with the
+           same key share one HTTP round-trip (Phase 3.9).
+        """
         cache_key = json.dumps({"f": filter_conditions, "c": currency_code, "l": limit}, sort_keys=True)
+        now = datetime.now()
+
+        # Layer 1: completed-result cache with negative-result short TTL.
         if cache_key in self._request_cache:
-            result, cached_time = self._request_cache[cache_key]
-            if (datetime.now() - cached_time).total_seconds() < REQUEST_DEDUP_TTL:
-                return result
-        result = await self._client.fetch_prices(filter_conditions, currency_code, limit)
-        self._request_cache[cache_key] = (result, datetime.now())
-        # Evict old entries when cache exceeds configured capacity.
-        # Lazy eviction keeps hot paths fast; only pays cost on overflow.
+            cached_result, cached_time = self._request_cache[cache_key]
+            age = (now - cached_time).total_seconds()
+            is_empty = not cached_result.get("Items")
+            ttl = NEGATIVE_CACHE_TTL if is_empty else REQUEST_DEDUP_TTL
+            if age < ttl:
+                return cached_result
+
+        # Layer 2: in-flight coalescing.
+        if cache_key in self._inflight:
+            return await self._inflight[cache_key]
+
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future[dict[str, Any]] = loop.create_future()
+        self._inflight[cache_key] = future
+        try:
+            result = await self._client.fetch_prices(filter_conditions, currency_code, limit)
+            self._request_cache[cache_key] = (result, datetime.now())
+            future.set_result(result)
+        except Exception as exc:
+            future.set_exception(exc)
+            raise
+        finally:
+            # Pop only after the future has been set/raised; concurrent
+            # awaiters resolved via ``await self._inflight[cache_key]`` above.
+            self._inflight.pop(cache_key, None)
+
+        # Lazy eviction when cache exceeds configured capacity. Keeps hot
+        # paths fast; only pays cost on overflow.
         from ..config import REQUEST_DEDUP_MAX_ENTRIES
+
         if len(self._request_cache) > REQUEST_DEDUP_MAX_ENTRIES:
             cutoff = datetime.now()
             self._request_cache = {
-                k: v for k, v in self._request_cache.items()
-                if (cutoff - v[1]).total_seconds() < REQUEST_DEDUP_TTL
+                k: v for k, v in self._request_cache.items() if (cutoff - v[1]).total_seconds() < REQUEST_DEDUP_TTL
             }
         return result
 
@@ -94,9 +311,13 @@ class PricingService:
         validate_sku: bool = True,
     ) -> dict[str, Any]:
         """Search Azure retail prices with various filters."""
-        # Resolve user-friendly names to official Azure service names
-        if service_name and service_name.lower() in SERVICE_NAME_MAPPINGS:
-            service_name = SERVICE_NAME_MAPPINGS[service_name.lower()]
+        # v5.3 — Resolve user-friendly names to canonical Azure service names.
+        # The Retail Prices API requires the exact ``serviceName`` string;
+        # common user inputs like ``"Storage Account"`` need to map to the
+        # canonical ``"Storage"`` and ``"Azure DNS"`` Private DNS Zone meters
+        # actually live under ``"Virtual Network"``.
+        if service_name:
+            service_name = _resolve_service_name(service_name)
 
         filter_conditions = []
 
@@ -474,15 +695,105 @@ class PricingService:
         hours_per_month: float = 730,
         currency_code: str = "USD",
         discount_percentage: float | None = None,
+        usage: dict[str, float] | None = None,
+        product_filter: str | None = None,
     ) -> dict[str, Any]:
-        """Estimate monthly costs based on usage."""
+        """Estimate monthly costs based on usage.
+
+        v5.4 — accepts an optional ``usage`` dict that lets callers supply
+        workload estimates so non-time-based meters can be projected:
+
+        * ``transactions_per_month`` → applied to per-10K/1M transaction meters
+          (e.g. Key Vault Standard ops, Storage Tables write ops).
+        * ``gb_stored`` → applied to per-GB/month storage-retention meters.
+        * ``gb_transferred`` → applied to per-GB egress meters.
+        * ``seconds_runtime`` → applied to per-second meters.
+
+        Usage is applied to the **primary** meter selected by
+        ``select_primary_meter``. For multi-product services like Storage
+        Account that have separate meters per product (Tables, Blobs, Files,
+        Queues), use ``product_filter`` to narrow the search to a single
+        product, or model each product as a separate ``bulk_estimate`` line
+        item with its own ``usage`` dict.
+
+        v5.3 — unit-aware projection. The Azure Retail Prices API frequently
+        returns multiple meters per SKU (e.g., ACR Premium has 7: GB/Month,
+        1/Day, 1 Second, …). Picks the most likely primary billing meter
+        (Hour > Day > Month > GB-Month > …) and projects to monthly using
+        the meter's actual dimension.
+        """
+        from ..meter_units import (
+            MeterDimension,
+            project_monthly_cost,
+            select_primary_meter,
+        )
+
+        # v5.3 — strip user-facing SKU suffixes that the API doesn't carry
+        # ("Standard LRS GPv2" → "Standard LRS"). The "GPv2" distinction
+        # is in productName, not skuName.
+        original_sku = sku_name
+        sku_name = _normalize_sku_for_search(sku_name)
+
+        # v5.4 — Static-fallback check FIRST (not last). Known zero-cost
+        # services (Virtual Network base, Resource Group, Managed Identity)
+        # and un-API'd flat-fee meters (Private DNS Zone, Private Endpoint)
+        # use the static table. Without this, the meter selector picks an
+        # unrelated meter (e.g. "Virtual Network Standard" matched
+        # "Public IP Prefix Standard" at $0.006/hr → bogus $4.38/mo).
+        fallback = _lookup_static_fallback(service_name, original_sku)
+        if fallback is not None:
+            return {
+                "service_name": fallback["service_name"],
+                "sku_name": fallback["sku_name"],
+                "region": region,
+                "product_name": fallback["product_name"],
+                "unit_of_measure": fallback["unit_of_measure"],
+                "meter_dimension": "static_fallback",
+                "currency": currency_code,
+                "on_demand_pricing": {
+                    "hourly_rate": round(fallback["monthly_cost"] / hours_per_month, 6) if hours_per_month else 0.0,
+                    "daily_cost": round(fallback["monthly_cost"] / 30.4375, 2),
+                    "monthly_cost": fallback["monthly_cost"],
+                    "yearly_cost": fallback["monthly_cost"] * 12,
+                },
+                "usage_assumptions": {
+                    "hours_per_month": hours_per_month,
+                    "hours_per_day": round(hours_per_month / 30.44, 2),
+                },
+                "savings_plans": [],
+                "available_meters": [],
+                "projection_warning": (f"Static fallback used: {fallback['note']} (source: {fallback['source']})"),
+            }
+
+        # Fetch up to 50 candidate meters so we can heuristically pick the
+        # right one (v5.0 only fetched 5 — too few to find the daily flat-fee
+        # meter for ACR Premium when GB/Month meters take the top slots).
         result = await self.search_prices(
             service_name=service_name,
             sku_name=sku_name,
             region=region or None,
             currency_code=currency_code,
-            limit=5,
+            limit=50,
+            validate_sku=False,  # We're projecting, not validating SKU spelling.
         )
+
+        # v5.3 — fall back to alternate canonical service names when the
+        # primary one returns nothing (e.g. Private DNS Zone meters live under
+        # ``Virtual Network`` rather than ``Azure DNS``).
+        if not result["items"]:
+            resolved = _resolve_service_name(service_name)
+            for alt in _FALLBACK_SERVICE_NAMES.get(resolved, ()):
+                alt_result = await self.search_prices(
+                    service_name=alt,
+                    sku_name=sku_name,
+                    region=region or None,
+                    currency_code=currency_code,
+                    limit=50,
+                    validate_sku=False,
+                )
+                if alt_result["items"]:
+                    result = alt_result
+                    break
 
         if not result["items"]:
             return {
@@ -492,20 +803,72 @@ class PricingService:
                 "region": region,
             }
 
-        item = result["items"][0]
-        hourly_rate = item.get("retailPrice", 0)
-        original_hourly_rate = hourly_rate
+        # Filter out RI/Reservation/SavingsPlan/DevTest meters so we don't
+        # accidentally return a 1-year reservation rate when the caller wanted
+        # consumption pricing.
+        consumption = [it for it in result["items"] if (it.get("type") or "").lower() == "consumption"] or result[
+            "items"
+        ]
 
+        # v5.4 — narrow to a specific productName when the caller supplied
+        # ``product_filter``. Useful for multi-product services like Storage
+        # Account where the API returns Tables/Blob/Queue/Files meters
+        # under the same skuName and the agent wants only one.
+        if product_filter:
+            pf_lower = product_filter.lower()
+            filtered = [it for it in consumption if pf_lower in (it.get("productName") or "").lower()]
+            if filtered:
+                consumption = filtered
+
+        item = select_primary_meter(consumption, requested_sku=sku_name, usage=usage)
+        if item is None:
+            return {
+                "error": f"No consumption meter found for {sku_name} in {region}",
+                "service_name": service_name,
+                "sku_name": sku_name,
+                "region": region,
+            }
+
+        rate = float(item.get("retailPrice", 0) or 0)
+        original_rate = rate
         if discount_percentage is not None and discount_percentage > 0:
-            hourly_rate = hourly_rate * (1 - discount_percentage / 100)
+            rate = rate * (1 - discount_percentage / 100)
+            # We need to project against the *discounted* rate, so swap the
+            # retailPrice on the item temporarily for the projection.
+            projection_item = {**item, "retailPrice": rate}
+        else:
+            projection_item = item
 
-        monthly_cost = hourly_rate * hours_per_month
-        daily_cost = hourly_rate * 24
+        monthly_cost, unit, warning = project_monthly_cost(
+            projection_item, hours_per_month=hours_per_month, usage=usage
+        )
+        # daily_cost / yearly_cost are still rate-based for back-compat with
+        # v5.x consumers that read ``hourly_rate`` directly.
+        if unit.dimension == MeterDimension.HOUR:
+            hourly_rate = rate / unit.quantity
+        elif unit.dimension == MeterDimension.DAY:
+            # Surface an effective hourly rate so existing callers can sanity-check.
+            hourly_rate = rate / (unit.quantity * 24)
+        else:
+            hourly_rate = 0.0  # Don't fabricate one for non-time meters.
+        daily_cost = hourly_rate * 24 if unit.is_time_based else 0.0
         yearly_cost = monthly_cost * 12
 
-        savings_plans = item.get("savingsPlan", [])
-        savings_estimates = []
+        # All available meters in compact form — lets the cost-estimate-subagent
+        # see why the primary was picked and flag mismatches.
+        all_meters = [
+            {
+                "sku_name": it.get("skuName"),
+                "product_name": it.get("productName"),
+                "retail_price": it.get("retailPrice"),
+                "unit_of_measure": it.get("unitOfMeasure"),
+                "type": it.get("type"),
+            }
+            for it in consumption[:10]
+        ]
 
+        savings_plans = item.get("savingsPlan", []) or []
+        savings_estimates = []
         for plan in savings_plans:
             plan_hourly = plan.get("retailPrice", 0)
             original_plan_hourly = plan_hourly
@@ -539,6 +902,7 @@ class PricingService:
             "region": region,
             "product_name": item.get("productName"),
             "unit_of_measure": item.get("unitOfMeasure"),
+            "meter_dimension": unit.dimension.value,
             "currency": currency_code,
             "on_demand_pricing": {
                 "hourly_rate": round(hourly_rate, 6),
@@ -551,20 +915,24 @@ class PricingService:
                 "hours_per_day": round(hours_per_month / 30.44, 2),
             },
             "savings_plans": savings_estimates,
+            "available_meters": all_meters,
         }
 
+        if usage:
+            estimate_result["usage_assumptions"]["usage"] = usage
+
+        if warning:
+            estimate_result["projection_warning"] = warning
         if discount_percentage is not None and discount_percentage > 0:
             estimate_result["discount_applied"] = {
                 "percentage": discount_percentage,
                 "note": "All prices shown are after discount",
             }
-            estimate_result["on_demand_pricing"]["original_hourly_rate"] = original_hourly_rate
-            estimate_result["on_demand_pricing"]["original_daily_cost"] = round(original_hourly_rate * 24, 2)
-            estimate_result["on_demand_pricing"]["original_monthly_cost"] = round(
-                original_hourly_rate * hours_per_month, 2
-            )
+            estimate_result["on_demand_pricing"]["original_hourly_rate"] = original_rate
+            estimate_result["on_demand_pricing"]["original_daily_cost"] = round(original_rate * 24, 2)
+            estimate_result["on_demand_pricing"]["original_monthly_cost"] = round(original_rate * hours_per_month, 2)
             estimate_result["on_demand_pricing"]["original_yearly_cost"] = round(
-                original_hourly_rate * hours_per_month * 12, 2
+                original_rate * hours_per_month * 12, 2
             )
 
         return estimate_result

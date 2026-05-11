@@ -1,6 +1,6 @@
 ---
 name: github-operations
-description: "Full contribution lifecycle: branch naming, conventional commits, GitHub issues, PRs, Actions, and releases. MCP-first with gh CLI fallback. USE FOR: commit, push, PR, branch, issue, release, GitHub operations. DO NOT USE FOR: Azure infrastructure, Bicep/Terraform code, architecture decisions."
+description: '**WORKFLOW SKILL** — Full GitHub contribution lifecycle: branch naming, conventional commits, issues, PRs, Actions, and releases. gh CLI-first with MCP fallback. WHEN: "commit", "push", "open PR", "create branch", "create issue", "cut release", "GitHub operation". USE FOR: commit/push, PR creation, branch lifecycle, issues, releases, Actions config. DO NOT USE FOR: Azure infrastructure, Bicep/Terraform code, architecture decisions.'
 license: MIT
 metadata:
   author: apex
@@ -11,16 +11,29 @@ metadata:
 # GitHub Operations
 
 Full contribution lifecycle — from branch creation to PR merge.
-MCP tools preferred; `gh` CLI as fallback.
+`gh` CLI preferred (always available in this dev container); MCP tools as fallback
+for operations with no `gh` equivalent (e.g., rich PR review thread management,
+bulk GraphQL queries).
 
-## Contribution Lifecycle
+## Steps
 
 ```text
 1. Create branch (naming convention) →
 2. Make changes →
 3. Commit (conventional commits) →
 4. Push (pre-push hooks validate branch + scope) →
-5. Create PR (MCP tools) →
+5. Create PR (gh CLI) →
+6. Review + Merge
+```
+
+## Contribution Lifecycle Detail
+
+```text
+1. Create branch (naming convention) →
+2. Make changes →
+3. Commit (conventional commits) →
+4. Push (pre-push hooks validate branch + scope) →
+5. Create PR (gh CLI) →
 6. Review + Merge
 ```
 
@@ -67,64 +80,36 @@ Scopes: `agents`, `skills`, `instructions`, `bicep`, `terraform`, `mcp`, `docs`,
 📋 **Full workflow**: Read `references/commit-conventions.md` for staging,
 breaking changes, best practices, and safety protocol.
 
-## MCP Priority Protocol (Mandatory)
+## Rules
 
-1. Identify required operation (issue, PR, search, Actions, release, etc.)
-2. Check whether an MCP tool exists for that operation
-3. If MCP exists, use MCP only
-4. Use `gh` CLI only when no equivalent MCP tool is available
+1. **Identify the operation** (issue, PR, search, Actions, release, etc.)
+2. **Use `gh` CLI by default** — always available in this dev container; the more stable primitive
+3. **Fall back to MCP only** when `gh` cannot satisfy the operation (rich PR review threads, bulk GraphQL, Copilot review requests)
 
 ### Devcontainer Reliability Rule
 
 - Do not run `gh auth login` in devcontainer workflows
 - `GH_TOKEN` must be set via VS Code User Settings (`terminal.integrated.env.linux`)
-- For PR/issue creation, rely on MCP tool authentication by default
-- If MCP write tools are missing, report explicitly and provide fallback
+- `gh` CLI authenticates automatically via `GH_TOKEN`; prefer it for issue/PR creation by default
+- If a fallback to MCP is required and MCP write tools are missing, report explicitly
+
+## Tool Priority Protocol (Mandatory)
+
+See the [Rules](#rules) section above for the priority order. Detailed CLI/MCP fallback tables below.
 
 ---
 
-## Issues (MCP Tools)
+## Issues & Pull Requests
 
-| Tool                           | Purpose                |
-| ------------------------------ | ---------------------- |
-| `mcp_github_list_issues`       | List repository issues |
-| `mcp_github_issue_read`        | Fetch issue details    |
-| `mcp_github_issue_write`       | Create/update issues   |
-| `mcp_github_search_issues`     | Search issues          |
-| `mcp_github_add_issue_comment` | Add comments           |
+`gh issue ...` and `gh pr ...` are the default for both. MCP tools are available as a
+fallback for operations the CLI does not cover well (rich PR review threads, Copilot review
+requests, bulk GraphQL). Full tool tables, creation pre-flight checks, and the
+gh-vs-MCP decision lattice live in
+[`references/issues-and-prs.md`](references/issues-and-prs.md).
 
-**Creating issues** — Required: `owner`, `repo`, `title`, `body`.
-Title guidelines: prefix with `[Bug]`, `[Feature]`, `[Docs]`; keep under 72 chars.
-
----
-
-## Pull Requests (MCP Tools)
-
-| Tool                                   | Purpose               |
-| -------------------------------------- | --------------------- |
-| `mcp_github_create_pull_request`       | Create new PRs        |
-| `mcp_github_merge_pull_request`        | Merge PRs             |
-| `mcp_github_update_pull_request`       | Update PR details     |
-| `mcp_github_pull_request_review_write` | Create/submit reviews |
-| `mcp_github_request_copilot_review`    | Copilot code review   |
-| `mcp_github_search_pull_requests`      | Search PRs            |
-| `mcp_github_list_pull_requests`        | List PRs              |
-
-### Creating PRs
-
-**Required**: `owner`, `repo`, `title`, `head` (source branch), `base` (target branch)
-
-**Pre-flight checks** (mandatory before creating):
-
-1. Validate branch name (see Branch Naming above)
-2. For domain branches, verify files are in scope
-3. Search for PR templates in `.github/PULL_REQUEST_TEMPLATE/`
-4. Title must follow conventional commit format
-
-**Default merge method**: `squash` unless user specifies otherwise.
-
-📋 **Smart PR Flow**: Read `references/smart-pr-flow.md` for PR lifecycle
-states, auto-labels, and auto-merge conditions.
+> **Default merge method**: `squash` unless the user specifies otherwise. Read
+> [`references/smart-pr-flow.md`](references/smart-pr-flow.md) for PR lifecycle states,
+> auto-labels, and auto-merge conditions.
 
 ---
 
@@ -151,15 +136,15 @@ commands covering repos, Actions, releases, secrets, API, and auth.
 ## DO / DON'T
 
 - **DO**: Validate branch name before committing or creating PRs
-- **DO**: Use MCP tools first for issues and PRs
-- **DO**: Use `gh` CLI for Actions, releases, repos, secrets, API
+- **DO**: Use `gh` CLI by default for issues, PRs, Actions, releases, repos, secrets, API
+- **DO**: Fall back to MCP tools when `gh` CLI lacks an equivalent (e.g., review threads, GraphQL bulk queries)
 - **DO**: Confirm repository context before creating issues/PRs
 - **DO**: Search for existing issues/PRs before creating duplicates
 - **DO**: Check for PR templates before creating PRs
 - **DON'T**: Commit on a branch with an invalid name
 - **DON'T**: Create issues/PRs without confirming repo owner and name
 - **DON'T**: Merge PRs without user confirmation
-- **DON'T**: Use `gh` CLI for issues/PRs when MCP tools are available
+- **DON'T**: Reach for MCP first when `gh` CLI can do the job — MCP availability is not guaranteed
 - **DON'T**: Skip hooks (--no-verify) unless user explicitly asks
 
 ---

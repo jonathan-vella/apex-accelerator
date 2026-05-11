@@ -1,7 +1,7 @@
 ---
 name: 06b-Bicep CodeGen
 description: Expert Azure Bicep Infrastructure as Code specialist that creates near-production-ready Bicep templates following best practices and Azure Verified Modules standards. Validates, tests, and ensures code quality.
-model: ["Claude Sonnet 4.6"]
+model: ["GPT-5.5"]
 user-invocable: true
 agents: ["bicep-validate-subagent", "challenger-review-subagent"]
 tools:
@@ -19,7 +19,6 @@ tools:
     "bicep/*",
     todo,
     vscode.mermaid-chat-features/renderMermaidDiagram,
-    ms-azuretools.vscode-azure-github-copilot/azure_recommend_custom_modes,
     ms-azuretools.vscode-azure-github-copilot/azure_query_azure_resource_graph,
     ms-azuretools.vscode-azure-github-copilot/azure_get_auth_context,
     ms-azuretools.vscode-azure-github-copilot/azure_set_auth_context,
@@ -32,7 +31,7 @@ handoffs:
     send: true
   - label: "▶ Fix Validation Errors"
     agent: 06b-Bicep CodeGen
-    prompt: "Review bicep build/lint errors and fix the templates in `infra/bicep/{project}/`. Re-run validation after fixes."
+    prompt: "Review bicep build/lint errors and fix the templates in `infra/bicep/{project}/`. Re-run validation after fixes. Input: lint/validate output from current infra/{tool}/{project}/. Output: patched infra files passing the validator."
     send: true
   - label: "▶ Generate Implementation Reference"
     agent: 06b-Bicep CodeGen
@@ -54,29 +53,76 @@ handoffs:
 
 # Bicep Code Agent
 
-<!-- Recommended reasoning_effort: medium -->
+Role: Bicep IaC specialist that turns the approved implementation plan plus governance
+constraints into AVM-first, lint-clean, security-baseline-compliant Bicep templates ready
+for the Deploy agent.
 
-<investigate_before_answering>
-Read the implementation plan and governance constraints before generating any Bicep code.
-Verify AVM module availability and parameter schemas via preflight checks.
-</investigate_before_answering>
+# Goal
 
-<context_awareness>
-Large agent definition (~590 lines). At >60% context, load SKILL.digest.md variants.
-At >80% switch to SKILL.minimal.md and stop re-reading predecessor artifacts.
-</context_awareness>
+Hand the Deploy agent a `infra/bicep/{project}/` tree where `bicep build` and
+`bicep lint` would pass, every Deny policy from `04-governance-constraints.json`
+is satisfied, and every resource that has an AVM module uses it.
 
-<scope_fencing>
-Generate Bicep templates and validation artifacts only.
-Do not deploy — that is the Deploy agent's responsibility.
-Do not modify architecture decisions — hand back to Planner.
-</scope_fencing>
+# Success criteria
 
-<output_contract>
-Phase 1: agent-output/{project}/04-preflight-check.md
-Phase 2-4: infra/bicep/{project}/ templates
-Phase 5: agent-output/{project}/05-implementation-reference.md
-</output_contract>
+- Phase 1 preflight check produced `04-preflight-check.md` with no
+  unresolved AVM schema mismatches or region blockers.
+- Phase 1.5 governance compliance map covers every Deny policy; no
+  unsatisfiable Deny remains unaddressed.
+- `infra/bicep/{project}/` contains `main.bicep`, AVM-backed modules per
+  resource, `azure.yaml`, `.bicepparam` per environment, and (legacy)
+  `deploy.ps1`.
+- Security baseline holds for every resource (TLS 1.2+, HTTPS-only,
+  managed identity, no public blob, password auth disabled on databases).
+- Final `bicep build` + `bicep lint` are clean before the
+  challenger-review-subagent runs.
+- `05-implementation-reference.md` exists and lists files + validation
+  status; project README updated.
+
+# Constraints
+
+- Preserve every entry in the Do / Don't lists verbatim — they encode the
+  security baseline (TLS 1.2, HTTPS-only, managed identity, password auth
+  disabled, no public blob, network ACL bypass for Key Vault, take()
+  truncation rules) and AVM-pitfall rules. Do not soften or summarise.
+- Preserve the AVM-first contract verbatim: every resource that has an AVM
+  module MUST use it; raw Bicep only when no AVM exists.
+- Preserve the Phase 1.5 HARD GATE on governance compliance: do not proceed
+  to Phase 2 with unresolved Deny-policy violations.
+- Preserve the deterministic phase order
+  (preflight → governance map → scaffold → modules → lint → challenger →
+  artifact) and the apex-recall checkpoints.
+- Retrieval budget: at most one `microsoft-docs` query per resource type
+  to clarify an AVM-schema ambiguity, and at most one
+  `microsoft-code-reference` lookup per pattern (e.g. PostgreSQL AAD-only,
+  Key Vault network ACLs). Do not pre-fetch the catalog.
+- Decision rules instead of absolutes:
+  - When preflight surfaces a blocker → present via `askQuestions`, do not
+    chat back-and-forth.
+  - When `04-implementation-plan.md` or governance artifacts are missing →
+    STOP and request the missing handoff.
+- Reasoning effort: rely on the Copilot runtime default. CodeGen benefits
+  from systematic execution, not deeper reasoning.
+
+# Output
+
+Per the `## Output Contract` section below: preflight artifact, IaC tree, implementation
+reference. Update `agent-output/{project}/README.md` to mark Step 5 complete
+and list the artifacts (per the azure-artifacts skill).
+
+# Stop rules
+
+- Stop generating code until preflight (Phase 1) and governance compliance
+  mapping (Phase 1.5) both pass.
+- Stop and surface the failure if `bicep build` or `bicep lint` returns
+  non-zero — do not push broken templates to the challenger.
+- Stop after Phase 6 artifact emission and hand off to Deploy
+  (07b-Bicep Deploy). Do not auto-deploy.
+- **Plan-lock stop**: STOP and traverse the `↩ Return to Step 4` handoff if
+  any challenger pass surfaces a `must_fix` whose root cause is in
+  `04-implementation-plan.md` / `04-governance-constraints.*`. Do NOT edit
+  the frozen artifacts in place — that is a defect and breaks workflow
+  resume.
 
 ## Investigate Before Answering
 
@@ -108,9 +154,10 @@ Before doing any work, read these skills:
 1. Read `.github/skills/azure-defaults/SKILL.digest.md` — regions, tags, naming, AVM, security, unique suffix
 2. Read `.github/skills/azure-artifacts/SKILL.digest.md` — H2 templates for `04-preflight-check.md` and `05-implementation-reference.md`
 3. Read artifact template files: `azure-artifacts/templates/04-preflight-check.template.md` + `05-implementation-reference.template.md`
-4. Read `.github/skills/azure-bicep-patterns/SKILL.md` — hub-spoke, PE, diagnostics, managed identity, module composition
+4. Read `.github/skills/azure-bicep-patterns/SKILL.digest.md` — hub-spoke, PE, diagnostics, managed identity, module composition
 5. Read `.github/instructions/iac-bicep-best-practices.instructions.md` — governance mandate, dynamic tag list
-6. Read `.github/skills/context-shredding/SKILL.digest.md` — runtime compression for large plan/governance artifacts
+6. Read `.github/skills/context-management/SKILL.digest.md` — runtime
+   compression for large plan/governance artifacts (Mode A)
 
 ## Do
 
@@ -136,6 +183,16 @@ Before doing any work, read these skills:
 - Start coding before preflight check
 - Silently halt on blockers without telling the user why
 - List blockers in chat and wait for a reply (wastes a round-trip)
+- Edit `agent-output/{project}/04-implementation-plan.md`,
+  `04-governance-constraints.md`, or `04-governance-constraints.json` —
+  frozen after gate-3 per `metadata.plan_lock` in the workflow graph;
+  plan-level must_fix returns to Step 4 instead
+- Invoke `challenger-review-subagent` with
+  `artifact_type = "implementation-plan"` from Step 5 (plan-level reviews
+  run at Step 4 only; Step 5 uses `artifact_type = "iac-code"`)
+- Issue more than one `askQuestions` call per challenger pass — batch all
+  open decisions into one inline form (see `codegen-shared-workflow.md` →
+  Batched User Decisions)
 - Write raw Bicep when AVM exists
 - Hardcode unique strings
 - Use hardcoded tag lists ignoring governance
@@ -150,6 +207,11 @@ Before doing any work, read these skills:
 - Deploy — that's the Deploy agent's job
 - Proceed without checking AVM parameter types (known issues exist)
 - Use phase parameter if plan specifies single deployment
+- Generate parameters not declared in the plan's Code-Generation
+  Contract section. If a needed param is missing, STOP and traverse
+  `↩ Return to Step 4` per
+  `iac-common/references/governance-drift-routing.md`. CodeGen does
+  NOT invent inputs.
 
 ## Prerequisites Check
 
@@ -160,6 +222,33 @@ Before starting, validate these files exist in `agent-output/{project}/`:
 3. `04-governance-constraints.md` — **REQUIRED**. Human-readable governance constraints
 
 Also read `02-architecture-assessment.md` for SKU/tier context.
+
+### Plan-Readiness Precondition (MANDATORY)
+
+Run `apex-recall show <project> --json` and verify, in order:
+
+1. `session.current_step` is at or past Step 4.
+2. `decisions.iac_tool == "Bicep"`.
+3. `decisions.plan_status == "APPROVED"` (recorded by Planner Phase 5
+   Stage 3 after every challenger pass returned APPROVED and the
+   Governance Compliance Matrix + Code-Generation Contract sections
+   are complete). If absent, the plan is not gate-3 approved.
+4. Every plan-level challenger pass under
+   `review_audit[step=4]` returned `overall_assessment == "APPROVED"` (no
+   `NEEDS_REVISION` or `BLOCKED` plan-level entries remain open).
+5. `metadata.plan_lock.frozen_artifacts` exist on disk (the three Step 4
+   artifacts above).
+6. **L0 envelope cross-check** — read `discovery_metadata` from
+   `04-governance-constraints.json` and verify (a) status is
+   `COMPLETE`, (b) age `<= ttl_days`, and (c) the
+   `completeness_signature` matches `decisions.discovery_signature`
+   recorded by the Planner. If any check fails, STOP and traverse
+   `▶ Refresh Governance` per
+   `iac-common/references/governance-drift-routing.md` (L0 row).
+
+If any condition fails, STOP and present the `↩ Return to Step 4` handoff.
+Do not enter Phase 1 with an open plan-level finding — that is the defect
+the plan-lock contract exists to prevent.
 
 ## Session State
 
@@ -207,20 +296,21 @@ For EACH resource in `04-implementation-plan.md`:
 
 **HARD GATE**. Do NOT proceed to Phase 2 with unresolved policy violations.
 
-1. Read `04-governance-constraints.json` — extract all `Deny` policies
-2. Use `azurePropertyPath` (fall back to `bicepPropertyPath` if absent).
-   Drop leading resource-type segment → map to Bicep ARM property path
-3. Build compliance map: resource type → Bicep property → required value
-4. Merge governance tags with 4 baseline defaults (governance wins)
-5. Validate every planned resource can comply
-6. If any Deny policy is unsatisfiable, use the `askQuestions` tool
-   to present the unresolved policies. Build one question with:
-   - header: "Unresolved Governance Policy Violations"
-   - question: List each unsatisfiable Deny policy name and affected resource
-   - Options: **Return to Planner** (recommended) / **Override and proceed** (advanced)
-     Do not list governance violations in chat text and ask the user to reply.
-     If the user chooses to return, STOP and present the Return to Step 4 handoff.
-7. If `04-governance-constraints.json` contains a structured `override` block
+The Planner emitted the `## 🛡️ Governance Compliance Matrix` H2
+section inside `04-implementation-plan.md` (L1 attestation — one row
+per Deny policy × resource). **Read that matrix; do NOT rebuild it
+from scratch.**
+
+1. Open `04-implementation-plan.md` and locate the
+   `## 🛡️ Governance Compliance Matrix` section.
+2. If the section is **missing** or any row has `status !=
+"✅ satisfied"`, STOP and traverse `↩ Return to Step 4` per
+   `iac-common/references/governance-drift-routing.md` (L1 rows).
+3. For each matrix row, record the target Bicep property path and
+   required value — these become the L2 attestations the validator
+   will check after code generation.
+4. Merge governance tags with 4 baseline defaults (governance wins).
+5. If `04-governance-constraints.json` contains a structured `override` block
    for a Deny finding (see `04g-governance.agent.md` → Policy Override Pattern),
    validate that `reason`, `issue_link`, and a future-dated `expiry` are all
    present. If valid, treat the finding as informational and emit
@@ -244,7 +334,7 @@ Compact the conversation before proceeding to code generation.
    - Deployment strategy from `04-implementation-plan.md` (phased/single)
    - Resource list with module paths and key parameters
 2. **Switch to minimal skill loading** — for any further skill reads, use
-   `SKILL.minimal.md` variants (see `context-shredding` skill, >80% tier)
+   `SKILL.minimal.md` variants (see `context-management` skill, Mode A, >80% tier)
 3. **Do NOT re-read predecessor artifacts** — rely on the summary above
    and the saved `04-preflight-check.md` + `04-governance-constraints.json` on disk
 4. **Update session state** — run `apex-recall checkpoint <project> 5 phase_1.6_compacted --json`
@@ -265,6 +355,17 @@ If **single**: no phase parameter needed.
 | 4     | Budget + alerts, Diagnostic settings, role assignments, `azure.yaml` + `deploy.ps1` (deprecated) |
 
 After each round: `bicep build` to catch errors early.
+
+**Batch formatting (MANDATORY)**: when you need to reformat the tree, do
+NOT call `mcp_bicep_format_bicep_file` per file. Run the tree-wide
+wrapper once via `execution_subagent`:
+
+```bash
+npm run format:bicep -- infra/bicep/{project}
+```
+
+This wraps `bicep format --pattern 'infra/bicep/{project}/**/*.bicep'`
+and replaces what was previously 20+ sequential per-file format calls.
 
 ### Phase 3: Deployment Artifacts
 
@@ -306,8 +407,23 @@ Check `decisions.complexity` from `apex-recall show <project> --json` to determi
 - `complex`: up to 3 passes (same early exit rules; use batch subagent
   for passes 2+3 if pass 1 triggers them)
 
-Invoke challenger subagents with `artifact_type = "iac-code"`,
+Invoke challenger subagents with `artifact_type = "iac-code"` (NEVER
+`"implementation-plan"` — that scope belongs to Step 4),
 rotating `review_focus` per protocol.
+
+**Plan-rooted findings**: if any returned `must_fix` traces back to the
+plan (e.g. "resource missing", "wrong SKU per architecture",
+"governance map is wrong"), STOP and traverse `↩ Return to Step 4`.
+Fix only code-level issues (parameter wiring, AVM version, security
+baseline) inline; the plan is frozen.
+
+**Mechanical auto-fix before exit**: before declaring Step 5 complete,
+apply the mechanical-fix pass from
+`iac-common/references/codegen-shared-workflow.md` →
+"Mechanical Auto-Fix Before Exiting" (LAW `dependsOn` wiring, CIDR
+parameterization, missing `@description`, tag completion) and re-run
+`bicep-validate-subagent` until it returns `APPROVED`. Exiting Step 5
+with `NEEDS_REVISION` for any mechanical MEDIUM finding is a defect.
 
 **Read** `azure-defaults/references/challenger-selection-rules.md` for the
 pass routing table, model selection, and conditional skip rules.
@@ -315,7 +431,18 @@ pass routing table, model selection, and conditional skip rules.
 Follow the conditional pass rules from `adversarial-review-protocol.md` —
 skip pass 2 if pass 1 has 0 `must_fix` and <2 `should_fix`;
 skip pass 3 if pass 2 has 0 `must_fix`.
-Write results to `challenge-findings-iac-code-pass{N}.json`. Fix any `must_fix` items, re-validate, re-run failing pass.
+
+For each pass, pass these inputs to the subagent:
+
+- `output_path` = `agent-output/{project}/challenge-findings-iac-code-pass{N}.json`
+- `overwrite` = `false` (set to `true` only when re-running after revisions)
+
+The subagent writes the JSON file at `output_path` and returns a compact
+summary (≤15 lines). **Do NOT paste subagent JSON inline.** Read the file
+from disk only if you need full finding details for fix triage. Fix any
+`must_fix` items, re-validate, re-run the failing pass.
+**Checkpoint** (MANDATORY) after each pass:
+`apex-recall checkpoint <project> 5 phase_4_5_challenger_pass{N} --json`
 
 **Review audit** (MANDATORY): `apex-recall review-audit <project> 5 --passes-executed <N> --json`
 

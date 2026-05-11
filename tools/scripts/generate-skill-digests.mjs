@@ -10,6 +10,7 @@
  * @example
  * node tools/scripts/generate-skill-digests.mjs              # all skills
  * node tools/scripts/generate-skill-digests.mjs azure-validate  # single skill
+ * node tools/scripts/generate-skill-digests.mjs --check      # CI drift detection (no writes)
  */
 
 import fs from "node:fs";
@@ -17,8 +18,7 @@ import path from "node:path";
 import { SKILLS_DIR } from "./_lib/paths.mjs";
 import { extractH2Sections } from "./_lib/h2-parser.mjs";
 
-const AUTO_GEN_HEADER =
-  "<!-- digest:auto-generated from SKILL.md — do not edit manually -->";
+const AUTO_GEN_HEADER = "<!-- digest:auto-generated from SKILL.md — do not edit manually -->";
 
 const PRIORITY_HEADINGS = new Set(["Mandatory Icon Embedding"]);
 
@@ -55,12 +55,8 @@ function trimSection(section, maxLines) {
 }
 
 function prioritizeSections(sections) {
-  const prioritized = sections.filter((section) =>
-    PRIORITY_HEADINGS.has(section.heading),
-  );
-  const remaining = sections.filter(
-    (section) => !PRIORITY_HEADINGS.has(section.heading),
-  );
+  const prioritized = sections.filter((section) => PRIORITY_HEADINGS.has(section.heading));
+  const remaining = sections.filter((section) => !PRIORITY_HEADINGS.has(section.heading));
   return [...prioritized, ...remaining];
 }
 
@@ -71,26 +67,18 @@ function generateDigest(skillDir) {
   const content = fs.readFileSync(sourcePath, "utf-8");
   const sourceLines = content.split("\n").length;
   const isShortSkill = sourceLines < 60;
-  const targetLines = Math.max(
-    isShortSkill ? 8 : 12,
-    Math.floor(sourceLines * (isShortSkill ? 0.5 : 0.55)),
-  );
+  const targetLines = Math.max(isShortSkill ? 8 : 12, Math.floor(sourceLines * (isShortSkill ? 0.5 : 0.55)));
   const title = extractTitle(content);
   const sections = prioritizeSections(extractH2Sections(content));
 
   const digestLines = [AUTO_GEN_HEADER, "", `# ${title} (Digest)`, ""];
   if (!isShortSkill) {
-    digestLines.push(
-      "Compact reference for agent startup. Read full `SKILL.md` for details.",
-    );
+    digestLines.push("Compact reference for agent startup. Read full `SKILL.md` for details.");
     digestLines.push("");
   }
 
   let remaining = targetLines - digestLines.length;
-  const maxPerSection = Math.max(
-    isShortSkill ? 4 : 8,
-    Math.floor(remaining / Math.max(sections.length, 1)),
-  );
+  const maxPerSection = Math.max(isShortSkill ? 4 : 8, Math.floor(remaining / Math.max(sections.length, 1)));
 
   for (const section of sections) {
     if (remaining <= 2) break;
@@ -103,12 +91,10 @@ function generateDigest(skillDir) {
     }
   }
 
-  return (
-    digestLines
-      .join("\n")
-      .replace(/\n{3,}/g, "\n\n")
-      .trimEnd() + "\n"
-  );
+  return `${digestLines
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trimEnd()}\n`;
 }
 
 function generateMinimal(skillDir, digestContent) {
@@ -120,13 +106,7 @@ function generateMinimal(skillDir, digestContent) {
 
   const digestLineCount = digestContent.split("\n").length;
   if (digestLineCount < 14) {
-    return (
-      [
-        AUTO_GEN_HEADER,
-        `# ${title} (Minimal)`,
-        "Read `SKILL.md` for full content.",
-      ].join("\n") + "\n"
-    );
+    return `${[AUTO_GEN_HEADER, `# ${title} (Minimal)`, "Read `SKILL.md` for full content."].join("\n")}\n`;
   }
 
   const targetLines = Math.max(7, Math.floor(digestLineCount * 0.4));
@@ -139,9 +119,7 @@ function generateMinimal(skillDir, digestContent) {
     if (remaining <= 2) break;
     minimalLines.push(`**${section.heading}**:`);
 
-    const firstContent = section.lines
-      .slice(1)
-      .find((l) => l.trim().length > 0 && !/^[|>-]/.test(l.trim()));
+    const firstContent = section.lines.slice(1).find((l) => l.trim().length > 0 && !/^[|>-]/.test(l.trim()));
     if (firstContent) {
       minimalLines.push(firstContent.trim().slice(0, 120).trimEnd());
     }
@@ -154,15 +132,15 @@ function generateMinimal(skillDir, digestContent) {
   }
   minimalLines.push("Read `SKILL.md` or `SKILL.digest.md` for full content.");
 
-  return (
-    minimalLines
-      .join("\n")
-      .replace(/\n{3,}/g, "\n\n")
-      .trimEnd() + "\n"
-  );
+  return `${minimalLines
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trimEnd()}\n`;
 }
 
-const targetSkill = process.argv[2];
+const args = process.argv.slice(2);
+const checkOnly = args.includes("--check");
+const targetSkill = args.find((a) => a !== "--check");
 const skillDirs = fs
   .readdirSync(SKILLS_DIR, { withFileTypes: true })
   .filter((d) => d.isDirectory())
@@ -171,6 +149,7 @@ const skillDirs = fs
 
 let generated = 0;
 let skipped = 0;
+const drifted = [];
 
 for (const skillName of skillDirs) {
   const skillDir = path.join(SKILLS_DIR, skillName);
@@ -184,23 +163,53 @@ for (const skillName of skillDirs) {
   const digestPath = path.join(skillDir, "SKILL.digest.md");
   const minimalPath = path.join(skillDir, "SKILL.minimal.md");
 
-  if (fs.existsSync(digestPath) && !targetSkill) {
+  // In check mode we always re-derive and compare (drift detection).
+  // In write mode we keep the legacy "skip if digest exists and no
+  // explicit target" behavior to avoid clobbering hand-tuned digests.
+  if (!checkOnly && fs.existsSync(digestPath) && !targetSkill) {
     skipped++;
     continue;
   }
 
   const digest = generateDigest(skillDir);
-  if (digest) {
-    fs.writeFileSync(digestPath, digest);
-    const minimal = generateMinimal(skillDir, digest);
-    if (minimal) {
-      fs.writeFileSync(minimalPath, minimal);
+  if (!digest) continue;
+  const minimal = generateMinimal(skillDir, digest);
+
+  if (checkOnly) {
+    const currentDigest = fs.existsSync(digestPath) ? fs.readFileSync(digestPath, "utf-8") : null;
+    const currentMinimal = minimal && fs.existsSync(minimalPath) ? fs.readFileSync(minimalPath, "utf-8") : null;
+    const digestDrift = currentDigest !== digest;
+    const minimalDrift = minimal != null && currentMinimal !== minimal;
+    if (digestDrift || minimalDrift) {
+      drifted.push({
+        skill: skillName,
+        digest: digestDrift,
+        minimal: minimalDrift,
+      });
     }
-    generated++;
-    console.log(`✅ ${skillName}: digest + minimal generated`);
+    continue;
   }
+
+  fs.writeFileSync(digestPath, digest);
+  if (minimal) fs.writeFileSync(minimalPath, minimal);
+  generated++;
+  console.log(`✅ ${skillName}: digest + minimal generated`);
 }
 
-console.log(
-  `\n📊 Generated: ${generated}, Skipped (already exists): ${skipped}`,
-);
+if (checkOnly) {
+  if (drifted.length > 0) {
+    console.error(`❌ ${drifted.length} skill digest(s) out of sync with SKILL.md:`);
+    for (const d of drifted) {
+      const parts = [];
+      if (d.digest) parts.push("SKILL.digest.md");
+      if (d.minimal) parts.push("SKILL.minimal.md");
+      console.error(`   - ${d.skill}: ${parts.join(", ")}`);
+    }
+    console.error("\n💡 Run: node tools/scripts/generate-skill-digests.mjs <skill-name>");
+    process.exit(1);
+  }
+  console.log("✅ All skill digests in sync with their SKILL.md");
+  process.exit(0);
+}
+
+console.log(`\n📊 Generated: ${generated}, Skipped (already exists): ${skipped}`);

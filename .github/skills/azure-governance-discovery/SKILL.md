@@ -1,7 +1,7 @@
 ---
 name: azure-governance-discovery
-description: "Deterministic Azure Policy discovery: lists effective policy assignments at subscription scope (including MG-inherited), pulls definitions and exemptions, classifies effects, filters Defender auto-assignments, and emits the governance-constraints JSON envelope via a Python script. USE FOR: 04g-Governance Phase 1 discovery, refreshing `04-governance-constraints.json`. DO NOT USE FOR: artifact writing, architecture mapping, traffic-light rendering, challenger orchestration — those stay in the parent agent."
-compatibility: Requires Python 3.10+, Azure CLI on PATH, read access to the target subscription.
+description: '**ANALYSIS SKILL** — Deterministic Azure Policy discovery: lists effective assignments (incl. MG-inherited), pulls definitions/exemptions, classifies effects, filters Defender auto-assignments, emits governance-constraints JSON via Python. WHEN: "Azure policy discovery", "effective policy assignments", "governance constraints", "04g-Governance Phase 1", "refresh governance JSON". USE FOR: 04g Phase 1 discovery, refreshing `04-governance-constraints.json`. DO NOT USE FOR: artifact writing, architecture mapping, traffic-light rendering, challenger orchestration.'
+compatibility: Requires Python 3.14, Azure CLI on PATH, read access to the target subscription.
 ---
 
 # Azure Governance Discovery Skill
@@ -26,7 +26,18 @@ pulling raw Azure REST responses into LLM context.
 - Challenger review orchestration — parent-side LLM work
 - Any workflow that is not 04g-Governance
 
-## Usage
+## Rules
+
+- **Stay deterministic** — the discovery script is a single batched REST traversal; no LLM calls, no retries that hide errors, no inferred policy effects
+- **Never pull raw Azure REST responses into LLM context** — stdout is exactly one machine-readable JSON status line; the parent agent reads only this line
+- **Schema compliance is mandatory** — envelope MUST conform to `tools/schemas/governance-constraints.schema.json` (`schema_version: governance-constraints-v1`)
+- **Property paths are always strings** — use `""` for unresolvable paths, never `null`
+- **Filter Defender auto-assignments by default** — they create policy noise that masks real governance constraints; opt-in via `--include-defender-auto`
+- **Exit codes are contract** — `0` = COMPLETE, `1` = PARTIAL, `2` = FAILED, `3` = invalid args; the parent agent routes solely on these codes
+- **No artifact writing** — the script emits JSON + a `.preview.md`; the agent owns the final `04-governance-constraints.md` content and traffic-light rendering
+- **Re-run with `--refresh`** when policy state has changed; otherwise honor the existing JSON
+
+## Steps
 
 ```bash
 python .github/skills/azure-governance-discovery/scripts/discover.py \
@@ -87,6 +98,26 @@ Top-level envelope also includes:
 - `policies` — alias (same reference) of `findings`; provided for downstream consumers.
 - `tags_required` — extracted tag-enforcement findings as `[{name, source_policy}]`.
 - `allowed_locations` — extracted from location-constraint policies.
+- `discovery_metadata` — **L0 attestation envelope (MANDATORY)**. See
+  [governance-discovery.md](../azure-defaults/references/governance-discovery.md#l0-discovery-envelope-mandatory)
+  for the full shape. Includes `discovery_status`, `discovered_at`,
+  `scope`, `api_versions`, `page_counts`, `completeness_signature`,
+  `ttl_days`. Downstream consumers (Planner, CodeGen, Deploy) read
+  this object FIRST and STOP on staleness, signature drift, or
+  non-COMPLETE status.
+
+### End-of-discovery self-check
+
+After writing the envelope, `discover.py` MUST re-fetch page 1 of
+`policyAssignments` (cheapest call) and confirm the count matches
+`page_counts.policyAssignments`. Mismatch → set `discovery_status:
+"PARTIAL"` and append a stderr warning naming the drifted REST
+surface.
+
+### Refresh handoff is non-skippable
+
+When invoked via the `▶ Refresh Governance` handoff, `discover.py`
+MUST be called with `--refresh` so cached results are bypassed.
 
 Property paths (`azurePropertyPath`, `bicepPropertyPath`) are always strings —
 empty `""` when unresolvable, never `null`.

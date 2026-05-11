@@ -33,6 +33,10 @@ class DatabricksHandlers:
 
     async def handle_databricks_dbu_pricing(self, arguments: dict[str, Any]) -> list[TextContent]:
         """Handle databricks_dbu_pricing tool calls."""
+        from ..mcp_response import MCPToolResponse, strip_private_keys
+        from ..response_format import coerce_response_format
+
+        fmt = coerce_response_format(arguments.pop("response_format", "compact"))
         service = self._get_databricks_service()
         result = await service.get_dbu_pricing(
             workload_type=arguments.get("workload_type"),
@@ -40,8 +44,11 @@ class DatabricksHandlers:
             region=arguments.get("region", "eastus"),
             currency_code=arguments.get("currency_code", "USD"),
         )
-        text = format_databricks_dbu_pricing_response(result)
-        return [TextContent(type="text", text=text)]
+        text = format_databricks_dbu_pricing_response(result, fmt)
+        return MCPToolResponse(
+            [TextContent(type="text", text=text)],
+            structured=strip_private_keys(result),
+        )
 
     async def handle_databricks_cost_estimate(self, arguments: dict[str, Any]) -> list[TextContent]:
         """Handle databricks_cost_estimate tool calls."""

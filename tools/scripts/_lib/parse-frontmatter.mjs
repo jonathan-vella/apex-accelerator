@@ -31,7 +31,7 @@ export function parseFrontmatter(content) {
         pendingKey = null;
         if (trimmed.includes("]")) {
           const values = trimmed
-            .replace(/[\[\]]/g, "")
+            .replace(/[[\]]/g, "")
             .split(",")
             .map((v) => v.trim().replace(/"/g, ""))
             .filter(Boolean);
@@ -47,7 +47,7 @@ export function parseFrontmatter(content) {
         pendingKey = null;
         const value = trimmed
           .replace(/^-\s*/, "")
-          .replace(/["\[\],]/g, "")
+          .replace(/["[\],]/g, "")
           .trim();
         if (value) currentValue.push(value);
         continue;
@@ -62,7 +62,7 @@ export function parseFrontmatter(content) {
         const value = line
           .trim()
           .replace(/^-\s*/, "")
-          .replace(/["\[\],]/g, "")
+          .replace(/["[\],]/g, "")
           .trim();
         if (value) currentValue.push(value);
         continue;
@@ -101,7 +101,7 @@ export function parseFrontmatter(content) {
         currentValue = [];
         if (rawValue.includes("]")) {
           const values = rawValue
-            .replace(/[\[\]]/g, "")
+            .replace(/[[\]]/g, "")
             .split(",")
             .map((v) => v.trim().replace(/"/g, ""))
             .filter(Boolean);
@@ -144,4 +144,17 @@ export function parseFrontmatter(content) {
 export function getBody(content) {
   const match = content.match(/^---\n[\s\S]*?\n---\n?([\s\S]*)$/);
   return match ? match[1] : content;
+}
+
+/**
+ * Extract the raw frontmatter YAML block (text between the --- delimiters)
+ * without parsing it. Useful when validators need to run textual lint
+ * checks (e.g. forbidden patterns) directly against the source YAML.
+ *
+ * @param {string} content - Full file content with --- delimiters
+ * @returns {string} Raw frontmatter text, or "" if no frontmatter found
+ */
+export function getRawFrontmatter(content) {
+  const match = content.match(/^---\n([\s\S]*?)\n---/);
+  return match ? match[1] : "";
 }

@@ -41,24 +41,24 @@ See `tools/registry/count-manifest.json` for canonical counts.
 
 ### Primary Agents
 
-| Agent               | File                                | Model      | Step | Artifacts                       |
-| ------------------- | ----------------------------------- | ---------- | ---- | ------------------------------- |
-| Orchestrator        | `01-orchestrator.agent.md`          | Opus 4.6   | All  | Orchestration                   |
-| Orchestrator (Fast) | `01-orchestrator-fastpath.agent.md` | Opus 4.6   | All  | Fast-path orchestration         |
-| Requirements        | `02-requirements.agent.md`          | Opus 4.6   | 1    | `01-requirements.md`            |
-| Architect           | `03-architect.agent.md`             | Opus 4.6   | 2    | `02-architecture-assessment.md` |
-| Design              | `04-design.agent.md`                | Sonnet 4.5 | 3    | `03-des-*.{drawio,py,png,md}`   |
-| Governance          | `04g-governance.agent.md`           | Sonnet 4.5 | 3.5  | `04-governance-constraints.md`  |
-| IaC Plan            | `05-iac-planner.agent.md`           | Opus 4.6   | 4    | `04-implementation-plan.md`     |
-| Bicep Code          | `06b-bicep-codegen.agent.md`        | Sonnet 4.5 | 5b   | Bicep in `infra/bicep/`         |
-| Bicep Deploy        | `07b-bicep-deploy.agent.md`         | Sonnet 4.5 | 6b   | `06-deployment-summary.md`      |
-| Terraform Code      | `06t-terraform-codegen.agent.md`    | Sonnet 4.5 | 5t   | Terraform in `infra/terraform/` |
-| Terraform Deploy    | `07t-terraform-deploy.agent.md`     | Sonnet 4.5 | 6t   | `06-deployment-summary.md`      |
-| As-Built            | `08-as-built.agent.md`              | Sonnet 4.5 | 7    | `07-ab-*.md` docs suite         |
-| Diagnose            | `09-diagnose.agent.md`              | Sonnet 4.5 | —    | Diagnostic reports              |
-| Challenger          | `10-challenger.agent.md`            | Sonnet 4.5 | —    | Challenge findings              |
-| Context Optimizer   | `11-context-optimizer.agent.md`     | Sonnet 4.5 | —    | Optimization reports            |
-| E2E Orchestrator    | `e2e-orchestrator.agent.md`         | Opus 4.6   | All  | E2E evaluation loop             |
+| Agent               | File                                | Model                     | Step | Artifacts                       |
+| ------------------- | ----------------------------------- | ------------------------- | ---- | ------------------------------- |
+| Orchestrator        | `01-orchestrator.agent.md`          | GPT-5.5                   | All  | Orchestration                   |
+| Orchestrator (Fast) | `01-orchestrator-fastpath.agent.md` | GPT-5.5                   | All  | Fast-path orchestration         |
+| Requirements        | `02-requirements.agent.md`          | Opus 4.7 (High reasoning) | 1    | `01-requirements.md`            |
+| Architect           | `03-architect.agent.md`             | Opus 4.7 (High reasoning) | 2    | `02-architecture-assessment.md` |
+| Design              | `04-design.agent.md`                | Sonnet 4.6                | 3    | `03-des-*.{drawio,py,png,md}`   |
+| Governance          | `04g-governance.agent.md`           | GPT-5.5                   | 3.5  | `04-governance-constraints.md`  |
+| IaC Plan            | `05-iac-planner.agent.md`           | Opus 4.7 (High reasoning) | 4    | `04-implementation-plan.md`     |
+| Bicep Code          | `06b-bicep-codegen.agent.md`        | GPT-5.5                   | 5b   | Bicep in `infra/bicep/`         |
+| Bicep Deploy        | `07b-bicep-deploy.agent.md`         | GPT-5.5                   | 6b   | `06-deployment-summary.md`      |
+| Terraform Code      | `06t-terraform-codegen.agent.md`    | GPT-5.5                   | 5t   | Terraform in `infra/terraform/` |
+| Terraform Deploy    | `07t-terraform-deploy.agent.md`     | GPT-5.5                   | 6t   | `06-deployment-summary.md`      |
+| As-Built            | `08-as-built.agent.md`              | GPT-5.5                   | 7    | `07-ab-*.md` docs suite         |
+| Diagnose            | `09-diagnose.agent.md`              | Opus 4.7                  | —    | Diagnostic reports              |
+| Challenger          | `10-challenger.agent.md`            | GPT-5.5                   | —    | Challenge findings              |
+| Context Optimizer   | `11-context-optimizer.agent.md`     | Opus 4.7 (High reasoning) | —    | Optimization reports            |
+| E2E Orchestrator    | `e2e-orchestrator.agent.md`         | GPT-5.5                   | All  | E2E evaluation loop             |
 
 ### Validation Subagents (in `_subagents/`)
 
@@ -102,31 +102,21 @@ Each subdirectory under `.github/skills/` with a `SKILL.md` is one skill.
 | `azure-diagnostics`           | `azure-diagnostics/`           | Troubleshooting     | "troubleshoot", "KQL", "health check"     |
 | `python-diagrams`             | `python-diagrams/`             | Document Creation   | "create chart", "WAF chart"               |
 | `mermaid`                     | `mermaid/`                     | Document Creation   | "mermaid diagram", "flowchart"            |
-| `azure-diagrams`              | `azure-diagrams/`              | Routing             | Routes to drawio/python-diagrams/mermaid  |
-| `azure-hosted-copilot-sdk`    | `azure-hosted-copilot-sdk/`    | SDK                 | "copilot SDK", "copilot app"              |
 | `azure-kusto`                 | `azure-kusto/`                 | Data & Analytics    | "KQL queries", "Azure Data Explorer"      |
-| `azure-messaging`             | `azure-messaging/`             | Messaging           | "event hub", "service bus"                |
 | `azure-prepare`               | `azure-prepare/`               | Deployment          | "create app", "prepare Azure"             |
 | `azure-quotas`                | `azure-quotas/`                | Capacity            | "check quotas", "service limits"          |
 | `azure-rbac`                  | `azure-rbac/`                  | Identity            | "RBAC role", "least privilege"            |
-| `azure-resource-lookup`       | `azure-resource-lookup/`       | Discovery           | "list resources", "find VMs"              |
-| `azure-resource-visualizer`   | `azure-resource-visualizer/`   | Visualization       | "visualize resources", "resource diagram" |
+| `azure-resources`             | `azure-resources/`             | Discovery           | "list resources", "resource diagram"      |
 | `azure-storage`               | `azure-storage/`               | Storage             | "blob storage", "file shares"             |
 | `azure-validate`              | `azure-validate/`              | Validation          | "validate app", "preflight checks"        |
-| `context-optimizer`           | `context-optimizer/`           | Meta                | "context optimization", "token waste"     |
-| `context-shredding`           | `context-shredding/`           | Meta                | "compress context", "context budget"      |
+| `context-management`          | `context-management/`          | Meta                | "context optimization", "compress context" |
 | `copilot-customization`       | `copilot-customization/`       | Meta                | "customization", "instructions", "agents" |
-| `count-registry`              | `count-registry/`              | Meta                | "entity count", "how many agents"         |
 | `docs-writer`                 | `docs-writer/`                 | Documentation       | "update docs", "check staleness"          |
 | `entra-app-registration`      | `entra-app-registration/`      | Identity            | "app registration", "Entra ID"            |
 | `github-operations`           | `github-operations/`           | Workflow            | "commit", "create issue", "create PR"     |
 | `golden-principles`           | `golden-principles/`           | Meta                | "operating principles", "agent rules"     |
 | `iac-common`                  | `iac-common/`                  | IaC Patterns        | "deploy patterns", "circuit breaker"      |
-| `make-skill-template`         | `make-skill-template/`         | Meta                | "create skill"                            |
-| `microsoft-code-reference`    | `microsoft-code-reference/`    | SDK Reference       | "Azure SDK", "code sample"                |
 | `microsoft-docs`              | `microsoft-docs/`              | Documentation       | "Azure docs", "quickstart"                |
-| `microsoft-foundry`           | `microsoft-foundry/`           | AI Platform         | "Foundry agent", "deploy agent"           |
-| `microsoft-skill-creator`     | `microsoft-skill-creator/`     | Meta                | "create skill for Microsoft tech"         |
 | `terraform-patterns`          | `terraform-patterns/`          | IaC Patterns        | "terraform pattern", "AVM-TF", "HCL"      |
 | `terraform-search-import`     | `terraform-search-import/`     | IaC Import          | "import resources", "terraform import"    |
 | `terraform-test`              | `terraform-test/`              | IaC Testing         | "terraform test", ".tftest.hcl"           |
@@ -211,15 +201,15 @@ Implementation → Deploy       → Documentation
 These files contain counts, tables, or version references that need
 updating when agents or skills change:
 
-| File                                    | Contains                                |
-| --------------------------------------- | --------------------------------------- |
-| `site/src/content/docs/`                | Published documentation pages           |
-| `docs.instructions.md`                  | Site docs standards                     |
-| `QUALITY_SCORE.md`                      | Project health grades (doc-gardening)   |
+| File                                          | Contains                                |
+| --------------------------------------------- | --------------------------------------- |
+| `site/src/content/docs/`                      | Published documentation pages           |
+| `docs.instructions.md`                        | Site docs standards                     |
+| `QUALITY_SCORE.md`                            | Project health grades (doc-gardening)   |
 | `tools/tests/exec-plans/tech-debt-tracker.md` | Tech debt inventory                     |
-| `VERSION.md`                            | Canonical version number                |
-| `CHANGELOG.md`                          | Release history                         |
-| `README.md` (root)                      | Overview, project structure, tech stack |
+| `VERSION.md`                                  | Canonical version number                |
+| `CHANGELOG.md`                                | Release history                         |
+| `README.md` (root)                            | Overview, project structure, tech stack |
 
 ## docs/ Folder Contents
 

@@ -13,18 +13,10 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import {
-  getAgents,
-  getSkills,
-  getInstructions,
-  getSkillNames as getSkillNamesFromIndex,
-} from "./_lib/workspace-index.mjs";
+import { getAgents, getSkills, getInstructions } from "./_lib/workspace-index.mjs";
 import { Reporter } from "./_lib/reporter.mjs";
-import {
-  MAX_SKILL_LINES_WITHOUT_REFS,
-  SKILLS_DIR,
-  INSTRUCTIONS_DIR,
-} from "./_lib/paths.mjs";
+import { getRawFrontmatter } from "./_lib/parse-frontmatter.mjs";
+import { MAX_SKILL_LINES_WITHOUT_REFS, SKILLS_DIR, INSTRUCTIONS_DIR } from "./_lib/paths.mjs";
 
 let overallFailed = false;
 
@@ -35,9 +27,7 @@ let overallFailed = false;
 const FORBIDDEN_PATTERNS = [
   {
     pattern: /^description:\s*[>|][-\s]*$/m,
-    message:
-      "description uses a YAML block scalar (>, >-, | or |-). " +
-      "Use a single-line inline string instead.",
+    message: "description uses a YAML block scalar (>, >-, | or |-). " + "Use a single-line inline string instead.",
   },
 ];
 
@@ -52,11 +42,7 @@ const DEPRECATED_PATTERNS = [
   },
 ];
 
-const KNOWN_OVERSIZED = new Set([
-  "azure-adr",
-  "github-operations",
-  "make-skill-template",
-]);
+const KNOWN_OVERSIZED = new Set(["azure-adr", "github-operations", "make-skill-template"]);
 
 function runFormatValidation() {
   const r = new Reporter("Skills Format Validator");
@@ -65,9 +51,7 @@ function runFormatValidation() {
   const skills = getSkills();
 
   if (skills.size === 0) {
-    console.log(
-      "No .github/skills directory found - skipping skill validation",
-    );
+    console.log("No .github/skills directory found - skipping skill validation");
     return;
   }
 
@@ -82,8 +66,7 @@ function runFormatValidation() {
       continue;
     }
 
-    const rawFrontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
-    const rawFrontmatter = rawFrontmatterMatch ? rawFrontmatterMatch[1] : "";
+    const rawFrontmatter = getRawFrontmatter(content);
 
     if (!frontmatter) {
       r.error(skillName, "No frontmatter found in SKILL.md");
@@ -106,28 +89,17 @@ function runFormatValidation() {
       }
     }
 
-    const jsonFiles = fs
-      .readdirSync(skillDir)
-      .filter((f) => f.endsWith(".skill.json"));
+    const jsonFiles = fs.readdirSync(skillDir).filter((f) => f.endsWith(".skill.json"));
     if (jsonFiles.length > 0) {
-      r.warn(
-        skillName,
-        `Found deprecated .skill.json file(s): ${jsonFiles.join(", ")}`,
-      );
+      r.warn(skillName, `Found deprecated .skill.json file(s): ${jsonFiles.join(", ")}`);
     }
 
     if (frontmatter.name && frontmatter.name !== skillName) {
-      r.error(
-        skillName,
-        `Frontmatter 'name' ("${frontmatter.name}") does not match directory name ("${skillName}")`,
-      );
+      r.error(skillName, `Frontmatter 'name' ("${frontmatter.name}") does not match directory name ("${skillName}")`);
     }
 
     if (frontmatter.description && frontmatter.description.length < 10) {
-      r.warn(
-        skillName,
-        `Description is too short (${frontmatter.description.length} chars)`,
-      );
+      r.warn(skillName, `Description is too short (${frontmatter.description.length} chars)`);
     }
 
     const lineCount = content.split("\n").length;
@@ -138,10 +110,7 @@ function runFormatValidation() {
           `SKILL.md is ${lineCount} lines (>${MAX_SKILL_LINES_WITHOUT_REFS}) without references/ (known — tracked)`,
         );
       } else {
-        r.error(
-          skillName,
-          `SKILL.md is ${lineCount} lines (>${MAX_SKILL_LINES_WITHOUT_REFS}) without references/`,
-        );
+        r.error(skillName, `SKILL.md is ${lineCount} lines (>${MAX_SKILL_LINES_WITHOUT_REFS}) without references/`);
       }
     } else if (lineCount > MAX_SKILL_LINES_WITHOUT_REFS && hasRefs) {
       r.warn(
@@ -203,33 +172,26 @@ function runReferencesValidation() {
           path.join(refsDir, refFile),
           `${refRelPath} is not referenced by any agent, skill, or instruction`,
         );
-        console.log(
-          `  Fix: Add a loading directive in ${skill}/SKILL.md or remove the orphaned file.`,
-        );
+        console.log(`  Fix: Add a loading directive in ${skill}/SKILL.md or remove the orphaned file.`);
       }
     }
   }
 
   const instrRefsDir = path.join(INSTRUCTIONS_DIR, "references");
   if (fs.existsSync(instrRefsDir)) {
-    const instrRefFiles = fs
-      .readdirSync(instrRefsDir)
-      .filter((f) => f.endsWith(".md"));
+    const instrRefFiles = fs.readdirSync(instrRefsDir).filter((f) => f.endsWith(".md"));
 
     for (const refFile of instrRefFiles) {
       r.tick();
       const refName = refFile.replace(/\.md$/, "");
-      const isReferenced =
-        allContent.includes(refFile) || allContent.includes(refName);
+      const isReferenced = allContent.includes(refFile) || allContent.includes(refName);
 
       if (!isReferenced) {
         r.warnAnnotation(
           path.join(instrRefsDir, refFile),
           `instructions/references/${refFile} is not referenced anywhere`,
         );
-        console.log(
-          `  Fix: Add a reference in the parent instruction file or remove the orphaned file.`,
-        );
+        console.log(`  Fix: Add a reference in the parent instruction file or remove the orphaned file.`);
       }
     }
   }
@@ -285,20 +247,7 @@ function runStaleReferenceDetection() {
     if (!stat.isFile()) return;
 
     const ext = path.extname(filePath);
-    const textExts = [
-      ".md",
-      ".json",
-      ".jsonc",
-      ".mjs",
-      ".js",
-      ".ts",
-      ".yml",
-      ".yaml",
-      ".sh",
-      ".ps1",
-      ".py",
-      ".txt",
-    ];
+    const textExts = [".md", ".json", ".jsonc", ".mjs", ".js", ".ts", ".yml", ".yaml", ".sh", ".ps1", ".py", ".txt"];
     if (!textExts.includes(ext)) return;
 
     const content = fs.readFileSync(filePath, "utf-8");
@@ -349,6 +298,78 @@ function runStaleReferenceDetection() {
 }
 
 // ============================================================================
+// Part 4: Cross-Skill Frontmatter Reference Validation
+// ============================================================================
+// Detects `(use foo)` redirects in SKILL.md frontmatter descriptions where
+// `foo` refers to a skill that does not exist in `.github/skills/`. This
+// covers the failure mode that retired-skill detection misses: descriptions
+// pointing at skills that were never created or were archived.
+
+function runCrossSkillReferenceValidation() {
+  const r = new Reporter("Cross-Skill Frontmatter Reference Validator");
+  r.header();
+
+  const skills = getSkills();
+  const validSkillNames = new Set(skills.keys());
+
+  // Agents and subagents (under `.github/agents/` and `.github/agents/_subagents/`)
+  // are valid redirect targets even though they aren't skills. Discover them
+  // so the allowlist stays in sync with the filesystem.
+  const validAgentNames = new Set();
+  const agentsDir = path.join(".github", "agents");
+  if (fs.existsSync(agentsDir)) {
+    for (const entry of fs.readdirSync(agentsDir, { withFileTypes: true })) {
+      if (entry.isFile() && entry.name.endsWith(".agent.md")) {
+        validAgentNames.add(entry.name.replace(/\.agent\.md$/, ""));
+      } else if (entry.isDirectory() && entry.name === "_subagents") {
+        for (const sub of fs.readdirSync(path.join(agentsDir, "_subagents"))) {
+          if (sub.endsWith(".agent.md")) {
+            validAgentNames.add(sub.replace(/\.agent\.md$/, ""));
+          }
+        }
+      }
+    }
+  }
+
+  // Allowlist: tools/MCPs that show up in `(use ...)` redirects but aren't
+  // skills or agents. Keep this small and explicit. Entries ending in " MCP"
+  // are validated against this set rather than blanket-accepted so typos
+  // (e.g. "azure-pricng MCP") are still flagged.
+  const NON_SKILL_REDIRECTS = new Set(["azure-pricing MCP", "drawio", "mermaid", "python-diagrams"]);
+
+  // Allow digit-prefixed agent ids like "03-architect" or "04g-governance"
+  // (leading [a-z0-9]) and optionally a trailing " MCP" suffix.
+  const REDIRECT_PATTERN = /\(use\s+([a-z0-9][a-z0-9-]*(?:\s+MCP)?)\)/gi;
+
+  for (const [skillName, skill] of skills) {
+    r.tick();
+    if (!skill.frontmatter?.description) continue;
+
+    const desc = skill.frontmatter.description;
+    let match;
+    REDIRECT_PATTERN.lastIndex = 0;
+    while ((match = REDIRECT_PATTERN.exec(desc)) !== null) {
+      const target = match[1].trim();
+      if (NON_SKILL_REDIRECTS.has(target)) continue;
+      if (target === skillName) continue;
+      if (validSkillNames.has(target) || validAgentNames.has(target)) continue;
+      r.error(
+        skillName,
+        `frontmatter description references missing skill/agent "${target}" — fix the (use ${target}) redirect`,
+      );
+    }
+  }
+
+  r.summary();
+  if (r.errors > 0) {
+    overallFailed = true;
+    console.log("❌ Cross-skill frontmatter reference validation FAILED\n");
+  } else {
+    console.log("✅ Cross-skill frontmatter reference validation passed\n");
+  }
+}
+
+// ============================================================================
 // Main entry point
 // ============================================================================
 
@@ -363,6 +384,9 @@ function main() {
 
   console.log("═══ Part 3: Stale Skill References ═══");
   runStaleReferenceDetection();
+
+  console.log("═══ Part 4: Cross-Skill Frontmatter References ═══");
+  runCrossSkillReferenceValidation();
 
   if (overallFailed) {
     console.log("❌ Skill validation FAILED");
