@@ -183,11 +183,8 @@ preserve state for potential session breaks.
 ## Subagent Budget
 
 The orchestrator does **not** invoke step agents or the challenger via
-`#runSubagent`. Every transition is delivered as a handoff button so the
-target agent runs at its own model tier. There is therefore no per-turn
-subagent budget for the orchestrator itself — step agents own their own
-subagent calls (cost-estimate, validate, what-if/plan, challenger) and run
-those at their own tiers.
+`#runSubagent`. See [Subagent Tier Rule](#subagent-tier-rule) below
+for the full rationale and the per-tier ceiling.
 
 ## Subagent Tier Rule
 
@@ -252,19 +249,19 @@ after Step 1 completes.
 
 ## Read Skills (After Project Name, Before Delegating)
 
-**After confirming the project name**, read the four skill files below
-**in a single parallel `read_file` batch** (one tool call, four files).
-**Never re-read** a file that is already in your conversation history
-(see [Context Hygiene](../instructions/agent-authoring.instructions.md#context-hygiene-token-efficiency)).
+After confirming the project name, read these four skill files in a
+**single parallel `read_file` batch** (one tool call, four files).
+Never re-read a file already in your conversation history
+(see [Context Hygiene](../instructions/agent-authoring.instructions.md#context-hygiene-token-efficiency)):
 
-1. **Read** `.github/skills/golden-principles/SKILL.md` — foundational quality principles for all agents
-2. **Read** `.github/skills/azure-defaults/SKILL.md` — regions, tags
-3. **Read** `.github/skills/azure-artifacts/SKILL.md` — artifact file naming and structure overview
-4. **Read** `.github/skills/workflow-engine/SKILL.md` — DAG model, node types, edge conditions
+1. `.github/skills/golden-principles/SKILL.md` — quality principles
+2. `.github/skills/azure-defaults/SKILL.md` — regions, tags
+3. `.github/skills/azure-artifacts/SKILL.md` — artifact structure
+4. `.github/skills/workflow-engine/SKILL.md` — DAG model
 
-After reading skills, extract key facts (region, tags, naming, security baseline,
-complexity, AVM-first) into the `## Skill Context` section of `00-handoff.md`.
-Step agents can use this pre-extracted context instead of re-reading skill files.
+Extract key facts (region, tags, naming, security baseline, complexity,
+AVM-first) into the `## Skill Context` section of `00-handoff.md` so
+step agents reuse that pre-extracted context instead of re-reading.
 
 ### Graph-Based Step Routing
 
@@ -385,6 +382,19 @@ for complex projects)"_ — is **removed**. Multi-pass review is enabled
 exclusively via `decisions.review_depth = "deep"` (set once at project
 boot) or via a direct `10-Challenger` invocation by the user.
 
+### Challenger-invocation ceiling (Plan 01 Phase 2b)
+
+Hard per-step ceiling: **default = 2**, **deep = 4** passes. Counter:
+`decisions.challenger_invocations_<step>` — increment before each
+Challenger handoff. When the ceiling would be exceeded, emit
+`vscode_askQuestions` with these labels verbatim:
+**"Accept findings"**, **"Override ceiling"**, **"Abort step"**. Persist
+via
+`apex-recall decide <project> --key challenger_decision_<step> --value <accept|override|abort> --json`
+(override flag: `challenger_override_<step>`). Keys registered in
+[`decision-keys.md`](../../tools/apex-recall/docs/decision-keys.md).
+Lint: `npm run validate:review-ceiling`.
+
 ## DO / DON'T
 
 | DO                                                                   | DON'T                                                             |
@@ -400,7 +410,9 @@ boot) or via a direct `10-Challenger` invocation by the user.
 | Create `agent-output/{project}/` + init session via `apex-recall`    | Include raw subagent dumps                                        |
 | Ensure `README.md` exists (Requirements agent creates it)            | Combine multiple steps without approval between them              |
 | Write `00-handoff.md` at EVERY gate before presenting                | Skip `00-handoff.md` or session state updates                     |
-| Update session state via `apex-recall` at EVERY gate                 |                                                                   |
+| Update session state via `apex-recall` at EVERY gate                 | Continue past a gate in the same chat — every gate ends with `/clear` |
+| End every accepted-gate message with the verbatim `/clear` line      | Paraphrase the resume line — validator greps it exactly           |
+| Emit `/clear` between challenger passes when more than 1 pass runs   | Chain multi-pass challenger reviews in one chat — span counter blows the ≤ 50 ceiling |
 
 ### Checkpoint Fallback (Safety Net)
 
@@ -436,16 +448,12 @@ lessons narrative as a completion artifact.
 
 ## Approval Gates, Handoff Document & Delegation Rules
 
-**Read** `.github/skills/workflow-engine/references/orchestrator-handoff-guide.digest.md` for:
+**Read** `.github/skills/workflow-engine/references/orchestrator-handoff-guide.md` for:
 
 - IaC routing logic (Bicep vs Terraform agent mapping)
 - Complexity routing (review pass counts)
 - Gate template skeleton + which gates need a SESSION BREAK
 - Step delegation rules (interactive vs autonomous steps)
-
-If the digest is insufficient (e.g., authoring a new gate template, or
-debugging a routing decision the digest doesn't explain), escalate to
-the full `orchestrator-handoff-guide.md`.
 
 **Key rules** (always enforced regardless of reference file):
 
@@ -469,7 +477,10 @@ All steps below happen in **one turn** — do NOT end your turn between them.
 3. **Check for existing artifacts** in `agent-output/{project-name}/`.
    If `01-requirements.md` or other step artifacts already exist, follow
    [Resuming a Project](#resuming-a-project) instead of starting fresh.
-4. Create `agent-output/{project-name}/` and initialize session state:
+4. Create `agent-output/{project-name}/` via `create_directory` (not
+   via `create_file` of a placeholder — that causes ENOENT errors on
+   downstream artifact reads, per Plan 01 Phase 2c). Then initialize
+   session state:
    `apex-recall init {project-name} --json`
    Then set project-specific fields:
    `apex-recall decide {project-name} --key region --value swedencentral --json`
@@ -560,12 +571,66 @@ Orchestrator with the project name — no special resume prompt needed.
 
 ## Session Break Protocol
 
-At Gates 2 and 3, recommend starting a fresh chat session to prevent context exhaustion:
+Every accepted Gate (1, 2, 2.5, 3, 4, 5) ends with a mandatory
+`/clear`-handoff — the headline token-reduction mechanism. Full
+contract:
+[`compression-templates.md#gate-boundary-clear-handoff-contract`](../skills/context-management/references/compression-templates.md#gate-boundary-clear-handoff-contract).
 
-1. Write `00-handoff.md` and update session state via `apex-recall` (as always)
-2. Present the gate with a session break recommendation (see gate templates above)
-3. If the user agrees: tell them to open a new chat and invoke `@01-Orchestrator` with the project name
-4. If the user prefers to continue: proceed in same session (warn context may degrade)
+### Gate-acceptance procedure (verbatim, every gate)
 
-At resumption, the Orchestrator runs `apex-recall show <project> --json` and restores full context
-from artifact paths — no information is lost. See [Resuming a Project](#resuming-a-project).
+1. Write `00-handoff.md` and update session state.
+2. Persist completion state **before** emitting the handoff line — the
+   `/clear` destroys anything not in `apex-recall`:
+
+   ```bash
+   apex-recall checkpoint <project> <step> after_gate_<N> --json
+   apex-recall complete-step <project> <step> --json  # if not already done
+   ```
+
+3. Present gate summary (artifact paths + Challenger findings + next-step handoff button).
+4. End the message with this line, **verbatim**, on its own final line:
+
+   ```text
+   Run `/clear` then reply `@01-Orchestrator resume <project>` to continue Step N+1.
+   ```
+
+5. **Stop.** Do not continue Step N+1 in the same chat — the contract is non-negotiable.
+
+### Resume path
+
+New chat with `@01-Orchestrator resume <project>`: first tool call is
+`apex-recall show <project> --json`. Read `00-handoff.md` only if a
+gate-specific artifact path is needed; do not re-read completed-step
+artifacts unless the user asks. Lint:
+`npm run validate:orchestrator-handoff` greps for the verbatim line.
+
+### Mid-step compaction (multi-pass challenger reviews)
+
+When a challenger review requires more than one pass (`review_depth =
+"deep"`, or revision passes triggered by accepted findings),
+**every pass after Pass 1** must be preceded by a `/clear` handoff —
+not just the final gate. Without this, the inter-`/clear` chat-span
+counter climbs past the smoke-verify ceiling (≤ 50) and Step-2 input
+tokens blow past 110 k.
+
+Procedure between Pass N and Pass N+1:
+
+1. Persist Pass-N findings + decisions:
+
+   ```bash
+   apex-recall checkpoint <project> <step> after_challenger_pass_<N> --json
+   ```
+
+2. Apply accepted fixes to the artifact (still in current chat — fixes
+   are small targeted edits).
+3. End the message with this line, **verbatim**, on its own final line:
+
+   ```text
+   Run `/clear` then reply `@01-Orchestrator resume <project>` to continue challenger Pass <N+1>.
+   ```
+
+4. **Stop.** The next pass runs in a fresh chat, scoped to the
+   revised artifact only.
+
+Single-pass `comprehensive` reviews (the default) do not trigger this
+rule — they go straight to the gate-boundary `/clear`.

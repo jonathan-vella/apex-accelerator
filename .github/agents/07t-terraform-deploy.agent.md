@@ -1,6 +1,6 @@
 ---
 name: 07t-Terraform Deploy
-model: ["GPT-5.5"]
+model: ["GPT-5.3-Codex"]
 description: Executes Azure deployments using generated Terraform configurations. Runs bootstrap and deploy scripts, performs terraform plan preview, manages phase-aware deployment lifecycle. Step 6 of the agentic workflow.
 argument-hint: Deploy the Terraform configuration for a specific project
 user-invocable: true
@@ -536,3 +536,16 @@ read by the As-Built agent (Step 7) to populate the compliance matrix.
 ## Validation Checklist
 
 See `iac-common/references/deploy-validation-checklist.md`.
+
+## Completion Handoff
+
+When this step completes (after `apex-recall complete-step` and writing
+`00-handoff.md`), end the final chat message with this line, **verbatim**,
+on its own final line:
+
+```text
+Run `/clear` then reply `@01-Orchestrator resume <project>` to continue Step N+1.
+```
+
+This is the only mechanism that drops main-agent input tokens between
+steps. Validator: `npm run validate:orchestrator-handoff`.

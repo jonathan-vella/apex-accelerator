@@ -1,6 +1,6 @@
 ---
 name: 11-Context Optimizer
-model: ["Claude Opus 4.7"]
+model: ["Claude Sonnet 4.6"]
 description: "Analyzes Copilot Chat debug logs to audit context-window utilization across agents. Identifies bloated prompts, redundant file reads, missing hand-off points, and wasted tokens. Produces actionable optimization reports. Recommendations only — never edits agents."
 user-invocable: true
 agents: ["*"]
@@ -143,7 +143,20 @@ Store the label for Phase 6.
      --output /tmp/context-audit.json
    ```
 
-3. Present session summary (total requests, models used, time range)
+3. For exported OTel debug logs (`logs/*.json` / `tmp/agent-debug-log-*.json`),
+   run the deeper profiler to extract token totals, per-model splits,
+   askQuestions counts, subagent wall-time, duplicate file reads, and
+   compliance warnings:
+
+   ```bash
+   npm run profile:debug-log -- logs/<session>.json
+   npm run profile:debug-log -- logs/<session>.json --json > /tmp/profile.json
+   ```
+
+   Full workflow + thresholds:
+   [`.github/skills/context-management/references/log-profiling.md`](../skills/context-management/references/log-profiling.md).
+
+4. Present session summary (total requests, models used, time range)
 
 **Checkpoint**: Confirm scope before deep analysis.
 
@@ -159,6 +172,7 @@ For each session, analyze request patterns:
 | Model distribution     | % Opus vs Sonnet vs GPT-5.5 vs GPT-5.3-Codex    |
 | Request type breakdown | editAgent vs title vs progressMessages          |
 | Burst patterns         | Rapid sequential calls (< 2s gap = likely loop) |
+| askQuestions per phase | Count from profiler; flag any single phase > 3 (Plan 01 Phase 4 batching) |
 
 Estimate token cost from latency (rough heuristic — longer turns correlate
 with larger context windows, especially for streaming responses).

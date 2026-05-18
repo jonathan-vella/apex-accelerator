@@ -1,7 +1,7 @@
 ---
 name: 05-IaC Planner
 description: "Expert Azure IaC planner that creates comprehensive machine-readable implementation plans. Consults Microsoft documentation, evaluates Azure Verified Modules (Bicep or Terraform), designs full infrastructure solutions with architecture diagrams. Routes by decisions.iac_tool."
-model: ["Claude Opus 4.7"]
+model: ["Claude Sonnet 4.6"]
 user-invocable: true
 agents: ["challenger-review-subagent"]
 tools:
@@ -116,6 +116,33 @@ Always specify Azure Storage Account backend only.
 9. **IaC-specific skill** (read on-demand during Phase 2):
    - Bicep → `.github/skills/azure-bicep-patterns/SKILL.md` — hub-spoke, PE, diagnostics, module composition
    - Terraform → `.github/skills/terraform-patterns/SKILL.md` — hub-spoke, PE, diagnostics, AVM-TF patterns
+
+### Required IaC Authoring References (mandate-load, every project)
+
+These four references encode rules that **every** IaC plan must satisfy.
+Reading them up front prevents the most common Phase 4.3 challenger
+findings (cost monitoring shape, policy property mapping, security
+baseline, AVM pin freshness). Each reference adds ≈2k tokens; total
+overhead ≈8k vs. ≈400k tokens consumed by avoidable challenger passes
+when they are skipped (telemetry: this finding came out of post-run
+analysis of a Step-4 trace where 5 of 8 challenger findings duplicated
+rules already documented in these files).
+
+1. **Read** [`.github/instructions/references/iac-cost-monitoring.md`](../instructions/references/iac-cost-monitoring.md)
+   — budget + Action Group + anomaly InsightAlert shape (incl. ≤25-char
+   `displayName`, subscription-scope view, `targetScope = 'subscription'`,
+   `notificationEmail` + `notification.to`).
+2. **Read** [`.github/instructions/references/iac-policy-compliance.md`](../instructions/references/iac-policy-compliance.md)
+   — Azure Policy property map (`publicNetworkAccess`, `minimumTlsVersion`,
+   `azureAdOnlyAuthentication`, etc.) cross-referenced against the
+   discovered `04-governance-constraints.json` Deny set.
+3. **Read** [`.github/instructions/references/iac-security-baseline.md`](../instructions/references/iac-security-baseline.md)
+   — non-negotiable baseline (HTTPS-only, TLS 1.2, no public blob,
+   Managed Identity, Entra-only SQL, **diagnostic settings on every
+   resource — not just App Service**).
+4. **Read** [`.github/skills/iac-common/references/avm-version-freeze-gate.md`](../skills/iac-common/references/avm-version-freeze-gate.md)
+   — Phase 4.4 freeze gate; resolve every AVM pin to MCR-latest BEFORE
+   writing the plan, not after the challenger catches it.
 
 ## DO / DON'T
 
@@ -489,16 +516,30 @@ Then run the **two-stage gate** documented in
 [`iac-common/references/iac-planner-approval-gate.md`](../skills/iac-common/references/iac-planner-approval-gate.md):
 
 - **Stage 1** auto-applies every `must_fix` (mandatory; 2-iteration cap;
-  unattended mode defers).
+  unattended mode defers). **Batch protocol**: apply **all** `must_fix`
+  edits in a single multi-replace pass, **then** recompute the plan
+  SHA-256 once, **then** run `validate:iac-contract` +
+  `validate:iac-contract-consistency` + `validate:plan-avm-pins` once.
+  Do NOT validate between individual patches — each round of
+  edit→sha→validate adds ≈4k tokens of terminal noise to context. Only
+  after a full batch fails do you split into a second batch.
 - **Stage 2** runs the Per-Finding Decision Protocol over remaining
-  `should_fix` items only.
+  `should_fix` items only. **Batch panel rule**: emit a **single**
+  `askQuestions` call carrying every in-scope `should_fix` (cap 12 per
+  protocol section 2f) — never one panel per finding. Each question
+  carries Accept / Skip options with the recommended default marked
+  per the WAF-pillar default matrix in
+  [`iac-planner-approval-gate.md`](../skills/iac-common/references/iac-planner-approval-gate.md).
 - **Stage 3** presents the final proceed gate + handoff to 06b/06t.
 
 **Plan-status attestation (MANDATORY)** — before completing the step,
 verify (a) every challenger pass returned `APPROVED`, (b) the Governance
 Compliance Matrix is complete (every Deny has a row, no `❌ unsatisfiable`),
 (c) the Code-Generation Contract section is present for every resource,
-(d) AVM freeze gate passes (`validate:avm-versions:freeze`), and (e) every
+(d) AVM freeze gate passes — **both** `validate:avm-versions:freeze`
+(contract JSON) AND `validate:plan-avm-pins` (every `avm:` line in the
+plan markdown, including the 17+ task YAML blocks the contract validator
+does not see), and (e) every
 required Step 3.5/Step 4 artifact + diagram `.png` exists per
 [`iac-common/references/step4-required-artifacts.md`](../skills/iac-common/references/step4-required-artifacts.md).
 Then emit:
@@ -570,3 +611,16 @@ connection string) → 4 App Service (SQL + Key Vault + VNet integration).
 Output: YAML task specs in this order with explicit `depends_on`.
 Terraform uses `var.deployment_phase` + `count`; Bicep uses `dependsOn`.
 </example>
+
+## Completion Handoff
+
+When this step completes (after `apex-recall complete-step` and writing
+`00-handoff.md`), end the final chat message with this line, **verbatim**,
+on its own final line:
+
+```text
+Run `/clear` then reply `@01-Orchestrator resume <project>` to continue Step N+1.
+```
+
+This is the only mechanism that drops main-agent input tokens between
+steps. Validator: `npm run validate:orchestrator-handoff`.

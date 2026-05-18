@@ -1,6 +1,6 @@
 ---
 name: 07b-Bicep Deploy
-model: ["GPT-5.5"]
+model: ["GPT-5.3-Codex"]
 description: "Executes Azure deployments using generated Bicep templates. Uses azd provision (default; deploy.ps1 retained only for legacy projects without azure.yaml). Performs what-if analysis and manages deployment lifecycle. Step 6 of the agentic workflow."
 argument-hint: Deploy the Bicep templates for a specific project
 user-invocable: true
@@ -545,3 +545,16 @@ read by the As-Built agent (Step 7) to populate the compliance matrix.
 ## Validation Checklist
 
 See `iac-common/references/deploy-validation-checklist.md`.
+
+## Completion Handoff
+
+When this step completes (after `apex-recall complete-step` and writing
+`00-handoff.md`), end the final chat message with this line, **verbatim**,
+on its own final line:
+
+```text
+Run `/clear` then reply `@01-Orchestrator resume <project>` to continue Step N+1.
+```
+
+This is the only mechanism that drops main-agent input tokens between
+steps. Validator: `npm run validate:orchestrator-handoff`.
