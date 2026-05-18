@@ -36,7 +36,7 @@ the [upstream APEX project](https://github.com/jonathan-vella/azure-agentic-infr
 | **VS Code**            | Latest stable release                                |
 | **GitHub Copilot**     | Active license (Individual, Business, or Enterprise) |
 | **Docker Desktop**     | For the dev container (or GitHub Codespaces)         |
-| **Azure subscription** | Optional for Steps 1-5; required for Step 6 (Deploy) |
+| **Azure subscription** | Required (Owner or Contributor on the target subscription) |
 
 ---
 
@@ -100,7 +100,7 @@ git diff
 git add -A && git commit -m "chore: initialize from template"
 ```
 
-### 4. Set Up Azure (Optional)
+### 4. Set Up Azure
 
 Run the setup wizard to configure Azure OIDC authentication, RBAC roles, and GitHub
 secrets/variables — all in one command:
@@ -118,7 +118,32 @@ It is idempotent — safe to re-run.
 See the [Azure Setup documentation](https://jonathan-vella.github.io/azure-agentic-infraops/getting-started/azure-setup/)
 for headless mode, manual setup steps, and troubleshooting.
 
-> **Skip this** if you are just exploring the agent workflow without deploying to Azure.
+### 5. Run the Maintenance Workflows
+
+After Azure setup completes, trigger the two scheduled maintenance workflows once
+so your repository has a fresh baseline before you start working. Both run weekly
+on Mondays after this initial seed.
+
+```bash
+gh workflow run "Weekly Maintenance"
+gh workflow run "Governance Policy Baseline"
+```
+
+| Workflow                       | Purpose                                                                                                                                              | Schedule                |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| **Weekly Maintenance**         | Refreshes the AVM module index, tracks Azure service deprecations, runs the quarterly docs/orphan audit, validates Draw.io tooling, and link-checks docs. | Mondays 06:00 UTC       |
+| **Governance Policy Baseline** | Collects effective Azure Policy assignments (including management-group inheritance) from your subscription into `agent-output/_baseline/` so the IaC planner consumes real governance constraints. Requires step 4 to be complete. | Mondays 05:00 UTC       |
+
+Verify both runs succeeded before continuing:
+
+```bash
+gh run list --workflow "Weekly Maintenance" --limit 1
+gh run list --workflow "Governance Policy Baseline" --limit 1
+```
+
+Each run may open a pull request when it detects drift (new AVM module versions,
+policy changes, deprecated services). Review and merge those PRs as they appear —
+they are never auto-merged.
 
 ---
 
