@@ -49,6 +49,250 @@ authentication mode changes, or identity removal.
 
 ---
 
+## Schema Drift in Pinned AVM Versions (mandatory pre-author check)
+
+The single biggest cause of repeated `bicep build` failures in Step 5 is
+**param-shape drift between AVM minor versions**. Param names you "know" from
+documentation, prior projects, or training data are frequently wrong for the
+exact pinned version. The plan's `04-iac-contract.json` pins the version; the
+schema inside the cached MCR tarball is the only source of truth.
+
+### Mandatory pre-author rule
+
+For every AVM module pinned in `04-iac-contract.json`, before writing the
+module call, **inspect the compiled JSON schema** in the local MCR cache:
+
+```bash
+# Cache path follows: ~/.bicep/br/mcr.microsoft.com/bicep$<module-path-$-encoded>/<version>$/main.json
+python3 - <<'EOF'
+import json, sys
+target = '/home/vscode/.bicep/br/mcr.microsoft.com/bicep$avm$res$<module>/$<version>$/main.json'
+d = json.load(open(target))
+# Top-level params:
+for k, v in d['parameters'].items():
+    print(f"  {k}: type={v.get('type')} nullable={v.get('nullable', False)}")
+# Nested object types:
+for tn, td in d.get('definitions', {}).items():
+    print(f"\n=== {tn} ===")
+    for k, v in td.get('properties', {}).items():
+        print(f"  {k}: {json.dumps(v)[:120]}")
+EOF
+```
+
+If the cache file does not exist, run a throwaway `bicep build` of a one-line
+module call to force MCR to populate it, then re-inspect.
+
+### Catalogue of drift we have hit (extend on every new occurrence)
+
+| Module | Pinned version | Wrong (from docs/older versions) | Correct |
+|---|---|---|---|
+| `avm/res/key-vault/vault` | `0.13.3` | `enabledForDeployment` / `enabledForTemplateDeployment` / `enabledForDiskEncryption` | `enableVaultForDeployment` / `enableVaultForTemplateDeployment` / `enableVaultForDiskEncryption` |
+| `avm/res/web/site` | `0.23.0` | `virtualNetworkSubnetId` | `virtualNetworkSubnetResourceId` |
+| `avm/res/web/site` | `0.23.0` | `appSettingsKeyValuePairs: { ... }` | `configs: [{ name: 'appsettings', properties: { ... } }]` |
+| `avm/res/web/site` | `0.23.0` | `authSettingV2Configuration: { ... }` on the module | Module has no auth-v2 param — author raw `Microsoft.Web/sites/config@authsettingsV2` child resource (see [Bicep `parent:` BCP120](#bicep-parent-bcp120-static-name-required-on-child-resources) below) |
+| `avm/res/sql/server` | `0.21.2` | `administrators: { ..., azureAdOnlyAuthentication: true }` (missing `principalType`) | Add `principalType: 'User'` (required by AVM schema) |
+| `avm/res/sql/server` | `0.21.2` | `databaseType: { ..., transparentDataEncryption: { state: 'Enabled' } }` | Remove — TDE is enabled by default; not in the AVM `databaseType` schema |
+| `avm/res/sql/server` | `0.21.2` | `databaseType: { ... }` without `availabilityZone` | `availabilityZone` is **required** (allowed values `-1`/`1`/`2`/`3`; use `-1` when zone-redundancy is not needed) |
+| `avm/res/sql/server` | `0.21.2` | Server-level `diagnosticSettings: [ ... ]` on the module | Not a server-level param — wire diagnostics on the database via `databaseType.diagnosticSettings` |
+| `avm/res/operational-insights/workspace` | `0.15.1` | `dailyQuotaGb: 1` (int) | `dailyQuotaGb: '1'` (string; default `'-1'`) |
+| `avm/res/insights/scheduled-query-rule` | `0.6.0` | `criteria: { allOf: [...] }` | `criterias: { allOf: [...] }` (pluralised) |
+| `avm/res/consumption/budget` | `0.3.8` | Nested `notifications`, `budgetCategory`, `timeGrain`, `filters` | Flat structure: `category`, `resetPeriod`, `thresholds: [int, int]`, `thresholdType: 'Actual' \| 'Forecasted'` (one per module instance), `actionGroups`, `contactEmails`, `contactRoles`, `operator`. To cover Actual + Forecasted, deploy **two budget module instances**. `startDate` has a built-in `utcNow()` default — do not pass it. |
+| `avm/res/consumption/budget` | `0.3.8` | Called from an RG-scoped module without `scope:` | Requires `scope: subscription()` on the module call |
+
+### Why what-if and lint don't catch this
+
+`bicep build` catches roughly half of these (missing required props,
+wrong types). The rest only fail during actual deploy or `what-if`. The
+**only deterministic guard** is the pre-author schema inspection above.
+
+### How to avoid in the future
+
+1. **Add a Phase 1 step** to the agent: for each AVM module in the contract,
+   inspect the cached `main.json` and emit a one-line param-shape summary
+   into `04-preflight-check.md`. Authors copy from that summary, not from docs.
+2. **Never copy param names** from older project codebases, training-data
+   defaults, or AVM README files written for a different minor version.
+3. **When a build error fires**, add a new row to the table above before
+   moving on — the next project will hit the same wall.
+
+---
+
+## Bicep Language Constraints (compiler-level, not AVM)
+
+These trip every project the first time. None are AVM-specific.
+
+### `utcNow()` is only valid as a parameter default
+
+```bicep
+// ❌ FAILS — BCP065: utcNow can only be used in parameter default values
+var now = utcNow('yyyy-MM-dd')
+
+// ✅ OK — parameter default
+param scheduleStartDate string = utcNow('yyyy-MM-dd')
+```
+
+Use this when emitting `Microsoft.CostManagement/scheduledActions` or any
+resource that needs a "today" date stamp. For an end-date that does not
+need to be dynamic, hard-code the literal (e.g. `'2027-01-01'`) rather
+than compute it.
+
+### Bicep `parent:` (BCP120) — static name required on child resources
+
+```bicep
+// ❌ FAILS — BCP120: parent property must be calculable at deployment start
+resource existingWebApp 'Microsoft.Web/sites@2023-12-01' existing = {
+  name: webApp.outputs.name   // module output ≠ static
+}
+resource authSettings 'Microsoft.Web/sites/config@2023-12-01' = {
+  parent: existingWebApp
+  name: 'authsettingsV2'
+  properties: { ... }
+}
+
+// ✅ OK — static name, explicit dependsOn for ordering
+resource existingWebApp 'Microsoft.Web/sites@2023-12-01' existing = {
+  name: 'app-web-${projectName}-${env}'   // statically computable from params
+}
+resource authSettings 'Microsoft.Web/sites/config@2023-12-01' = {
+  parent: existingWebApp
+  name: 'authsettingsV2'
+  properties: { ... }
+  dependsOn: [ webAppModule ]   // make ordering explicit since the existing ref is decoupled
+}
+```
+
+This pattern is needed whenever an AVM module does not expose a child-resource
+param (e.g. `Microsoft.Web/sites/config@authsettingsV2` is not in `avm/res/web/site`).
+
+### Subscription-scope sub-modules need `scope:` on the caller
+
+Anomaly-detection alerts (`Microsoft.CostManagement/insights/...`), budgets,
+policy assignments at subscription scope, and management-group resources
+**must** be in modules with `targetScope = 'subscription'`. If called from an
+RG-scoped parent, the parent must add `scope: subscription()`:
+
+```bicep
+module anomalyAlert 'modules/costmonitoring-anomaly.bicep' = {
+  name: 'anomaly'
+  scope: subscription()   // required — module declares targetScope = 'subscription'
+  params: { ... }
+}
+```
+
+This is also why we split `costmonitoring.bicep` (RG-scope: Action Group +
+Budgets) from `costmonitoring-anomaly.bicep` (sub-scope: InsightAlert).
+
+---
+
+## Identity ↔ RBAC Circular Dependency
+
+A frequent Phase 2 (Security) anti-pattern: placing the role assignment **inside**
+`identity.bicep` so the identity module needs the Key Vault / Storage / SQL resource
+ID, while those resource modules need the managed identity `principalId`. The two
+modules end up depending on each other's outputs and the Bicep compiler emits a
+circular dependency error.
+
+### Symptom
+
+```text
+Error BCP073: The output "keyVaultId" cannot be referenced because the module
+"identity" depends on it (BCP176 cyclical dependency).
+```
+
+or (more subtly) `what-if` succeeds because the cycle is across module boundaries,
+but `bicep build` fails at compile time.
+
+### Rule
+
+**RBAC role assignments live in the *target resource's* module**, never in
+`identity.bicep`. The identity module's only job is to create the User Assigned
+Managed Identity and surface its `id`, `principalId`, and `clientId` outputs.
+
+### Correct shape
+
+```bicep
+// identity.bicep — creation-only, no role assignments
+module mi 'br/public:avm/res/managed-identity/user-assigned-identity:0.4.1' = {
+  params: { name: name, location: location, tags: tags }
+}
+output managedIdentityPrincipalId string = mi.outputs.principalId
+```
+
+```bicep
+// keyvault.bicep — RBAC scoped to THIS vault, after the vault exists
+module kv 'br/public:avm/res/key-vault/vault:0.13.3' = { ... }
+
+resource rbacMiKv 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: kv  // explicit; depends_on is implicit via scope
+  name: guid(kv.id, managedIdentityPrincipalId, 'KeyVaultSecretsUser')
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
+    principalId: managedIdentityPrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+```
+
+Same rule applies to Storage Blob Data Contributor, SQL contained users, ACR pull,
+and any other data-plane RBAC: assign it in the resource module after creation.
+
+---
+
+## Runtime Managed Identity ≠ Data-Plane Admin
+
+A dangerous Phase 3 (Data) anti-pattern: using the application's shared User
+Assigned Managed Identity as the **Azure SQL Entra admin** (or Cosmos
+`Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments` admin, or any
+other data-plane admin role). It passes what-if but grants the runtime
+workload full DDL/DML, firewall, and admin-rotation rights over the data plane.
+
+### Rule
+
+- **Admin principal** = dedicated Entra security group or deployment principal
+  (not the app MI), passed in as `sqlEntraAdminObjectId` + `sqlEntraAdminLogin`.
+- **Runtime identity** = the app MI, added as a **contained database user** with
+  least-privilege roles after the database exists.
+
+### Correct shape (SQL)
+
+```bicep
+// database.bicep — dedicated admin, NOT the app MI
+module sql 'br/public:avm/res/sql/server:0.21.2' = {
+  params: {
+    administrators: {
+      administratorType: 'ActiveDirectory'
+      login: sqlEntraAdminLogin         // param
+      sid: sqlEntraAdminObjectId        // param
+      tenantId: tenant().tenantId
+      azureAdOnlyAuthentication: true
+    }
+  }
+}
+```
+
+Then a **post-deploy** step (deployment script, az CLI, or pipeline task) runs
+T-SQL against the database to grant the app MI least-privilege access:
+
+```sql
+CREATE USER [id-{project}-{env}] FROM EXTERNAL PROVIDER;
+ALTER ROLE db_datareader ADD MEMBER [id-{project}-{env}];
+ALTER ROLE db_datawriter ADD MEMBER [id-{project}-{env}];
+GRANT EXECUTE ON SCHEMA::dbo TO [id-{project}-{env}];
+```
+
+This step cannot be expressed in Bicep before the DB exists — record it in the
+`04-implementation-plan.md` post-deploy section and in the
+`06-deployment-summary.md` operations list.
+
+### Why this matters
+
+If the runtime MI is Entra admin, a compromised app principal can drop tables,
+rotate the SQL Entra admin, and (with `azureAdOnlyAuthentication: true`) lock
+out human operators. Splitting admin from runtime preserves a clean break-glass
+path via the dedicated admin group.
+
+---
+
 ## SKU-Default Mismatch (Premium-Only Properties on Lower SKUs)
 
 Many AVM modules ship with parameter defaults shaped for the **Premium** tier and
@@ -145,6 +389,138 @@ the compiled ARM contains any of these Premium-only registry properties:
 
 The same pattern applies to other AVM modules with SKU-gated properties — extend
 the check per resource family as new cases are discovered.
+
+---
+
+## Log Analytics Ingestion-Cap Alerts — KQL Column Safety
+
+A common Phase 1 (Observability) anti-pattern: authoring an
+ingestion-cap `Microsoft.Insights/scheduledQueryRules` whose KQL body
+references columns from the **wrong** Log Analytics table. The
+template builds, lints, and `what-if`-validates cleanly. Apply then
+fails at the resource provider with:
+
+```text
+BadRequest: 'where' operator: Failed to resolve column or scalar
+expression named 'OperationName'
+```
+
+(also seen for `Message`). The deployment is left in a partial state.
+
+### Rule
+
+For Log Analytics **ingestion / workspace meta** alerts (daily-cap
+warnings at 70/90/100%), query the workspace's own meta-table
+`_LogOperation` — never `AzureActivity`, `AzureDiagnostics`, or any
+data-plane table that happens to expose `OperationName` or `Message`
+for unrelated reasons.
+
+### Correct shape
+
+```bicep
+module la 'br/public:avm/res/operational-insights/workspace:<latest>' = {
+  // ...
+}
+
+// Each cap alert (70% / 90% / 100%) uses the same KQL skeleton
+var workspaceResourceId = la.outputs.resourceId
+var capQuery = '_LogOperation | where Category == "Ingestion" | where _ResourceId =~ "${workspaceResourceId}" | where TimeGenerated > ago(1d) | summarize Count = count()'
+
+module capAlert70 'br/public:avm/res/insights/scheduled-query-rule:<latest>' = {
+  params: {
+    name: 'sqr-la-cap-70'
+    criterias: {
+      allOf: [
+        {
+          query: capQuery
+          threshold: <70%-of-cap>
+          operator: 'GreaterThan'
+        }
+      ]
+    }
+    scopes: [ workspaceResourceId ]
+  }
+}
+```
+
+### Why build + what-if don't catch it
+
+- `bicep build` only validates the resource shape; the KQL body is an
+  opaque string.
+- `bicep lint` does not parse KQL.
+- `az deployment ... what-if` evaluates ARM-level idempotency; the
+  Log Analytics query parser only runs at create time.
+
+### Deterministic guard
+
+For every `Microsoft.Insights/scheduledQueryRules` resource in the
+rendered template, the 06b validator + 07b deploy agent must grep the
+KQL body for:
+
+| Token           | Allowed table(s)                                            | Action if mismatched                       |
+| --------------- | ----------------------------------------------------------- | ------------------------------------------ |
+| `OperationName` | `AzureActivity`, `AzureDiagnostics` (some resource types)   | Reject when KQL targets `_LogOperation`    |
+| `Message`       | `AppTraces`, `AppExceptions`, `Syslog`, `Event`             | Reject when KQL targets `_LogOperation`    |
+| `_LogOperation` | Workspace meta (`Operation`, `Category`, `Detail`)          | Allowed columns only — see Microsoft docs  |
+
+The deploy-side preflight is captured in
+[`deploy-validation-checklist.md` § KQL alert queries](../../iac-common/references/deploy-validation-checklist.md#kql-alert-queries-reference-valid-columns).
+
+---
+
+## SQL Entra Admin Object ID Resolution
+
+A frequent Phase 3 (Data) deploy-time failure mode:
+`Microsoft.Sql/servers.administrators.sid` is bound to a parameter
+(`sqlEntraAdminObjectId`) that Step 5 CodeGen left as a placeholder
+GUID, an empty string, or a stale ID copied from another project. The
+deployment fails at the SQL nested deployment with:
+
+```text
+InvalidExternalAdministratorSid: The provided ID '<value>' is not a
+valid Microsoft Entra ID.
+```
+
+### Rule
+
+`sqlEntraAdminObjectId` (and any analogous `*EntraAdminObjectId` /
+`*PrincipalId` param) MUST be resolved to a live Entra object ID at
+deploy time — never at code-gen time. CodeGen declares it as a
+required input in `04-environment-manifest.json` (shape:
+`entra-object-id`); it must not be baked into the bicepparam file.
+
+### Resolution recipes
+
+```bash
+# Deployer (works in dev and CI signed-in contexts)
+az ad signed-in-user show --query id -o tsv
+
+# Specific user by UPN
+az ad user show --id alice@contoso.com --query id -o tsv
+
+# Security group by display name
+az ad group show --group "FreshConnect SQL Admins" --query id -o tsv
+
+# Write back into the azd environment so subsequent deploys reuse it
+azd env set SQL_ADMIN_OBJECT_ID <resolved-guid>
+```
+
+### Why this lives at deploy time, not code-gen time
+
+- The signed-in deployer changes between developer machines and CI
+  service principals; the right SID is environment-specific.
+- Hard-coding a GUID in `04-environment-manifest.json` would tie the
+  IaC tree to one operator and fail other deployers fast.
+- Step 5 CodeGen has no Entra read permission by contract; only the
+  deploy agent runs in the human's CLI context.
+
+### Deterministic guard
+
+The deploy preflight (07b Phase 1.5) MUST call `az ad ... show` for
+every param flagged as `entra-object-id` in
+`04-environment-manifest.json` and fail-closed on empty / non-GUID
+responses. See
+[`deploy-validation-checklist.md` § Entra principal object IDs](../../iac-common/references/deploy-validation-checklist.md#entra-principal-object-ids-are-real).
 
 ---
 

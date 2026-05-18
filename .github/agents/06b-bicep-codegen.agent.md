@@ -5,21 +5,7 @@ model: ["Claude Sonnet 4.6"]
 user-invocable: true
 agents: ["bicep-validate-subagent", "challenger-review-subagent"]
 tools:
-  [
-    vscode,
-    execute,
-    read,
-    agent,
-    browser,
-    edit,
-    search,
-    web,
-    "azure-mcp/*",
-    "bicep/*",
-    todo,
-    vscode.mermaid-chat-features/renderMermaidDiagram,
-    ms-azuretools.vscode-azureresourcegroups/azureActivityLog,
-  ]
+  [vscode/extensions, vscode/askQuestions, vscode/installExtension, vscode/memory, vscode/newWorkspace, vscode/resolveMemoryFileUri, vscode/runCommand, vscode/vscodeAPI, vscode/toolSearch, execute/getTerminalOutput, execute/killTerminal, execute/sendToTerminal, execute/createAndRunTask, execute/runTests, execute/runNotebookCell, execute/executionSubagent, execute/runInTerminal, read/terminalSelection, read/terminalLastCommand, read/getNotebookSummary, read/problems, read/readFile, read/viewImage, read/readNotebookCellOutput, agent/runSubagent, browser/openBrowserPage, browser/readPage, browser/screenshotPage, browser/navigatePage, browser/clickElement, browser/dragElement, browser/hoverElement, browser/typeInPage, browser/runPlaywrightCode, browser/handleDialog, edit/createDirectory, edit/createFile, edit/createJupyterNotebook, edit/editFiles, edit/editNotebook, edit/rename, search/codebase, search/fileSearch, search/listDirectory, search/textSearch, search/usages, web/fetch, web/githubRepo, web/githubTextSearch, bicep/build_bicep, bicep/build_bicepparam, bicep/decompile_arm_parameters_file, bicep/decompile_arm_template_file, bicep/format_bicep_file, bicep/get_azure_resource_type_schema, bicep/get_bicep_best_practices, bicep/get_deployment_snapshot, bicep/get_extension_resource_type_schema, bicep/get_file_references, bicep/list_avm_metadata, bicep/list_azure_resource_types, bicep/list_extension_resource_types, bicep/list_well_known_extensions, azure-mcp/acr, azure-mcp/advisor, azure-mcp/aks, azure-mcp/appconfig, azure-mcp/applens, azure-mcp/applicationinsights, azure-mcp/appservice, azure-mcp/azd, azure-mcp/azurebackup, azure-mcp/azuremigrate, azure-mcp/azureterraform, azure-mcp/azureterraformbestpractices, azure-mcp/bicepschema, azure-mcp/cloudarchitect, azure-mcp/communication, azure-mcp/compute, azure-mcp/confidentialledger, azure-mcp/containerapps, azure-mcp/cosmos, azure-mcp/datadog, azure-mcp/deploy, azure-mcp/deviceregistry, azure-mcp/documentation, azure-mcp/eventgrid, azure-mcp/eventhubs, azure-mcp/extension_azqr, azure-mcp/extension_cli_generate, azure-mcp/extension_cli_install, azure-mcp/fileshares, azure-mcp/foundry, azure-mcp/foundryextensions, azure-mcp/functionapp, azure-mcp/functions, azure-mcp/get_azure_bestpractices, azure-mcp/grafana, azure-mcp/group_list, azure-mcp/group_resource_list, azure-mcp/keyvault, azure-mcp/kusto, azure-mcp/loadtesting, azure-mcp/managedlustre, azure-mcp/marketplace, azure-mcp/monitor, azure-mcp/mysql, azure-mcp/policy, azure-mcp/postgres, azure-mcp/pricing, azure-mcp/quota, azure-mcp/redis, azure-mcp/resourcehealth, azure-mcp/role, azure-mcp/search, azure-mcp/servicebus, azure-mcp/servicefabric, azure-mcp/signalr, azure-mcp/speech, azure-mcp/sql, azure-mcp/storage, azure-mcp/storagesync, azure-mcp/subscription_list, azure-mcp/virtualdesktop, azure-mcp/wellarchitectedframework, azure-mcp/workbooks, todo, vscode.mermaid-chat-features/renderMermaidDiagram, ms-azuretools.vscode-azureresourcegroups/azureActivityLog]
 handoffs:
   - label: "▶ Run Preflight Check"
     agent: 06b-Bicep CodeGen
@@ -129,29 +115,22 @@ and list the artifacts (per the azure-artifacts skill).
   the frozen artifacts in place — that is a defect and breaks workflow
   resume.
 
-## Investigate Before Answering
+## Operating frame
 
-Read the implementation plan and governance constraints before generating any Bicep code.
-Verify AVM module availability and parameter schemas via preflight checks.
-Do not assume resource configurations — validate against actual Azure API schemas.
+Shared agent rules (read each SKILL.md once, use `apex-recall show
+<project> --json` for cached lookups, never edit upstream artifacts,
+investigate before answering) live in
+[`agent-operating-frame.instructions.md`](../instructions/agent-operating-frame.instructions.md).
 
-## Context Awareness
-
-This is a large agent definition (~590 lines). Read each `SKILL.md` only once;
-do not re-read predecessor artifacts after the boot read — use
-`apex-recall show <project> --json` for cached lookups instead.
-
-## Scope Fencing
-
-This agent generates Bicep templates and validation artifacts only.
-Do not deploy infrastructure — that is the Deploy agent's responsibility.
-Do not modify architecture decisions — hand back to the Planner if the plan needs changes.
-
-## Subagent Budget
-
-This agent orchestrates 2 subagents: bicep-validate-subagent (lint+review), challenger-review-subagent.
-Invoke bicep-validate-subagent for combined lint and code review.
-Use challenger-review-subagent only for adversarial review after validation passes.
+- **Scope**: generate Bicep templates + validation artifacts only.
+  Never deploy (hand off to `07b-bicep-deploy`); never modify
+  architecture (hand back to `05-iac-planner`).
+- **Subagent budget (2)**: `bicep-validate-subagent` (combined lint
+  and code review); `challenger-review-subagent` (post-validation
+  adversarial pass only).
+- **Schema verification**: validate AVM module availability and
+  parameter schemas via the preflight + bicep-validate-subagent
+  before generating code.
 
 ## Read Skills First
 
@@ -167,13 +146,12 @@ Before doing any work, read these skills.
 
 ## Do
 
-- Run preflight check BEFORE writing any Bicep (Phase 1)
-- Use `askQuestions` to present blockers from Phase 1 + 1.5
-- Use AVM modules for EVERY resource that has one
-- Generate `uniqueSuffix` ONCE in `main.bicep`, pass to ALL modules
-- Apply baseline tags + governance extras
-- Parse `04-governance-constraints.json` — map each Deny policy to Bicep
-- Apply security baseline (TLS 1.2, HTTPS, managed identity, no public)
+> **Read** [`iac-common/references/codegen-do-dont.md`](../skills/iac-common/references/codegen-do-dont.md)
+> for the shared DO/DON'T rules that apply to both `06b` and `06t`
+> (preflight first, AVM-first, governance mapping, security baseline,
+> plan-lock, no inventing inputs, etc.). Bicep-specific additions only
+> below.
+
 - PostgreSQL: set `activeDirectoryAuth: Enabled`, `passwordAuth: Disabled`
 - APIM: check SKU compatibility matrix before VNet config (common-patterns.md)
 - Front Door: use separate `location` (global) and `resourceLocation` (region)
@@ -182,46 +160,15 @@ Before doing any work, read these skills.
 - Use `resourceId(subscription().subscriptionId, ...)` for cross-RG refs at subscription scope
 - Generate `azure.yaml` (required) + `deploy.ps1` (deprecated fallback) + `.bicepparam` per environment
 - Run `bicep build` + `bicep lint` after generation
-- Save `05-implementation-reference.md` + update project README
 
 ## Don't
 
-- Start coding before preflight check
-- Silently halt on blockers without telling the user why
-- List blockers in chat and wait for a reply (wastes a round-trip)
-- Edit `agent-output/{project}/04-implementation-plan.md`,
-  `04-governance-constraints.md`, or `04-governance-constraints.json` —
-  frozen after gate-3 per `metadata.plan_lock` in the workflow graph;
-  plan-level must_fix returns to Step 4 instead
-- Invoke `challenger-review-subagent` with
-  `artifact_type = "implementation-plan"` from Step 5 (plan-level reviews
-  run at Step 4 only; Step 5 uses `artifact_type = "iac-code"`)
-- Issue more than one `askQuestions` call per challenger pass — batch all
-  open decisions into one inline form (see `codegen-shared-workflow.md` →
-  Batched User Decisions)
-- Bundle multiple file bodies in a single response — exceeds VS Code's
-  per-response output-token ceiling and aborts the turn with *"the
-  response hit the length limit"*. Emit ONE file per response turn
-  (see `codegen-shared-workflow.md` → Phase 2: Output Cadence)
 - Write raw Bicep when AVM exists
-- Hardcode unique strings
-- Use hardcoded tag lists ignoring governance
-- Skip governance compliance mapping (HARD GATE)
-- Use `APPINSIGHTS_INSTRUMENTATIONKEY` (use CONNECTION_STRING)
-- Allow password-only auth on any database (security baseline)
 - Use `virtualNetworkType` on Standard/Basic v2 (classic model only)
 - Share a single location param for both profile and Private Link
 - Set `bypass: 'None'` when enabledForDeployment/DiskEncryption/TemplateDeployment is true
-- Put hyphens in Storage Account names
 - Use bare `resourceId(rgName, type, name)` from subscription-scope modules
-- Deploy — that's the Deploy agent's job
-- Proceed without checking AVM parameter types (known issues exist)
 - Use phase parameter if plan specifies single deployment
-- Generate parameters not declared in the plan's Code-Generation
-  Contract section. If a needed param is missing, STOP and traverse
-  `↩ Return to Step 4` per
-  `iac-common/references/governance-drift-routing.md`. CodeGen does
-  NOT invent inputs.
 
 ## Prerequisites Check
 
@@ -369,20 +316,15 @@ from scratch.**
 
 ### Phase 1.6: Context Compaction
 
-Context usage reaches ~80% after preflight checks and governance mapping.
-Compact the conversation before proceeding to code generation.
+Context reaches ~80% after preflight + governance mapping. Apply Mode A
+runtime compression per
+[`context-management/SKILL.md`](../skills/context-management/SKILL.md):
+write one concise summary (preflight result + AVM/custom counts,
+governance compliance map status, deployment strategy, resource list
+with module paths) and stop loading additional skills before Phase 2.
+Do NOT re-read predecessor artifacts.
 
-1. **Summarize prior phases** — write a single concise message containing:
-   - Preflight check result (blockers, AVM vs custom count)
-   - Governance compliance map (Deny policies mapped, unsatisfied count)
-   - Deployment strategy from `04-implementation-plan.md` (phased/single)
-   - Resource list with module paths and key parameters
-2. **Stop loading additional skills** — once context is compacted, do not load
-   any new skill files; rely on summaries already in context
-3. **Do NOT re-read predecessor artifacts** — rely on the summary above
-   and the saved `04-preflight-check.md` + `04-governance-constraints.json` on disk
-4. **Update session state** — run `apex-recall checkpoint <project> 5 phase_1.6_compacted --json`
-   so resume skips re-loading prior context
+**Checkpoint** (MANDATORY): `apex-recall checkpoint <project> 5 phase_1.6_compacted --json`
 
 ### Phase 2: Progressive Implementation
 
@@ -410,18 +352,15 @@ and replaces what was previously 20+ sequential per-file format calls.
 
 ### Phase 3: Deployment Artifacts
 
-Generate `infra/bicep/{project}/azure.yaml` (azd manifest — **primary deployment method**) with:
-
-- `name: {project}`, `metadata.template`, `infra.provider: bicep`, `infra.path: .` (co-located), `infra.module`
-- `hooks.preprovision` — ARM token validation, banner
-- `hooks.postprovision` — resource verification via ARG
-
-Also generate `infra/bicep/{project}/deploy.ps1` (deprecated fallback) with:
-
-- Banner, parameter validation (ResourceGroup, Location, Environment, Phase)
-- `az group create` + `az deployment group create --template-file --parameters`
-- Phase-aware looping if phased; approval prompts between phases
-- Output parsing and error handling
+Generate `infra/bicep/{project}/azure.yaml` (azd manifest — **primary**)
+and `infra/bicep/{project}/deploy.ps1` (deprecated fallback). Full file
+contents and hook bodies:
+[`codegen-file-order.md`](../skills/iac-common/references/codegen-file-order.md) → Bicep.
+Mandatory `azure.yaml` keys: `name: {project}`, `metadata.template`,
+`infra.provider: bicep`, `infra.path: .` (co-located), `infra.module`,
+`hooks.preprovision` (ARM token validation), `hooks.postprovision`
+(resource verification via ARG). `deploy.ps1` must remain phase-aware
+when the plan selects phased deployment.
 
 ### Phase 4: Validation (Subagent-Driven — Parallel)
 
@@ -562,3 +501,15 @@ decisions needed.
 
 **Read** `.github/skills/azure-bicep-patterns/references/codegen-validation-checklist.md`
 — verify ALL items before marking Step 5 complete.
+
+## Completion Handoff
+
+After `apex-recall complete-step` + writing `00-handoff.md`, end the
+final chat message with this line, **verbatim**, on its own final line
+(full contract:
+[`compression-templates.md`](../skills/context-management/references/compression-templates.md#gate-boundary-clear-handoff-contract);
+validator: `npm run validate:orchestrator-handoff`):
+
+```text
+Run `/clear`, then switch the chat agent picker to `01-Orchestrator` and send `resume <project>` to continue Step N+1.
+```

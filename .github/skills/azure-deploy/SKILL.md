@@ -1,6 +1,6 @@
 ---
 name: azure-deploy
-description: "**WORKFLOW SKILL** — Execute Azure deployments for ALREADY-PREPARED apps. Runs azd up, azd deploy, terraform apply with built-in error recovery. Requires plan.md from azure-prepare and validated status from azure-validate. WHEN: 'run azd up', 'run azd deploy', 'push to production', 'go live', 'bicep deploy', 'terraform apply', 'publish to Azure'. DO NOT USE FOR: creating new apps (azure-prepare), generating IaC (azure-prepare), pre-deployment checks (azure-validate)."
+description: "**WORKFLOW SKILL** — Execute Azure deployments (azd up, azd deploy, terraform apply) for already-prepared apps with built-in error recovery. WHEN: 'run azd up', 'run azd deploy', 'push to production', 'go live', 'bicep deploy', 'terraform apply', 'publish to Azure'. DO NOT USE FOR: creating new apps (azure-prepare), pre-deploy checks (azure-validate)."
 license: MIT
 metadata:
   author: Microsoft
@@ -59,9 +59,9 @@ Activate this skill when user wants to:
 
 | Tool                              | Purpose                              |
 | --------------------------------- | ------------------------------------ |
-| `mcp_azure_mcp_subscription_list` | List available subscriptions         |
-| `mcp_azure_mcp_group_list`        | List resource groups in subscription |
-| `mcp_azure_mcp_azd`               | Execute AZD commands                 |
+| `mcp_azure-mcp_subscription_list` | List available subscriptions         |
+| `mcp_azure-mcp_group_list`        | List resource groups in subscription |
+| `mcp_azure-mcp_azd`               | Execute AZD commands                 |
 
 ## References
 

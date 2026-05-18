@@ -82,6 +82,45 @@ def test_defender_auto_assignments_filtered_by_default():
     assert env["findings"] == []
 
 
+def test_defender_filter_is_quiet_by_default(capsys):
+    """Phase 6: default-quiet mode emits zero `filter: skipping` lines on stderr."""
+    defender_assignment = {
+        "id": "/subscriptions/s/providers/Microsoft.Authorization/policyAssignments/defender-123",
+        "name": "defender-123",
+        "properties": {
+            "displayName": "ASC Default",
+            "policyDefinitionId": "/providers/Microsoft.Authorization/policySetDefinitions/asc",
+            "scope": "/subscriptions/s",
+            "metadata": {"assignedBy": "Security Center"},
+        },
+    }
+    mapping = {"policyAssignments": {"value": [defender_assignment]}}
+    discover.discover("s", project="p", az_rest=_router(mapping))
+    err = capsys.readouterr().err
+    matching = [line for line in err.splitlines() if line.startswith("filter: skipping")]
+    assert matching == [], f"expected zero filter announcements on stderr, got: {matching}"
+
+
+def test_defender_filter_is_verbose_when_opted_in(capsys):
+    """Phase 6: --verbose restores per-assignment filter announcements."""
+    defender_assignment = {
+        "id": "/subscriptions/s/providers/Microsoft.Authorization/policyAssignments/defender-123",
+        "name": "defender-123",
+        "properties": {
+            "displayName": "ASC Default",
+            "policyDefinitionId": "/providers/Microsoft.Authorization/policySetDefinitions/asc",
+            "scope": "/subscriptions/s",
+            "metadata": {"assignedBy": "Security Center"},
+        },
+    }
+    mapping = {"policyAssignments": {"value": [defender_assignment]}}
+    discover.discover("s", project="p", az_rest=_router(mapping), verbose=True)
+    err = capsys.readouterr().err
+    matching = [line for line in err.splitlines() if line.startswith("filter: skipping")]
+    assert len(matching) == 1
+    assert "ASC Default" in matching[0]
+
+
 def test_defender_auto_retained_with_opt_in():
     defender_assignment = {
         "id": "/subscriptions/s/providers/Microsoft.Authorization/policyAssignments/defender-123",
@@ -722,7 +761,15 @@ def test_tags_required_populated_for_tag_policy():
 
 
 def test_tags_required_unresolved_when_no_params():
-    """Tag policy without assignment params should surface as [unresolved: ...]."""
+    """Tag policy without assignment params should resolve keys from policyRule.
+
+    Regression: previously surfaced as `[unresolved: ...]` when the deny policy
+    hard-coded tag keys in `policyRule.if.allOf[*].anyOf[*].field` rather than
+    in `assignment_parameters.tagName*`. That caused downstream agents to fall
+    back to sibling Modify-policy keys, producing transcription drift
+    (e.g. `tech-contact` vs `technical-contact`). discover.py now walks the
+    rule body and extracts hard-coded tag keys.
+    """
     assignment = {
         "id": "/subscriptions/s/providers/Microsoft.Authorization/policyAssignments/tags2",
         "name": "tags2",
@@ -753,7 +800,9 @@ def test_tags_required_unresolved_when_no_params():
     }
     env = discover.discover("s", project="p", az_rest=_router(mapping))
     assert len(env["tags_required"]) == 1
-    assert env["tags_required"][0]["name"].startswith("[unresolved:")
+    assert env["tags_required"][0]["name"] == "Owner"
+    finding = next(f for f in env["findings"] if (f.get("category") or "").lower() == "tags")
+    assert finding.get("extracted_tag_keys") == ["Owner"]
 
 
 def test_allowed_locations_from_assignment_params():

@@ -18,18 +18,6 @@ handoffs:
     agent: 03-Architect
     prompt: "Compare alternative SKU options for key resources. Analyze trade-offs between cost, performance, and features. Input: current SKU choices in agent-output/{project}/02-architecture-assessment.md. Output: SKU trade-off matrix written to agent-output/{project}/03-des-sku-comparison.md."
     send: true
-  - label: "▶ Save Assessment"
-    agent: 03-Architect
-    prompt: "Save the current architecture assessment to `agent-output/{project}/02-architecture-assessment.md`."
-    send: true
-  - label: "▶ Generate Architecture Diagram"
-    agent: 04-Design
-    prompt: "This handoff implies `design_scope=diagrams` and `diagram_tool=drawio` — record both via `apex-recall decide <project> --key design_scope --value diagrams --step 3 --json` and `apex-recall decide <project> --key diagram_tool --value drawio --step 3 --json` BEFORE any other work (this silent-skips the Phase 0 askMe gates per workflow-gates.md). Then use the drawio skill and MCP tools to generate an Azure architecture diagram for the assessed design. Use transactional mode. Include required resources, boundaries, auth/data/telemetry flows, and output `agent-output/{project}/03-des-diagram.drawio` with quality score >= 9/10. Follow batch-only workflow from the drawio skill. Input: agent-output/{project}/02-architecture-assessment.md. Output: agent-output/{project}/03-des-diagram.drawio + .png."
-    send: true
-  - label: "▶ Create ADR from Assessment"
-    agent: 04-Design
-    prompt: "This handoff implies `design_scope=adrs` — record via `apex-recall decide <project> --key design_scope --value adrs --step 3 --json` BEFORE any other work (this silent-skips the Phase 0 askMe gates and the diagram-tool gate per workflow-gates.md). Then use the azure-adr skill to document the architectural decision and recommendations from the assessment above as a formal ADR. Include the WAF trade-offs and recommendations as part of the decision rationale. Input: agent-output/{project}/02-architecture-assessment.md decisions block. Output: agent-output/{project}/03-des-adr-*.md (one ADR per decision)."
-    send: true
   - label: "Step 3: Design Artifacts"
     agent: 04-Design
     prompt: "Begin Step 3 (Design) for the architecture in `agent-output/{project}/02-architecture-assessment.md`. This handoff is the explicit **fresh-start entry** — it OVERRIDES the silent-skip rule in `workflow-gates.md`. You MUST raise both askMe panels even if `decisions.design_scope` / `decisions.diagram_tool` are already set; show any stored value as the recommended option but let the user change it. **Phase 00 (always ask)**: raise `vscode_askQuestions` with **Diagrams only**, **ADRs only**, **Both**; then `apex-recall decide <project> --key design_scope --value <diagrams|adrs|both> --step 3 --json`. **Phase 0 (always ask if diagrams in scope)**: raise `vscode_askQuestions` with **Draw.io** (Azure-brand icons, recommended) vs **Python diagrams** (faster, generic icons); then `apex-recall decide <project> --key diagram_tool --value <drawio|python> --step 3 --json`. Outputs: Drawio → `03-des-diagram.drawio` (+ `.png`); Python → `03-des-diagram.py` (+ `.png`); ADRs → `03-des-adr-NNNN-{slug}.md`. Do not proceed to any artifact work until both panels have user answers."
@@ -50,24 +38,23 @@ handoffs:
 
 # Architect Agent
 
-<investigate_before_answering>
-Before making WAF assessments, search Microsoft documentation for each Azure service
-in scope. Verify SKU availability, AVM module versions, and service lifecycle status.
-Do not rely on parametric knowledge for pricing — delegate to cost-estimate-subagent.
-</investigate_before_answering>
+## Operating frame
 
-<context_awareness>
-Read each `SKILL.md` only once. For predecessor artifacts in `agent-output/`,
-follow the artifact tier system from the `context-management` skill
-(Mode A: Runtime Compression).
+Shared agent rules (read each SKILL.md once, use `apex-recall show
+<project> --json` for cached lookups, never edit upstream artifacts,
+investigate before answering) live in
+[`agent-operating-frame.instructions.md`](../instructions/agent-operating-frame.instructions.md).
 
-Review-depth opt-in: read `decisions.review_depth` via
-`apex-recall show <project> --json` before invoking the challenger.
-Default to `"default"` if absent. `"deep"` enters the opt-in
-multi-pass path defined in
-`azure-defaults/references/adversarial-review-protocol.md`
-without re-prompting the user.
-</context_awareness>
+- **Investigate first**: search Microsoft Learn for each Azure service in
+  scope before scoring WAF; verify SKU availability, AVM module versions,
+  and service lifecycle status. Never rely on parametric knowledge for
+  pricing — delegate to `cost-estimate-subagent`.
+- **Subagent budget (2)**: `cost-estimate-subagent` (all dollar figures);
+  `challenger-review-subagent` (comprehensive + cost-feasibility passes).
+  Review-depth opt-in: read `decisions.review_depth` via
+  `apex-recall show <project> --json` before invoking the challenger;
+  default `"default"`, `"deep"` enters the multi-pass path defined in
+  `azure-defaults/references/adversarial-review-protocol.md`.
 
 <output_contract>
 Primary artifact: agent-output/{project}/02-architecture-assessment.md — all 5 WAF pillar
@@ -111,10 +98,8 @@ Run `apex-recall show <project> --json` for full project context. Do not read `0
 
 ## Read Skills (After Prerequisites, Before Assessment)
 
-**After prerequisites are confirmed**, read these skills for configuration and template structure.
-Issue all four `read_file` calls in **one parallel tool batch** and **never re-read** files
-already in conversation history (see
-[Context Hygiene](../instructions/agent-authoring.instructions.md#context-hygiene-token-efficiency)).
+**After prerequisites are confirmed**, read these skills for configuration and
+template structure. Issue all four `read_file` calls in **one parallel tool batch**.
 
 1. **Read** `.github/skills/azure-defaults/SKILL.md` — regions, tags, pricing MCP names, WAF criteria, service lifecycle
 2. **Read** `.github/skills/azure-artifacts/SKILL.md` — H2 templates for `02-architecture-assessment.md` and `03-des-cost-estimate.md`
@@ -299,30 +284,16 @@ in your WAF assessment recommendations (still produce the identical artifact str
 
 ## Cost Estimation
 
-**Pricing Accuracy Gate**: Model evaluation found that the Architect agent
-hallucinated SKU prices (e.g., AKS Standard at $0.60/hr instead of $0.10/hr)
-when writing prices from parametric knowledge. ALL dollar figures MUST come from
-the `cost-estimate-subagent` (Codex-powered, MCP-verified). Never write a price
-that did not originate from a subagent response.
+> **Read** [`azure-defaults/references/cost-estimate-parent-contract.md`](../skills/azure-defaults/references/cost-estimate-parent-contract.md)
+> for the full Pricing Accuracy Gate, the 5-step delegation procedure,
+> the MCP-tools table, and the no-parametric-fallback rule. Architect-specific
+> usage notes only below.
 
-Delegate ALL pricing work to `cost-estimate-subagent` to keep your context focused on WAF analysis:
-
-1. **Prepare resource list** — compile resource types, SKUs, region, and quantities from your assessment
-2. **Delegate to `cost-estimate-subagent`** — provide:
-   - `resource_list`, `project_name`, `region`
-   - `output_path` = `agent-output/{project}/02-cost-estimate.json`
-   - `overwrite` = `false` (set to `true` only when re-running after revisions)
-   - Optional: `compare_regions: true`, `include_ri_savings: true`
-3. **Receive compact summary** — the subagent writes the full JSON breakdown to
-   `output_path` and returns a ≤15-line summary (status, region, monthly_total,
-   yearly_total, file_path, confidence). **Do NOT paste subagent JSON inline.**
-   **Checkpoint** (MANDATORY): `apex-recall checkpoint <project> 2 phase_4_pricing --json`
-4. **Read the JSON file** from `output_path` to populate both
-   `02-architecture-assessment.md` (Cost Assessment table) and
-   `03-des-cost-estimate.md` line items. Copy figures verbatim — do NOT round,
-   adjust, or "correct" them.
-5. **Cross-check totals** — verify that the sum of `resources[].monthly_cost`
-   equals `monthly_total`. Flag any discrepancy to the user before proceeding.
+Use `output_path = agent-output/{project}/02-cost-estimate.json` and
+populate **both** `02-architecture-assessment.md` and
+`03-des-cost-estimate.md` from the subagent's JSON. Architect's own
+analysis remains qualitative only (Strengths/Gaps prose); WAF pillar
+prose carries **no dollar figures**.
 
 ### What Goes Where
 
@@ -332,31 +303,6 @@ Delegate ALL pricing work to `cost-estimate-subagent` to keep your context focus
 | `02-architecture-assessment.md` → Resource SKU Recommendations | Monthly Est. column                  | Subagent response        |
 | `03-des-cost-estimate.md` → all sections                       | Every dollar figure                  | Subagent response        |
 | WAF pillar prose (Strengths/Gaps)                              | Qualitative only — NO dollar figures | Architect's own analysis |
-
-The subagent uses these Azure Pricing MCP tools on your behalf:
-
-| Tool                     | Purpose                                             | Preferred |
-| ------------------------ | --------------------------------------------------- | --------- |
-| `azure_bulk_estimate`    | All resources in one call (**use this by default**) | ✅ Yes    |
-| `azure_region_recommend` | Find cheapest region for compute SKUs               | Optional  |
-| `azure_price_search`     | RI/SP pricing lookup only (not for base prices)     | Optional  |
-| `azure_cost_estimate`    | Fallback for single resource if bulk fails          | Avoid     |
-| `azure_sku_discovery`    | Only if SKU name is unknown                         | Avoid     |
-
-**Tip**: The subagent targets ≤ 10 MCP calls total (1 bulk + up to 8
-per-line `azure_price_search` fallbacks + optional region/RI). When
-providing the resource list, include service_name, SKU, region, and
-quantity so it can use `azure_bulk_estimate` in one call. The subagent
-returns only `COMPLETE` or `FAILED` — it never returns `PARTIAL`; treat
-`FAILED` as a hard stop and surface the `unresolved_items[]` list to the
-user.
-
-Refer to azure-defaults skill for exact `service_name` values.
-
-**No fallback to parametric knowledge or Azure Pricing Calculator.**
-If `cost-estimate-subagent` fails or is unavailable, STOP and notify the user.
-Do NOT write dollar figures from memory. Do NOT proceed to artifact generation
-without subagent-verified prices.
 
 ## Adversarial Review — 1-Pass Comprehensive Architecture + 1-Pass Cost Estimate (default)
 
@@ -376,31 +322,36 @@ in `workflow-graph.json` based on `decisions.complexity`. Do NOT prompt
 the user — the project-scoped `review_depth` decision is the opt-in
 trigger.
 
+### Common invocation template
+
+All `challenger-review-subagent` calls below share these parameters; per-pass
+blocks list only the overrides:
+
+```text
+project_name    = {project}
+prior_findings  = null               # pass 1; compact string for pass 2-3 deep cascade
+overwrite       = false              # set to true only when re-running after revisions
+```
+
 ### Architecture Review (default: 1 pass, comprehensive)
 
-Invoke `challenger-review-subagent`:
+Overrides:
 
 - `artifact_path` = `agent-output/{project}/02-architecture-assessment.md`
-- `project_name` = `{project}`
 - `artifact_type` = `architecture`
-- `review_focus` = `comprehensive`
-- `pass_number` = `1`
-- `prior_findings` = `null`
-- `output_path` = `agent-output/{project}/challenge-findings-architecture.json`
-- `overwrite` = `false` (set to `true` only when re-running after revisions)
+- `review_focus`  = `comprehensive`
+- `pass_number`   = `1`
+- `output_path`   = `agent-output/{project}/challenge-findings-architecture.json`
 
 ### Cost Estimate Review (1 pass — cost-feasibility lens)
 
-Invoke `challenger-review-subagent`:
+Overrides:
 
 - `artifact_path` = `agent-output/{project}/03-des-cost-estimate.md`
-- `project_name` = `{project}`
 - `artifact_type` = `cost-estimate`
-- `review_focus` = `cost-feasibility`
-- `pass_number` = `1`
-- `prior_findings` = `null`
-- `output_path` = `agent-output/{project}/challenge-findings-cost-estimate.json`
-- `overwrite` = `false`
+- `review_focus`  = `cost-feasibility`
+- `pass_number`   = `1`
+- `output_path`   = `agent-output/{project}/challenge-findings-cost-estimate.json`
 
 The subagent writes the JSON file at `output_path` and returns a compact
 summary (≤15 lines). **Do NOT paste subagent JSON inline.** Read the file
@@ -423,23 +374,22 @@ from disk only if you need full finding details for the Gate presentation.
 
 ### Deep-review path (opt-in, when `decisions.review_depth == "deep"`)
 
-When deep review is active, replace the single comprehensive architecture
-pass with the rotating-lens cascade:
+Replace the single comprehensive architecture pass with the rotating-lens
+cascade. Per-pass overrides only — every other parameter follows the
+Common invocation template above.
 
 1. Pass 1 — `security-governance` (always)
 2. Pass 2 — `architecture-reliability` (skip if pass 1 has 0 `must_fix` AND <2 `should_fix`)
 3. Pass 3 — `cost-feasibility` (skip if pass 2 has 0 `must_fix`)
 
-For each pass, invoke `challenger-review-subagent` with:
+Per-pass overrides:
 
 - `artifact_path` = `agent-output/{project}/02-architecture-assessment.md`
-- `project_name` = `{project}`
 - `artifact_type` = `architecture`
-- `review_focus` = per-pass value from the protocol cascade
-- `pass_number` = `1` / `2` / `3`
-- `prior_findings` = `null` for pass 1; compact string for passes 2-3
-- `output_path` = `agent-output/{project}/challenge-findings-architecture-pass{N}.json`
-- `overwrite` = `false` (set to `true` only when re-running after revisions)
+- `review_focus`  = per-pass value above
+- `pass_number`   = `1` / `2` / `3`
+- `prior_findings`= `null` for pass 1; compact string for passes 2-3
+- `output_path`   = `agent-output/{project}/challenge-findings-architecture-pass{N}.json`
 
 ### Cost-feasibility review gate + Challenger empty-output diagnostic
 
@@ -450,48 +400,33 @@ and
 
 ## Approval Gate
 
-**Present findings directly in chat** before asking the user to decide:
+Full gate mechanics (findings table render, source-merge order,
+sidecar location, Revise loop with `multi_replace_string_in_file`,
+Proceed handoff template, banned-phrases enforcement) live in
+[`workflow-gates.md`](../skills/azure-defaults/references/workflow-gates.md#architect-step-2--approval-gate-handoff-template).
+Architect-step-2 specifics only below.
 
 1. Print WAF pillar scores (Security, Reliability, Performance, Cost,
-   Operations) with estimated monthly cost
-2. For each challenger pass, render a markdown table with columns:
-   **ID**, **Severity**, **Title**, **WAF Pillar**, **Recommendation**
-   — list every finding (must_fix first, then should_fix, then suggestion)
-3. Show aggregate totals across all passes: `N must-fix, N should-fix`
-4. Reference the JSON file paths for machine-readable details
-
-Then run the **Per-Finding Decision Protocol** from
-[.github/skills/azure-defaults/references/adversarial-review-protocol.md](../skills/azure-defaults/references/adversarial-review-protocol.md).
-
-> **Per-finding askMe (mandatory)**: present **one `vscode_askQuestions`
-> call per finding** with three options — `Accept` / `Skip` / `Defer` —
-> plus a free-form rationale field. **MUST NOT batch findings into a
-> single question with `multiSelect`.** Worked example: 5 findings →
-> 5 sequential questions, in must_fix → should_fix → suggestion order.
-
-- **Sources merged for the panel** (per protocol section 2e): in this
-  order — `challenge-findings-cost-estimate.json` →
-  `challenge-findings-architecture.json` (default single-pass) **or**
-  `challenge-findings-architecture-pass1.json` → `pass2.json` →
-  `pass3.json` (deep-review path; omit passes that did not run).
-- **Sidecar**:
-  `agent-output/{project}/challenge-findings-architecture-decisions.json`.
-  All decisions across cost-estimate and architecture passes land in this
-  single sidecar — `artifact_type: "architecture"`.
-- **On Revise** (matrix row 2): apply Accepted fixes to
-  `02-architecture-assessment.md` (and `02-cost-estimate.json` /
-  `03-des-cost-estimate.md` for cost-estimate findings) using a
-  **single `multi_replace_string_in_file` call** that bundles every
-  Accepted finding's edit — do NOT re-emit the artifact via
-  `create_file`. See azure-artifacts skill "Revision Workflow". Then
-  re-run **all relevant passes** of the challenger per the configured
-  pass count (`overwrite: true`), then re-build the panel skipping
-  issues whose `issue_id` already has a sidecar entry (protocol
-  section 2c).
-- **On Proceed**: emit the final handoff template per
-  [`workflow-gates.md`](../skills/azure-defaults/references/workflow-gates.md#architect-step-2--approval-gate-handoff-template).
-  Routing is **always** Design or Governance — never IaC Planner
-  directly. Enforced by `tools/scripts/validate-banned-phrases.mjs`.
+   Operations) with estimated monthly cost.
+2. Render the findings table per pass (must_fix → should_fix →
+   suggestion) and run the **Per-Finding Decision Protocol** from
+   [`adversarial-review-protocol.md`](../skills/azure-defaults/references/adversarial-review-protocol.md).
+   **One `vscode_askQuestions` call per finding** with three options
+   — `Accept` / `Skip` / `Defer` — plus a free-form rationale.
+   **MUST NOT batch findings into a single question with `multiSelect`.**
+3. Source-merge order for the panel: `challenge-findings-cost-estimate.json`
+   → `challenge-findings-architecture.json` (default single-pass) **or**
+   `challenge-findings-architecture-pass{1,2,3}.json` (deep-review path;
+   omit passes that did not run).
+4. Sidecar: `agent-output/{project}/challenge-findings-architecture-decisions.json`.
+   All decisions across cost-estimate and architecture passes land here
+   — `artifact_type: "architecture"`.
+5. **On Revise**: bundle all Accepted edits into a **single
+   `multi_replace_string_in_file` call** — do NOT re-emit the artifact
+   via `create_file`. Then re-run all relevant passes (`overwrite: true`)
+   and rebuild the panel skipping `issue_id`s already in the sidecar.
+6. **On Proceed**: routing is **always** Design or Governance, never
+   IaC Planner directly (enforced by `validate-banned-phrases.mjs`).
 
 ## Output Files
 
@@ -541,3 +476,15 @@ Decision logic: Score each pillar 1-10 with confidence.
 
 Output: Include this table in 02-architecture-assessment.md under ## WAF Assessment Summary.
 </example>
+
+## Completion Handoff
+
+After `apex-recall complete-step` + writing `00-handoff.md`, end the
+final chat message with this line, **verbatim**, on its own final line
+(full contract:
+[`compression-templates.md`](../skills/context-management/references/compression-templates.md#gate-boundary-clear-handoff-contract);
+validator: `npm run validate:orchestrator-handoff`):
+
+```text
+Run `/clear`, then switch the chat agent picker to `01-Orchestrator` and send `resume <project>` to continue Step N+1.
+```

@@ -10,7 +10,7 @@ handoffs:
     agent: 08-As-Built
     prompt: "Generate the complete Step 7 documentation suite for the deployed project. Read all prior artifacts in `agent-output/{project}/` and query deployed resources. Input: agent-output/{project}/06-deployment-summary.md + deployed resource state. Output: full as-built suite at agent-output/{project}/07-*.md."
     send: true
-  - label: "▶ Generate As-Built Diagram (Draw.io)"
+  - label: "▶ Generate As-Built Diagram"
     agent: 08-As-Built
     prompt: "Generate an as-built architecture diagram using the drawio skill and MCP tools. Use transactional mode. CRITICAL: The MCP server is NOT stateful — you MUST pass `diagram_xml` from each response to the next call. (1) `search-shapes` with ALL Azure service names in one call. (2) `create-groups` for VNets/subnets/RGs in one call (text: '' for groups, separate label vertex above). (3) `add-cells` with ALL vertices AND edges in one call, transactional: true. Pass `diagram_xml` from step 2. Use `shape_name` for icons, `temp_id` for refs. Do NOT specify width/height/style for shaped vertices. Use actual deployed resource names where they improve traceability. (4) Extract cell IDs via terminal command (do NOT read full JSON through the LLM). Save `diagram_xml` to temp file. (5) `add-cells-to-group` for all assignments in one call, passing `diagram_xml` from step 3. (6) `finish-diagram` with compress: true, passing `diagram_xml` from step 5. (7) Save via `python3 tools/scripts/save-drawio.py <json-path> agent-output/{project}/07-ab-diagram.drawio` — this decompresses, strips server-injected edge anchors/waypoints, and embeds mxGraphModel. (8) Validate via `node tools/scripts/validate-drawio-files.mjs`. Quality score >= 9/10. Input: deployed resource graph. Output: agent-output/{project}/07-as-built-diagram.drawio."
     send: true
@@ -88,32 +88,27 @@ draw.io workflow is captured in `## Draw.io MCP-Driven Diagram Workflow`.
 - Stop and re-run the diagram workflow if quality score < 9/10; do not ship a
   failing diagram.
 
-## Subagent Budget
+## Operating frame
 
-This agent runs on `GPT-5.5` and delegates pricing-only work to a single
-subagent: `cost-estimate-subagent` on `GPT-5.3-Codex`. The cross-family call
-(OpenAI ↔ OpenAI Codex) is intentional — Codex is selected for numerical and
-parametric reasoning over SKU pricing. The subagent contract is JSON-shaped
-and preserved verbatim, so no parsing changes are required here.
+Shared agent rules (read each SKILL.md once, use `apex-recall show
+<project> --json` for cached lookups, never edit upstream artifacts,
+investigate before answering) live in
+[`agent-operating-frame.instructions.md`](../instructions/agent-operating-frame.instructions.md).
 
-## Context Awareness
-
-**This is a large agent definition (~405 lines).** Read each `SKILL.md` only
-once; do not re-read predecessor artifacts after the boot read — use
-`apex-recall show <project> --json` for cached lookups instead.
-
-## Scope
-
-**This agent generates as-built documentation only**: design document, operations runbook, cost estimate,
-compliance matrix, backup/DR plan, resource inventory, and documentation index.
-Do not modify deployed infrastructure, change IaC templates, or skip prior artifact review.
+- **Scope**: generate as-built documentation only (design document,
+  operations runbook, cost estimate, compliance matrix, backup/DR
+  plan, resource inventory, documentation index). Never modify
+  deployed infrastructure, change IaC templates, or skip prior
+  artifact review.
+- **Subagent budget (1)**: `cost-estimate-subagent` on `GPT-5.3-Codex`
+  (intentional cross-family call — Codex selected for numerical
+  reasoning over SKU pricing). The JSON-shaped contract is preserved
+  verbatim.
 
 ## Read Skills First
 
-Before doing any work, read these skills. Issue the SKILL.md reads and the template-file
-reads in **one parallel `read_file` batch** to amortize cost. **Never re-read** a file
-already in your conversation history (see
-[Context Hygiene](../instructions/agent-authoring.instructions.md#context-hygiene-token-efficiency)).
+Before doing any work, read these skills. Issue the SKILL.md reads and the
+template-file reads in **one parallel `read_file` batch** to amortize cost.
 
 1. Read `.github/skills/azure-defaults/SKILL.md` — regions, tags, naming, pricing MCP names
 2. Read `.github/skills/azure-artifacts/SKILL.md` — H2 templates for all 07-\* artifacts
@@ -287,21 +282,16 @@ Then continue:
 
 ### Phase 1.5: Context Compaction
 
-Context usage reaches ~80% after loading 6+ prior artifacts and IaC source.
-Compact before generating the 7-document suite.
+Context reaches ~80% after loading 6+ prior artifacts + IaC source.
+Apply Mode A runtime compression per
+[`context-management/SKILL.md`](../skills/context-management/SKILL.md):
+write one concise summary (resource inventory with IDs/SKUs,
+architecture decisions + WAF scores, deployment result, compliance
+requirements, cost estimate baseline) and stop loading additional
+skills before Phase 2. Do NOT re-read predecessor artifacts during
+doc generation — query Azure CLI for specific details as needed.
 
-1. **Summarize prior artifacts** — write a single concise message containing:
-   - Resource inventory (names, types, SKUs, resource IDs from deployment)
-   - Architecture decisions from `02-architecture-assessment.md` (WAF scores, pattern)
-   - Deployment result from `06-deployment-summary.md` (success/partial, resource count)
-   - Compliance requirements from `01-requirements.md`
-   - Cost estimate baseline from `03-des-cost-estimate.md` (monthly total)
-2. **Stop loading additional skills** — once context is compacted, do not load
-   any new skill files; rely on summaries already in context
-3. **Do NOT re-read predecessor artifacts during doc generation** — rely on
-   the summary above and query Azure CLI for specific resource details as needed
-4. **Update session state** — run `apex-recall checkpoint <project> 7 phase_1.5_compacted --json`
-   so resume skips re-loading prior context
+**Checkpoint** (MANDATORY): `apex-recall checkpoint <project> 7 phase_1.5_compacted --json`
 
 ### Phase 2: Documentation Generation
 
@@ -321,25 +311,21 @@ Generate these files IN ORDER (each builds on the previous):
 
 ## Cost Estimation (07-ab-cost-estimate.md)
 
-**Pricing Accuracy Gate**: Same policy as the Architect agent — ALL dollar
-figures MUST come from `cost-estimate-subagent` (Codex-powered, MCP-verified).
-Never write a price from parametric knowledge.
+> **Read** [`azure-defaults/references/cost-estimate-parent-contract.md`](../skills/azure-defaults/references/cost-estimate-parent-contract.md)
+> for the full Pricing Accuracy Gate, the 5-step delegation procedure,
+> the MCP-tools table, and the no-parametric-fallback rule. As-built-specific
+> usage notes only below.
 
-Delegate pricing to `cost-estimate-subagent`:
+As-built variants of the parent contract:
 
-1. **Query deployed resources** — use `az resource list` / Resource Graph to get actual SKUs, tiers, and quantities
-2. **Prepare resource list** — compile actual (not planned) resource types, SKUs, region, and quantities
-3. **Delegate to `cost-estimate-subagent`** — provide:
-   - `resource_list`, `project_name`, `region`
-   - `output_path` = `agent-output/{project}/07-ab-cost-estimate.json`
-   - `overwrite` = `false` (set to `true` only when re-running after revisions)
-4. **Receive compact summary** — the subagent writes the full JSON breakdown to
-   `output_path` and returns a ≤15-line summary (status, region, monthly_total,
-   yearly_total, file_path, confidence). **Do NOT paste subagent JSON inline.**
-   **Checkpoint** (MANDATORY): `apex-recall checkpoint <project> 7 phase_3_pricing --json`
-5. **Read the JSON file** from `output_path` to populate `07-ab-cost-estimate.md`.
-   Copy figures verbatim — do NOT round, adjust, or "correct" them.
-6. **Cross-check with 03-des-cost-estimate.md** — note any delta between planned and as-built costs
+- **Resource source (step 1)**: query the **actually deployed**
+  environment via `az resource list` + Azure Resource Graph — never
+  re-use the planned resource list from Step 4.
+- **Output path (step 2)**: `agent-output/{project}/07-ab-cost-estimate.json`
+- **Checkpoint (step 3)**: `apex-recall checkpoint <project> 7 phase_3_pricing --json`
+- **Cross-check (step 5)**: also compare `monthly_total` against
+  `03-des-cost-estimate.md` and note any planned-vs-as-built delta
+  in `07-ab-cost-estimate.md`.
 
 ### Phase 3: As-Built Charts
 
@@ -359,19 +345,21 @@ Use the drawio skill and MCP tools to generate:
 
 - `agent-output/{project}/07-ab-diagram.drawio` — Editable Draw.io architecture diagram
 
-The diagram MUST reflect actual deployed resources (not just planned ones).
-Follow the batch-only workflow from the drawio skill:
+The diagram MUST reflect actual deployed resources (not just planned
+ones). Follow the batch-only workflow and style rules in
+[`drawio/SKILL.md`](../skills/drawio/SKILL.md) +
+[`drawio/references/style-reference.md`](../skills/drawio/references/style-reference.md)
+(left-to-right flow, cross-cutting at bottom, orthogonal edges, 120×80 px
+spacing, groups-with-empty-text + bold label above, etc.). As-built-specific
+rules only below:
 
-- Left-to-right flow, cross-cutting services at bottom (no edges)
-- Groups with empty text and separate bold label vertex above
-- Orthogonal edges, generous spacing (120px H, 80px V minimum)
-- Use actual deployed resource names where they improve traceability
-- Keep labels and deployed names readable at 100% zoom
-- Remove non-essential edge labels and low-value supporting groups that weaken hierarchy
-- Prefer service names and deployed resource names over SKU, tier, policy, or
-  count annotations unless a difference is architecturally significant
-- Save via `python3 tools/scripts/save-drawio.py <json-path> <output.drawio>` (strips edge anchors)
-- Validate via `node tools/scripts/validate-drawio-files.mjs`
+- Use the **actually deployed** resource names where they improve
+  traceability — not the plan's name placeholders.
+- Prefer service names + deployed names over SKU/tier/policy/count
+  annotations unless a difference is architecturally significant.
+- Save via `python3 tools/scripts/save-drawio.py <json-path> <output.drawio>`
+  (strips edge anchors).
+- Validate via `node tools/scripts/validate-drawio-files.mjs`.
 
 ### Phase 4: Finalize
 
@@ -467,3 +455,15 @@ This keeps the user informed during multi-phase operations.
 - [ ] Artifact lint delegated to lefthook + `10-Challenger` (no direct
       `npm run lint:artifact-templates` or `markdownlint-cli2` calls — see
       [`agent-authoring.instructions.md`](../instructions/agent-authoring.instructions.md#no-direct-markdownlint-on-agent-output-rule))
+
+## Completion Handoff
+
+After `apex-recall complete-step` + writing `00-handoff.md`, end the
+final chat message with this line, **verbatim**, on its own final line
+(full contract:
+[`compression-templates.md`](../skills/context-management/references/compression-templates.md#gate-boundary-clear-handoff-contract);
+validator: `npm run validate:orchestrator-handoff`):
+
+```text
+Run `/clear`, then switch the chat agent picker to `01-Orchestrator` and send `resume <project>` to continue Step N+1.
+```

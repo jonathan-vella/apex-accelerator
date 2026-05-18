@@ -1,6 +1,6 @@
 ---
 name: iac-common
-description: '**UTILITY SKILL** — Shared IaC deploy patterns for Bicep + Terraform deploy agents: deployment strategies, circuit breaker, known deploy issues. WHEN: "phased deployment", "circuit breaker", "deploy strategy", "deploy issue", "shared IaC pattern". USE FOR: phased deployment, circuit breaker patterns, deploy-specific known issues. DO NOT USE FOR: preflight validation (use azure-validate), code generation (use azure-bicep-patterns or terraform-patterns).'
+description: '**UTILITY SKILL** — Shared IaC deploy patterns for Bicep + Terraform agents: deployment strategies, circuit breaker, known deploy issues. WHEN: "phased deployment", "circuit breaker", "deploy strategy", "deploy issue", "shared IaC pattern". DO NOT USE FOR: preflight (azure-validate), code generation (azure-bicep-patterns / terraform-patterns).'
 ---
 
 # IaC Common Skill
@@ -59,6 +59,11 @@ Full procedure (`azd up` / `azd provision --preview`, environment preflight chec
 | **azd vs `deploy.ps1` guide** | `references/azd-vs-deploy-guide.md`                                                                                                   |
 | **AVM module index**          | `references/avm-module-index.md` (canonical CSV + JSON list of AVM modules in `.github/data/`)                                        |
 | **AVM version freeze gate**   | `references/avm-version-freeze-gate.md` (Phase 4.4 gate before `plan_status=APPROVED`)                                                |
+| **Codegen shared workflow**   | `references/codegen-shared-workflow.md` (Phase 2 output cadence loaded by `06b`/`06t` CodeGen agents)                                  |
+| **Codegen file-order**        | `references/codegen-file-order.md` (per-tool file emission order loaded by `06b`/`06t` CodeGen agents)                                 |
+| **Codegen DO / DON'T**        | `references/codegen-do-dont.md` (shared DO/DON'T bullets between `06b` + `06t`; tool-specific bullets stay in each agent body)         |
+| **Preflight policy checks**   | `references/preflight-policy-checks.md` (deploy-agent jq snippets, skip-validation shortcut, L3 precheck routing matrix, deprecation scan regex) |
+| **Azure Resource Graph primer** | [`references/azure-resource-graph-primer.md`](references/azure-resource-graph-primer.md) (canonical shared head used by `azure-compliance` / `azure-cost-optimization` / `azure-diagnostics` resource-graph references) |
 | Preflight validation          | `azure-validate/references/infraops-preflight.md`                                                                                     |
 | CLI auth validation procedure | `azure-defaults/references/azure-cli-auth-validation.md`                                                                              |
 | Policy effect decision tree   | `azure-defaults/references/policy-effect-decision-tree.md`                                                                            |

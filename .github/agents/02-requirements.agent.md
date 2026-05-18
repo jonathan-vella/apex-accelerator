@@ -3,7 +3,6 @@ name: 02-Requirements
 model: ["GPT-5.5"]
 description: Researches and captures Azure platform engineering project requirements
 argument-hint: Describe the Azure workload or project you want to gather requirements for
-target: vscode
 user-invocable: true
 agents: ["challenger-review-subagent"]
 tools: [vscode, execute, read, agent, browser, edit, search, web, "azure-mcp/*", todo]
@@ -28,11 +27,6 @@ handoffs:
     agent: 03-Architect
     prompt: "Review the requirements in `agent-output/{project}/01-requirements.md` and create a comprehensive WAF assessment with cost estimates. Input: completed requirements with NFRs, compliance, budget, workload pattern. Output: `agent-output/{project}/02-architecture-assessment.md` and `agent-output/{project}/03-des-cost-estimate.md`."
     send: true
-  - label: "Open in Editor"
-    agent: agent
-    prompt: "#createFile the requirements plan as is into an untitled file (`untitled:plan-${camelCaseName}.prompt.md` without frontmatter) for further refinement. Input: `agent-output/{project}/01-requirements.md` path. Output: VS Code editor opened on the file with no artifact change."
-    send: true
-    showContinueOn: false
   - label: "↩ Return to Orchestrator"
     agent: 01-Orchestrator
     prompt: "Returning from Step 1 (Requirements). Input: artifacts at `agent-output/{project}/01-requirements.md`. Output: orchestrator next-step guidance."
@@ -54,8 +48,11 @@ mandatory challenger review, and hand off to Architecture only after the Gate 1 
 - Phases 1-4 each collect answers before any file, skill, template, or source read.
 - `agent-output/{project}/01-requirements.md` matches the Azure artifacts template H2 structure.
 - `agent-output/{project}/README.md` is created from the project README template.
-- `agent-output/{project}/sku-manifest.json` and `.md` are created at rev 1 with user pins only;
-  an empty `services[]` is valid and common.
+- `agent-output/{project}/sku-manifest.json` and `.md` are created at rev 1. Phase 3j SKU
+  and sizing preferences elicitation is mandatory: every user-volunteered pin is written
+  with `source: "user-pin"`; an empty `services[]` is valid only when the user explicitly
+  answered "no preference" for every applicable class, in which case
+  `decisions.sku_preferences_captured = true` records that the elicitation ran.
 - `apex-recall` records checkpoints, `iac_tool`, region, SKU manifest status, and Step 1 completion.
 - `challenge-findings-requirements.json` is produced by `challenger-review-subagent` and every
   finding is rendered in chat before the proceed/revise gate.
@@ -69,7 +66,10 @@ mandatory challenger review, and hand off to Architecture only after the Gate 1 
 - Before Phases 1-4 are complete, do not read skills, templates, source files, existing artifacts,
   or create files.
 - Step 1 captures intent and constraints. Architecture decisions, service SKU derivation, IaC code,
-  Bicep snippets, and deployment actions belong to later steps.
+  Bicep snippets, and deployment actions belong to later steps. **SKU and sizing preferences
+  are a constraint, not an architecture decision**, and MUST be elicited via the mandatory
+  Phase 3j batch — the user's answer may be "no preference" (which defers the decision to
+  Architect at Step 2), but the question must always be asked.
 - Use `apex-recall` for session state. Do not read or write `00-session-state.json` directly.
 - Use `askQuestions` for structured discovery. **Batch independent questions** into a single
   `askQuestions` call via the `questions[]` array — issue separate calls only when a later
@@ -147,21 +147,55 @@ Run `apex-recall show <project> --json` for project context when needed. Do not 
   `apex-recall decide <project> --decision "<text>" --rationale "<why>" --step 1 --json`.
 - On completion, run `apex-recall complete-step <project> 1 --json`.
 
-## SKU Manifest - User Pins Only
+## SKU Manifest - User Pins (Mandatory Elicitation)
 
 Step 1 creates `agent-output/{project}/sku-manifest.json` and renders `sku-manifest.md`.
 
-- Capture only hard constraints the user volunteers: region pins, tier requirements driven by
-  compliance, and reserved-instance commitments the user already purchased.
-- Do not exhaustively enumerate SKUs.
-- Empty `services[]` at rev 1 is valid and usually expected.
+- **Always run Phase 3j (SKU and sizing preferences elicitation)** for every project. The
+  user must be asked even when the expected answer is "no preference". See
+  [`service-class-menu.md` § 3j](../skills/azure-defaults/references/service-class-menu.md#3j-sku-and-sizing-preferences-mandatory-for-every-project).
+- Capture hard preferences the user volunteers: pinned SKUs/sizes, tier floors driven by
+  compliance or existing commitments, reserved-instance purchases, and per-environment
+  overrides.
+- Do not exhaustively enumerate SKUs. Only what the user actually has a preference about.
+- An empty `services[]` is valid only when the user explicitly answered "no preference" for
+  every applicable class. It is **not** the default — it must be the recorded outcome of
+  Phase 3j.
 - Every service entry written at Step 1 uses `source: "user-pin"`, `source_step: "1"`, and
   `last_modified_rev: 1`.
-- After writing rev 1, set `decisions.sku_manifest_status = "draft"` and
-  `decisions.sku_manifest_revision = 1` with `apex-recall decide`.
+- After writing rev 1, set `decisions.sku_manifest_status = "draft"`,
+  `decisions.sku_manifest_revision = 1`, and `decisions.sku_preferences_captured = true`
+  with `apex-recall decide`.
 - Render `sku-manifest.md` with `tools/scripts/render-sku-manifest-md.mjs`; do not hand-edit it.
 
 ## Phase 1: Business Discovery
+
+### P0 directive — batch independent questions (Plan 01 Phase 4)
+
+Every `askQuestions` call **MUST** bundle every independent question
+for the current phase into a single tool call via the `questions[]`
+array. Sequential calls are only permitted when a later question's
+wording depends on a prior answer. This is the largest user-wait
+reduction available — the test04 baseline fired 29 askQuestions calls
+across Step 1 (1,744 s of user-wait); the target is ≤10.
+
+**Numbered example — 6 questions in ONE call**:
+
+```jsonc
+askQuestions({
+  questions: [
+    { header: "project_name",  question: "Confirm or change the project folder." },
+    { header: "industry",      question: "Pick the industry that best matches.", options: [...] },
+    { header: "company_size",  question: "Startup / Mid-Market / Enterprise?", options: [...] },
+    { header: "region_pin",    question: "Any region pin (e.g. EU GDPR)?" },
+    { header: "compliance",    question: "Compliance / regulatory constraints?" },
+    { header: "iac_tool",      question: "Bicep or Terraform?", options: ["Bicep", "Terraform"] }
+  ]
+})
+```
+
+The validator `npm run validate:question-batching` greps this body
+for the P0 directive heading + the numbered example block.
 
 Use `askQuestions` for Round 1:
 
@@ -239,14 +273,22 @@ apex-recall decide <project> --key cost_monitoring_exception \
 This phase is required. Read once, then follow the batched-`askQuestions`
 runbook in
 [`azure-defaults/references/service-class-menu.md`](../skills/azure-defaults/references/service-class-menu.md)
-(Batches A → B → C → 3i confirm step). Externalised to keep per-turn
-system-prompt replay small; the full per-class question set, options, and
-batching rules live in that reference.
+(Batches A → B → C → 3i confirm → **3j SKU/sizing preferences (mandatory)**).
+Externalised to keep per-turn system-prompt replay small; the full per-class
+question set, options, and batching rules live in that reference. Step 3j
+MUST run for every project — the user's answer may be "no preference" but
+the question must always be asked.
 
 After the `relational_db` answer comes back, record it:
 
 ```bash
 apex-recall decide <project> --key relational_db --value <choice> --json
+```
+
+After Step 3j completes, record the mandatory elicitation flag:
+
+```bash
+apex-recall decide <project> --key sku_preferences_captured --value true --json
 ```
 
 ## Phase 4: Security and Compliance
@@ -334,41 +376,29 @@ machine-readable detail.
 ### 6c. Per-finding decision panel
 
 Follow `## Per-Finding Decision Protocol` in
-[`.github/skills/azure-defaults/references/adversarial-review-protocol.md`](../skills/azure-defaults/references/adversarial-review-protocol.md).
+[`adversarial-review-protocol.md`](../skills/azure-defaults/references/adversarial-review-protocol.md)
+for question shape, option labels, deterministic action mapping,
+batched-`askQuestions` rules, and the 12-question cap. Requirements-step
+specifics:
 
-Present one batched `askQuestions` call where each in-scope finding (every `must_fix` and every
-`should_fix`) is its own question. Do not present a single combined accept/revise prompt.
-
-Per-finding question shape:
-
-- `header`: `requirements-pass1-{idx}` (unique across the batch, <=50 chars).
-- `question`: the finding title (truncate with an ellipsis at 200 chars).
-- `message`: markdown block including severity badge, category, description, failure scenario,
-  artifact section, and suggested mitigation.
-- `options` (fixed order, four labels):
-  1. `Accept (apply mitigation)`
-  2. `Reject (accept risk)`
-  3. `Defer (carry to handoff)`
-  4. `Edit (custom guidance)`
+- `header` namespace: `requirements-pass1-{idx}` (unique, ≤50 chars).
 - `recommended`: `Accept` for `must_fix`; `Defer` for `should_fix`.
-- `allowFreeformInput`: `true`.
-
-Skip the per-finding panel only when `must_fix + should_fix == 0`. Suggestions auto-defer and never
-appear in the panel. Cap the panel at 12 questions; auto-defer the rest with the standard
-`auto-deferred (panel cap; re-run gate after revising must_fix)` note.
+- Skip the panel when `must_fix + should_fix == 0`.
+- Suggestions auto-defer and never appear in the panel.
 
 ### 6d. Persist decisions
 
 For each answer:
 
-- Compute a stable `issue_id` as the first 8 hex chars of
-  `sha256(category + "|" + title + "|" + artifact_section)`.
+- `issue_id` = first 8 hex chars of
+  `sha256(category + "|" + title + "|" + artifact_section)` (formula
+  from the protocol).
 - Append a `decisions[]` entry to
-  `agent-output/{project}/challenge-findings-requirements-decisions.json` using an atomic write.
+  `agent-output/{project}/challenge-findings-requirements-decisions.json`
+  via atomic write.
 - Run
   `apex-recall finding <project> --add "{severity}|{action}|{issue_id}|{title}|{note}" --json`.
-- Map user input to action and note per the protocol's deterministic table (Edit with empty text
-  becomes a deferred entry with an auto-note).
+- Map user input to action + note per the protocol's deterministic table.
 
 ### 6e. Aggregated proceed/revise gate
 
@@ -393,39 +423,49 @@ emit a chat warning listing every auto-deferred `must_fix`.
 
 ## Required Information
 
-| Requirement         | Gathered In | Default                                  |
-| ------------------- | ----------- | ---------------------------------------- |
-| Project name        | Phase 1     | Required                                 |
-| Project description | Phase 1     | Required, one or two sentences           |
-| Industry / vertical | Phase 1     | Technology / SaaS                        |
-| Company size        | Phase 1     | Mid-Market                               |
-| System description  | Phase 1     | Required                                 |
-| Scenario            | Phase 1     | Greenfield                               |
-| Environments        | Phase 1     | Dev + Production                         |
-| Workload pattern    | Phase 2     | Agent-inferred                           |
-| Budget              | Phase 2     | Required                                 |
-| Scale               | Phase 2     | 100-1,000 users                          |
-| Concurrent users    | Phase 2     | Conditional for web/API                  |
-| TPS                 | Phase 2     | Conditional for database-heavy workloads |
-| Data sensitivity    | Phase 2     | Internal business data                   |
-| IaC tool            | Phase 2     | Bicep                                    |
-| Service tier        | Phase 3     | Balanced                                 |
-| SLA target          | Phase 3     | 99.9%                                    |
-| RTO / RPO           | Phase 3     | 4 hours / 1 hour                         |
-| Azure services      | Phase 3     | Based on workload pattern                |
-| Compliance          | Phase 4     | Based on industry                        |
-| Security controls   | Phase 4     | Managed Identity + Key Vault + TLS       |
-| Region              | Phase 4     | `swedencentral`                          |
-| Timeline            | Phase 5     | 1-3 months                               |
+Collected via `askQuestions` across Phases 1–5. Required inputs (must
+be provided by the user): `project_name`, `project_description`,
+`system_description`, `budget`. Everything else has a default and may
+be inferred or asked conditionally.
+
+Defaults (greenfield, Sweden Central, Tech/SaaS, mid-market):
+
+- Industry / Company size: `technology-saas` / `mid-market`
+- Scenario / Environments: `greenfield` / `dev + production`
+- Workload pattern: agent-inferred from system description
+- Scale / Sensitivity: `100–1,000 users` / `internal business data`
+- IaC tool: `bicep` · Service tier: `balanced` · SLA: `99.9%`
+- RTO/RPO: `4h / 1h` · Region: `swedencentral`
+- Security baseline: `Managed Identity + Key Vault + TLS 1.2`
+- Timeline: `1–3 months`
+
+Conditional questions: concurrent users (web/API workloads only), TPS
+(database-heavy workloads only), compliance frameworks (regulated
+industries only).
 
 ## Validation Checklist
 
 - [ ] Phase 1, Phase 2, Phase 3, and Phase 4 each used `askQuestions` or equivalent chat questions.
+- [ ] Phase 3j SKU/sizing preference elicitation ran (Batch D) and
+      `decisions.sku_preferences_captured = true` is recorded in apex-recall.
 - [ ] All H2 headings from the Azure artifacts template are present and in order.
 - [ ] Business Context, Architecture Pattern, Recommended Security Controls, Budget, Region, and
       `iac_tool` are populated.
 - [ ] Baseline tags are captured for downstream governance: Environment, ManagedBy, Project, Owner.
 - [ ] No Bicep, Terraform, or deployment code blocks appear in the requirements artifact.
-- [ ] SKU manifest rev 1 contains only user pins or an empty `services[]`.
+- [ ] SKU manifest rev 1 contains only user pins from Phase 3j (or an empty `services[]` when
+      the user explicitly answered "no preference" for every applicable class).
 - [ ] `sku-manifest.md` was rendered from JSON.
 - [ ] Challenger review ran and findings were presented in chat before handoff.
+
+## Completion Handoff
+
+After `apex-recall complete-step` + writing `00-handoff.md`, end the
+final chat message with this line, **verbatim**, on its own final line
+(full contract:
+[`compression-templates.md`](../skills/context-management/references/compression-templates.md#gate-boundary-clear-handoff-contract);
+validator: `npm run validate:orchestrator-handoff`):
+
+```text
+Run `/clear`, then switch the chat agent picker to `01-Orchestrator` and send `resume <project>` to continue Step N+1.
+```

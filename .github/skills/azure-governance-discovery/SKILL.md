@@ -1,6 +1,6 @@
 ---
 name: azure-governance-discovery
-description: "**ANALYSIS SKILL** — Deterministic Azure Policy discovery: lists effective assignments (incl. MG-inherited), pulls definitions/exemptions, classifies effects, filters Defender auto-assignments, emits governance-constraints JSON via Python. WHEN: 'Azure policy discovery', 'effective policy assignments', 'governance constraints', '04g-Governance Phase 1', 'refresh governance JSON'. DO NOT USE FOR: artifact writing, architecture mapping, challenger orchestration."
+description: "**ANALYSIS SKILL** — Azure Policy discovery: effective assignments (incl. MG-inherited), definitions/exemptions, effect classification, emits governance-constraints JSON. WHEN: 'Azure policy discovery', 'effective policy assignments', 'governance constraints', '04g-Governance Phase 1', 'refresh governance JSON'. DO NOT USE FOR: artifact writing, architecture mapping."
 compatibility: Requires Python 3.14, Azure CLI on PATH, read access to the target subscription.
 ---
 
@@ -83,59 +83,56 @@ human-readable preview after:
 
 The script writes a JSON envelope conforming to
 [`tools/schemas/governance-constraints.schema.json`](../../../tools/schemas/governance-constraints.schema.json)
-(`schema_version: governance-constraints-v1`). Findings include both
-`bicepPropertyPath` and `azurePropertyPath`, plus three additive fields:
+(`schema_version: governance-constraints-v1`). Each finding carries both
+`bicepPropertyPath` and `azurePropertyPath` (always strings — empty `""` when
+unresolvable, never `null`), plus `category`, `exemption`, and `classification`
+(`"blocker"` | `"auto-remediate"` | `"informational"`; exempted Deny/Modify
+blockers downgrade to `"informational"`). Top-level envelope also includes
+`policies` (alias of `findings`), `tags_required`, `allowed_locations`, and
+`discovery_metadata` (**L0 attestation envelope — MANDATORY**).
 
-- `category` — `properties.metadata.category` from the definition; `"Uncategorized"` if absent.
-- `exemption` — nullable object with `exemptionCategory` (`Waiver`|`Mitigated`),
-  `expiresOn`, `description`, `policyDefinitionReferenceIds`, when a
-  `Microsoft.Authorization/policyExemptions` record matches.
-- `classification` — `"blocker"` | `"auto-remediate"` | `"informational"`.
-  Exempted Deny/Modify blockers downgrade to `"informational"`.
+For the full per-finding schema and additive fields, read
+[`references/schema.md`](references/schema.md).
 
-Top-level envelope also includes:
+For the L0 envelope spec (shape, completeness-signature algorithm,
+end-of-discovery self-check, refresh handoff, consumer protocol,
+backward-compatibility rules), read
+[`references/l0-envelope.md`](references/l0-envelope.md).
 
-- `policies` — alias (same reference) of `findings`; provided for downstream consumers.
-- `tags_required` — extracted tag-enforcement findings as `[{name, source_policy}]`.
-- `allowed_locations` — extracted from location-constraint policies.
-- `discovery_metadata` — **L0 attestation envelope (MANDATORY)**. See
-  [governance-discovery.md](../azure-defaults/references/governance-discovery.md#l0-discovery-envelope-mandatory)
-  for the full shape. Includes `discovery_status`, `discovered_at`,
-  `scope`, `api_versions`, `page_counts`, `completeness_signature`,
-  `ttl_days`. Downstream consumers (Planner, CodeGen, Deploy) read
-  this object FIRST and STOP on staleness, signature drift, or
-  non-COMPLETE status.
-
-### End-of-discovery self-check
-
-After writing the envelope, `discover.py` MUST re-fetch page 1 of
-`policyAssignments` (cheapest call) and confirm the count matches
-`page_counts.policyAssignments`. Mismatch → set `discovery_status:
-"PARTIAL"` and append a stderr warning naming the drifted REST
-surface.
-
-### Refresh handoff is non-skippable
-
-When invoked via the `▶ Refresh Governance` handoff, `discover.py`
-MUST be called with `--refresh` so cached results are bypassed.
-
-Property paths (`azurePropertyPath`, `bicepPropertyPath`) are always strings —
-empty `""` when unresolvable, never `null`.
+For the effect classification table and Defender-filter rationale, read
+[`references/effect-classification.md`](references/effect-classification.md).
 
 ### Preview Markdown
 
-When invoked via CLI, the script also writes a sibling `.preview.md` file
-(e.g., `04-governance-constraints.preview.md`) with the H2 structure matching
-the azure-artifacts template. The agent copies this to `04-governance-constraints.md`
-and annotates placeholder sections only — avoiding slow mega-patch generation.
-
-See `references/effect-classification.md` for the full classification table.
-See `references/schema.md` for the output JSON envelope and per-finding fields.
+The script also writes a sibling `.preview.md` file (e.g.,
+`04-governance-constraints.preview.md`) with the H2 structure matching the
+azure-artifacts template. The agent copies this to
+`04-governance-constraints.md` and annotates placeholder sections only.
 
 ## Reference Index
 
+References are split into two tiers so the agent loads only what it
+needs:
+
+**Load-always** (the minimum to drive the core workflow):
+
+- `references/terminal-commands.md` — pre-built batched commands
+  (Cmd 1–8) for the entire phase.
+
+**Load-on-demand** (read only when the relevant decision point is
+reached):
+
 - `references/effect-classification.md` — effect-to-classification mapping, exemption downgrade, Defender filter rationale
 - `references/schema.md` — output JSON envelope, `findings[]` structure, additive fields
+- `references/l0-envelope.md` — canonical L0 envelope spec (shape,
+  signature algorithm, self-check, refresh handoff, consumer protocol)
+- `references/inline-resolution-gate.md` — Phase 2.7 protocol +
+  signature/TTL short-circuit
+- `references/baseline-check.md` — Phase 0.45 cached-baseline procedure
+- `references/policy-override-pattern.md` — structured `override` object shape
+- `references/reconciliation-disposition.md` — Phase 2.5 disposition rules
+- `references/resume-checks.md` — Phase 0.4 short-circuit conditions (signature, TTL, confirmations)
+- `references/discover-output.md` — `discover.py` stdout shape, exit codes, anti-patterns, discovery-signature persistence
 
 ## Design Notes
 

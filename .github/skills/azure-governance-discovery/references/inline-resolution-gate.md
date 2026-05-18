@@ -34,7 +34,33 @@ failure.
 
 The only valid bypass is the Phase 0.4 resume short-circuit, which
 already verified that the three resolutions exist in
-`governance_gate_status.resolved_confirmations`.
+`governance_gate_status.resolved_confirmations` **and** the snapshot
+they were recorded against is still trusted (signature + TTL match).
+
+### Same-session signature + TTL short-circuit
+
+Even within a single live session, the Phase 2.7 prompt is skipped when:
+
+1. `governance_gate_status.resolved_confirmations` already contains all
+   three required topics from a prior pass in the same project, AND
+2. `discovery_metadata.completeness_signature` from the current
+   envelope equals `decisions.discovery_signature` in the apex-recall
+   snapshot, AND
+3. `age_days = (now - discovery_metadata.discovered_at) / 86400 <=
+   discovery_metadata.ttl_days` (default 7).
+
+All three checks must pass — signature match alone is insufficient
+(upstream policy drift between refreshes would silently ride on a
+stale confirmation). When the check passes, emit a single-line log:
+
+```text
+Phase 2.7 confirmations resolved from prior session (signature + TTL match)
+```
+
+If TTL is exceeded the prompt MUST be re-issued, even when the
+signature has not changed — the locked S3 decision is single-clock:
+confirmations age transitively with the snapshot they were recorded
+against.
 
 ## Protocol
 
@@ -51,6 +77,56 @@ jq '{
   related_assignments: (.location_constraints.related_assignments // [])
 }' agent-output/{project}/04-governance-constraints.json
 ```
+
+### Step 1a: Authoritative tag-key resolution (MANDATORY before Step 2)
+
+Before presenting the `Required RG Tag Keys` question, reconcile tag
+keys across ALL Tags-category policies in the discovery JSON. The
+discovery script populates `findings[*].extracted_tag_keys` for every
+Tags-category policy whose `policyRule` hard-codes tag keys (typical
+of Deny policies); Modify policies still expose keys via
+`assignment_parameters.tagName*`. **Deny-policy keys win** — they are
+the enforcement contract. Modify-policy keys must be unioned (not
+substituted) so resources satisfy both layers.
+
+```bash
+jq -r '
+  .findings // []
+  | map(select((.category // "" | ascii_downcase) == "tags"))
+  | map({
+      name: .display_name,
+      effect: .effect,
+      keys_from_rule: (.extracted_tag_keys // []),
+      keys_from_params: (
+        (.assignment_parameters // {})
+        | to_entries
+        | map(select(.key | test("^tagName"; "i")))
+        | map(.value)
+      )
+    })
+' agent-output/{project}/04-governance-constraints.json
+```
+
+Resolution rules:
+
+1. Collect the **deny-policy key set** = union of `keys_from_rule`
+   across all `effect: "deny"` Tags policies.
+2. Collect the **modify-policy key set** = union of `keys_from_params`
+   across all `effect: "modify"` Tags policies.
+3. If the two sets are **identical**, `required_tag_keys` =
+   deny-policy set.
+4. If they **differ** (transcription drift, e.g. `technical-contact`
+   vs `tech-contact`):
+   - `required_tag_keys` = **union** of both sets.
+   - Append a finding via `apex-recall finding <project> --add
+     "Tag policy drift: deny=<list> modify=<list>; deployment must emit
+     both sets to satisfy both layers." --json`.
+   - Set `tag_contract.drift_detected = true` in the artifact JSON.
+5. **NEVER** synthesise tag keys from parametric knowledge or
+   abbreviate (`technical-contact` → `tech-contact`) — every key
+   in `required_tag_keys` MUST trace back to either
+   `extracted_tag_keys` or `assignment_parameters.tagName*` in the
+   discovery JSON.
 
 ### Step 2: Ask all three questions in a single `vscode_askQuestions` call
 

@@ -138,33 +138,23 @@ complete and list the artifacts (per the azure-artifacts skill).
   the frozen artifacts in place — that is a defect and breaks workflow
   resume.
 
-## Investigate Before Answering
+## Operating frame
 
-Read the implementation plan and governance constraints before generating any Terraform code.
-Verify AVM-TF module availability and variable schemas via preflight checks.
-Do not assume resource configurations — validate against actual Terraform Registry data.
+Shared agent rules (read each SKILL.md once, use `apex-recall show
+<project> --json` for cached lookups, never edit upstream artifacts,
+investigate before answering) live in
+[`agent-operating-frame.instructions.md`](../instructions/agent-operating-frame.instructions.md).
 
-## Context Awareness
-
-This is a large agent definition (~590 lines). Read each `SKILL.md` only once;
-do not re-read predecessor artifacts after the boot read — use
-`apex-recall show <project> --json` for cached lookups instead.
-
-## Scope Fencing
-
-This agent generates Terraform configurations and validation artifacts only.
-Do not deploy infrastructure — that is the Deploy agent's responsibility.
-Do not modify architecture decisions — hand back to the Planner if the plan needs changes.
-
-## Subagent Budget
-
-This agent orchestrates 2 subagents: terraform-validate-subagent (lint+review), challenger-review-subagent.
-Invoke terraform-validate-subagent for combined lint and code review.
-Use challenger-review-subagent only for adversarial review after validation passes.
-
-**HCP GUARDRAIL**: Never write `terraform { cloud { } }` blocks or reference `TFE_TOKEN`.
-Always generate Azure Storage Account backend. Never use `terraform -target` for phased
-deployment — use `var.deployment_phase` with `count` conditionals instead.
+- **Scope**: generate Terraform configurations + validation artifacts
+  only. Never deploy (hand off to `07t-terraform-deploy`); never
+  modify architecture (hand back to `05-iac-planner`).
+- **Subagent budget (2)**: `terraform-validate-subagent` (combined
+  lint + code review); `challenger-review-subagent` (post-validation
+  adversarial pass only).
+- **HCP GUARDRAIL**: Never write `terraform { cloud { } }` blocks or
+  reference `TFE_TOKEN`. Always generate Azure Storage Account
+  backend. Never use `terraform -target` for phased deployment — use
+  `var.deployment_phase` with `count` conditionals instead.
 
 ## Read Skills First
 
@@ -180,51 +170,20 @@ Before doing any work, read these skills.
 
 ## Do
 
-- Run preflight check BEFORE writing any Terraform (Phase 1)
-- Use `askQuestions` to present blockers from Phase 1 + 1.5
-- Use AVM-TF modules for EVERY resource that has one
-- Generate unique suffix ONCE in `locals.tf`, pass to ALL resources
-- Apply baseline tags + governance extras via `local.tags`
-- Parse `04-governance-constraints.json` — map Deny policies to TF args
-- Apply security baseline (TLS 1.2, HTTPS, managed identity, no public)
+> **Read** [`iac-common/references/codegen-do-dont.md`](../skills/iac-common/references/codegen-do-dont.md)
+> for the shared DO/DON'T rules that apply to both `06b` and `06t`
+> (preflight first, AVM-first, governance mapping, security baseline,
+> plan-lock, no inventing inputs, etc.). Terraform-specific additions
+> only below.
+
 - Use `var.deployment_phase` + `count` for phased deployment
 - Generate bootstrap + deploy scripts (bash + PS)
 - Run `terraform validate` + `terraform fmt -check` after generation
-- Save `05-implementation-reference.md` + update project README
 
 ## Don't
 
-- Start coding before preflight check
-- Silently halt on blockers without telling the user why
-- List blockers in chat and wait for a reply (wastes a round-trip)
-- Edit `agent-output/{project}/04-implementation-plan.md`,
-  `04-governance-constraints.md`, or `04-governance-constraints.json` —
-  frozen after gate-3 per `metadata.plan_lock` in the workflow graph;
-  plan-level must_fix returns to Step 4 instead
-- Invoke `challenger-review-subagent` with
-  `artifact_type = "implementation-plan"` from Step 5 (plan-level reviews
-  run at Step 4 only; Step 5 uses `artifact_type = "iac-code"`)
-- Issue more than one `askQuestions` call per challenger pass — batch all
-  open decisions into one inline form (see `codegen-shared-workflow.md` →
-  Batched User Decisions)
-- Bundle multiple file bodies in a single response — exceeds VS Code's
-  per-response output-token ceiling and aborts the turn with *"the
-  response hit the length limit"*. Emit ONE file per response turn
-  (see `codegen-shared-workflow.md` → Phase 2: Output Cadence)
 - Write raw `azurerm` when AVM-TF exists
-- Hardcode unique strings
-- Use hardcoded tag maps ignoring governance
-- Skip governance compliance mapping (HARD GATE)
-- Use `APPINSIGHTS_INSTRUMENTATIONKEY` (use CONNECTION_STRING)
 - Use `terraform -target` or `terraform { cloud { } }` / `TFE_TOKEN`
-- Put hyphens in Storage Account names
-- Deploy — that's the Deploy agent's job
-- Proceed without checking AVM-TF variable types (known issues exist)
-- Generate variables not declared in the plan's Code-Generation
-  Contract section. If a needed variable is missing, STOP and traverse
-  `↩ Return to Step 4` per
-  `iac-common/references/governance-drift-routing.md`. CodeGen does
-  NOT invent inputs.
 
 ## Prerequisites Check
 
@@ -380,20 +339,15 @@ from scratch.**
 
 ### Phase 1.6: Context Compaction
 
-Context usage reaches ~80% after preflight checks and governance mapping.
-Compact the conversation before proceeding to code generation.
+Context reaches ~80% after preflight + governance mapping. Apply Mode A
+runtime compression per
+[`context-management/SKILL.md`](../skills/context-management/SKILL.md):
+write one concise summary (preflight result + AVM-TF/raw counts,
+governance compliance map status, deployment strategy, resource list
+with module sources + version pins + key variables) and stop loading
+additional skills before Phase 2. Do NOT re-read predecessor artifacts.
 
-1. **Summarize prior phases** — write a single concise message containing:
-   - Preflight check result (blockers, AVM-TF vs raw count)
-   - Governance compliance map (Deny policies mapped, unsatisfied count)
-   - Deployment strategy from `04-implementation-plan.md` (phased/single)
-   - Resource list with module sources, version pins, and key variables
-2. **Stop loading additional skills** — once context is compacted, do not load
-   any new skill files; rely on summaries already in context
-3. **Do NOT re-read predecessor artifacts** — rely on the summary above
-   and the saved `04-preflight-check.md` + `04-governance-constraints.json` on disk
-4. **Update session state** — run `apex-recall checkpoint <project> 5 phase_1.6_compacted --json`
-   so resume skips re-loading prior context
+**Checkpoint** (MANDATORY): `apex-recall checkpoint <project> 5 phase_1.6_compacted --json`
 
 ### Phase 2: Progressive Implementation
 
@@ -563,3 +517,15 @@ This keeps the user informed during multi-phase operations.
 
 **Read** `.github/skills/terraform-patterns/references/codegen-validation-checklist.md`
 — verify ALL items before marking Step 5 complete.
+
+## Completion Handoff
+
+After `apex-recall complete-step` + writing `00-handoff.md`, end the
+final chat message with this line, **verbatim**, on its own final line
+(full contract:
+[`compression-templates.md`](../skills/context-management/references/compression-templates.md#gate-boundary-clear-handoff-contract);
+validator: `npm run validate:orchestrator-handoff`):
+
+```text
+Run `/clear`, then switch the chat agent picker to `01-Orchestrator` and send `resume <project>` to continue Step N+1.
+```

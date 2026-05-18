@@ -17,9 +17,19 @@ This section exists so a brand-new chat with no memory can pick up the work.
   yet**. Create it from `main` as the first action.
 - **First action when resuming** (paste verbatim):
   1. `git fetch origin && git checkout -b feat/test04-token-reduction origin/main`
-  2. Open this file (`tools/apex-prompts/apex-planning-prompts/01-plan-tokenreduction.prompt.md`)
+  2. Extract the baseline log corpus (the `logs/` and `tmp/` paths are
+     gitignored, so the JSON files only ship via this archive):
+     `tar -xzf .github/data/token-reduction-logs.tar.gz`
+     This recreates `logs/test04-01.json`, two
+     `logs/agent-debug-log-*.json`, and two
+     `tmp/agent-debug-log-*.json` — the exact ≥3-session corpus
+     Phase 0 consumes and the canonical `logs/test04-01.json` that
+     Phase 1 verification re-profiles. Confirm with
+     `ls logs/test04-01.json tmp/agent-debug-log-*.json` before
+     proceeding.
+  3. Open this file (`tools/apex-prompts/apex-planning-prompts/01-plan-tokenreduction.prompt.md`)
      and start Phase 0 ("Multi-log baselining") below.
-  3. Create `/memories/session/plan01-progress.md` and use it as the
+  4. Create `/memories/session/plan01-progress.md` and use it as the
      live per-phase status tracker for the duration of the work (this
      plan file stays frozen; the session memory file mutates).
 - **Progress tracking**: session memory only. **Do not** use
@@ -75,7 +85,10 @@ committing to numeric targets.
 
 1. Identify ≥3 historical OTel session logs under `logs/` plus
    `tmp/agent-debug-log-*.json` representing different workflow shapes
-   (Step 1 only, Step 1→2, Step 1→2→3.5).
+   (Step 1 only, Step 1→2, Step 1→2→3.5). On a fresh device these
+   paths are gitignored — extract them once via
+   `tar -xzf .github/data/token-reduction-logs.tar.gz` (see "First
+   action when resuming" above).
 2. Run the profiler (Phase 1 deliverable) against each.
 3. Compute baseline range: p50 / p90 / max for every headline metric
    (input tokens, avg/call, askQuestions count, challenger
@@ -151,16 +164,18 @@ implementable mechanism.
 1. Add a "Gate-boundary handoff" contract to
    `.github/skills/context-management/references/compression-templates.md`:
    on every accepted Gate, the orchestrator's final assistant message
-   ends with a verbatim line — *"Run `/clear` then reply
-   `@01-Orchestrator resume <project>` to continue Step N+1."*
+   ends with a verbatim line — *"Run `/clear`, then switch the chat
+   agent picker to `01-Orchestrator` and send `resume <project>` to
+   continue Step N+1."*
 2. Edit `01-orchestrator.agent.md` Gate-acceptance section to require
    `apex-recall checkpoint <project> <step> <phase>` **before** the
    resume-line is emitted, and forbid the agent from continuing to
    Step N+1 in the same chat session.
-3. Resume path: a new chat starting with `@01-Orchestrator resume
-   <project>` runs `apex-recall show <project> --json` as its first
-   tool call, loads only the compact handoff JSON (~1–2 KB), and
-   skips re-reading completed-step artifacts unless explicitly needed.
+3. Resume path: in a new chat the user picks `01-Orchestrator` from
+   the agent picker and sends `resume <project>`, which runs
+   `apex-recall show <project> --json` as the first tool call, loads
+   only the compact handoff JSON (~1–2 KB), and skips re-reading
+   completed-step artifacts unless explicitly needed.
 4. Pre-action lint:
    `tools/scripts/validate_orchestrator_handoff.py` parses
    `01-orchestrator.agent.md` and asserts every Gate-acceptance

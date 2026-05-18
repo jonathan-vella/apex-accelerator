@@ -1,6 +1,6 @@
 ---
 name: azure-resources
-description: "**ANALYSIS SKILL** — List, find, and visualize existing Azure resources via Resource Graph (LOOKUP) or Mermaid diagrams (VISUALIZE). WHEN: 'list resources', 'list VMs', 'find orphaned resources', 'resource inventory', 'cross-subscription query', 'visualize Azure resources', 'diagram my resources'. DO NOT USE FOR: deploying (azure-deploy), cost optimization (azure-cost-optimization), security scanning (azure-compliance), troubleshooting (azure-diagnostics)."
+description: "**ANALYSIS SKILL** — List, find, and visualize Azure resources via Resource Graph or Mermaid. WHEN: 'list resources', 'list VMs', 'find orphaned resources', 'resource inventory', 'cross-subscription query', 'visualize Azure resources', 'diagram my resources'. DO NOT USE FOR: deploys (azure-deploy), cost (azure-cost-optimization), security (azure-compliance), troubleshooting (azure-diagnostics)."
 license: MIT
 metadata:
   author: Microsoft
@@ -55,8 +55,8 @@ Use this mode when the user wants to **list / find / show** Azure resources.
 | Tool                              | Purpose                            | When to Use                                     |
 | --------------------------------- | ---------------------------------- | ----------------------------------------------- |
 | `extension_cli_generate`          | Generate `az graph query` commands | Primary — generate ARG queries from user intent |
-| `mcp_azure_mcp_subscription_list` | List available subscriptions       | Discover subscription scope before querying     |
-| `mcp_azure_mcp_group_list`        | List resource groups               | Narrow query scope                              |
+| `mcp_azure-mcp_subscription_list` | List available subscriptions       | Discover subscription scope before querying     |
+| `mcp_azure-mcp_group_list`        | List resource groups               | Narrow query scope                              |
 
 ## Rules
 
