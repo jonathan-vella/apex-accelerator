@@ -96,9 +96,17 @@ npm run sync:workflows
 After running, review and commit:
 
 ```bash
-git diff
+git --no-pager diff
 git add -A && git commit -m "chore: initialize from template"
 ```
+
+> **Expected diff:** You will see changes to `AGENTS.md`, `CONTRIBUTING.md`, and one or more
+> `.github/workflows/` files. You may also see formatting-only changes to `.vscode/mcp.json`
+> (the dev container normalizes its JSON arrays to multi-line format on first start) — this is
+> expected and safe to commit.
+>
+> **Tip:** Use `git --no-pager diff` instead of plain `git diff` to avoid the `less` pager.
+> If you do use `git diff` and see a `:` prompt, press `q` to exit or `Space` to scroll.
 
 ### 4. Set Up Azure
 
