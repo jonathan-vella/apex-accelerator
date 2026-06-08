@@ -52,7 +52,7 @@ for (const u of urls) {
       const href = m[1];
       if (!href) continue;
       if (/^(https?:|mailto:|tel:|#)/.test(href)) continue;
-      if (href.startsWith("/apex/")) {
+      if (href.startsWith("/")) {
         // Doc URLs get a trailing slash for Set dedupe; static assets
         // (anything with a file extension in the last segment) stay as-is.
         const lastSegment = href.split("/").pop() || "";

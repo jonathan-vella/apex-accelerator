@@ -139,6 +139,6 @@ npm run preview  # Preview production build
 
 - **No SSR**: This is a static documentation site — do not enable SSR mode
 - **No API routes**: No `src/pages/api/` — this is a content-only site
-- **Base path**: All asset references must account for `/apex/` base
+- **Base path**: All asset references must account for `/` base
 - **Edit links**: Point to `https://github.com/jonathan-vella/apex/edit/main/site/`
 - **Pagefind search**: Built-in with Starlight — no additional config needed

@@ -35,7 +35,7 @@ const REPO_ROOT = resolve(dirname(__filename), "../..");
 const OUT_PATH = join(REPO_ROOT, "site/public/architecture-explorer-graph.json");
 
 const GITHUB_BASE = "https://github.com/jonathan-vella/apex/blob/main/";
-const _DOCS_BASE = "/apex/";
+const _DOCS_BASE = "/";
 
 /** @type {Array<{id: string, key: string, label: string, color: string, shape: string}>} */
 const CATEGORIES = [
@@ -186,7 +186,7 @@ function collectSubagents() {
 
 function collectSkills() {
   const skillsDir = join(REPO_ROOT, ".github/skills");
-  let dirs = [];
+  let dirs;
   try {
     dirs = readdirSync(skillsDir).filter((d) => statSync(join(skillsDir, d)).isDirectory());
   } catch {
