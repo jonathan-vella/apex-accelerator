@@ -25,7 +25,7 @@ is Well-Architected, governed, and documented.
 
 **What you get**: Specialized agents, skills, validation scripts, a full dev container with all
 tools pre-installed, and an optional weekly sync workflow that keeps your agents and skills up to date with
-the [upstream APEX project](https://github.com/jonathan-vella/azure-agentic-infraops).
+the [upstream APEX project](https://github.com/jonathan-vella/apex).
 
 ---
 
@@ -88,7 +88,7 @@ npm run sync:workflows
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `npm install`            | Install Node.js dependencies (validation scripts, linting)                                                                                                                                    |
 | `npm run init`           | **One-time setup** — replaces all references to the accelerator template repo with your repo's URL (auto-detected from git remote). Run `npm run init -- --dry-run` first to preview changes. |
-| `npm run sync:workflows` | Fetches the latest GitHub Actions workflows from the [upstream APEX project](https://github.com/jonathan-vella/azure-agentic-infraops) into your `.github/workflows/` directory                |
+| `npm run sync:workflows` | Fetches the latest GitHub Actions workflows from the [upstream APEX project](https://github.com/jonathan-vella/apex) into your `.github/workflows/` directory                |
 
 > **Note:** Python dependencies (diagrams, Azure Pricing MCP server, apex-recall) are installed
 > automatically by the dev container's `post-create.sh` script. No manual `pip install` is needed.
@@ -124,7 +124,7 @@ main branch + dev/staging/prod environments), assigns Reader at your Management 
 and Contributor at your subscription, and configures all GitHub secrets and variables.
 It is idempotent — safe to re-run.
 
-See the [Azure Setup documentation](https://jonathan-vella.github.io/azure-agentic-infraops/getting-started/azure-setup/)
+See the [Azure Setup documentation](https://apexops.pro/getting-started/azure-setup/)
 for headless mode, manual setup steps, and troubleshooting.
 
 ### 5. Allow GitHub Actions to Create Pull Requests
@@ -348,12 +348,12 @@ cd infra/terraform/{project} && terraform init -backend=false && terraform valid
 
 ## Resources
 
-- [APEX upstream project](https://github.com/jonathan-vella/azure-agentic-infraops)
-- [APEX documentation](https://jonathan-vella.github.io/azure-agentic-infraops/)
-- [Azure Setup guide](https://jonathan-vella.github.io/azure-agentic-infraops/getting-started/azure-setup/)
-- [MicroHack (hands-on exercises)](https://jonathan-vella.github.io/microhack-agentic-infraops/)
-- [Prompt Guide](https://jonathan-vella.github.io/azure-agentic-infraops/guides/prompt-guide/)
-- [FAQ](https://jonathan-vella.github.io/azure-agentic-infraops/reference/faq/)
+- [APEX upstream project](https://github.com/jonathan-vella/apex)
+- [APEX documentation](https://apexops.pro/)
+- [Azure Setup guide](https://apexops.pro/getting-started/azure-setup/)
+- [MicroHack (hands-on exercises)](https://microhack.apexops.pro/)
+- [Prompt Guide](https://apexops.pro/guides/prompt-guide/)
+- [FAQ](https://apexops.pro/reference/faq/)
 
 ## License
 

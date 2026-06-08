@@ -1,5 +1,5 @@
 # Upstream Sync
-# This repository is a downstream accelerator of jonathan-vella/azure-agentic-infraops.
+# This repository is a downstream accelerator of jonathan-vella/apex.
 # Upstream ALWAYS wins for all files EXCEPT the paths listed in EXCLUDE_PATHS below.
 #
 # ALWAYS synced from upstream (upstream wins):
@@ -57,7 +57,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  UPSTREAM_REPO: jonathan-vella/azure-agentic-infraops
+  UPSTREAM_REPO: jonathan-vella/apex
   UPSTREAM_REF: main
   SYNC_BRANCH: automation/upstream-sync
   # Single source of truth for excluded paths. Consumed by the sync step and the leak-check step.
