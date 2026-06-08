@@ -4,7 +4,7 @@
 
 ```bash
 # Clone the Accelerator template and open in dev container
-# https://github.com/jonathan-vella/azure-agentic-infraops-accelerator
+# https://github.com/jonathan-vella/apex-accelerator
 git clone https://github.com/YOUR-USERNAME/my-infraops-project.git && cd my-infraops-project
 code . # then: F1 → Dev Containers: Reopen in Container
 
@@ -14,7 +14,7 @@ npm run setup                            # Azure + GitHub OIDC/secrets/RBAC
 
 > Python deps (diagrams, Azure Pricing MCP, apex-recall) install automatically
 > via the dev container's `post-create.sh`. Setup details:
-> https://jonathan-vella.github.io/azure-agentic-infraops/getting-started/azure-setup/
+> https://apexops.pro/getting-started/azure-setup/
 
 ## Build & Validation
 
@@ -31,7 +31,7 @@ npm run validate:iac-security-baseline   # TLS/HTTPS/Entra-only/no-public-blob b
 npm run lint:safe-shell                  # No interactive shell prompts in committed snippets
 
 # Full list (≈30 scripts) → npm run | grep -E "^  (lint|validate|test):" or
-# https://jonathan-vella.github.io/azure-agentic-infraops/reference/validation-reference/
+# https://apexops.pro/reference/validation-reference/
 
 # Pre-commit/pre-push hooks (installed via lefthook on `npm run prepare`)
 git push                                 # Triggers diff-based-push-check.sh automatically
@@ -129,4 +129,4 @@ For deeper guidance, agents read these on demand:
   `.github/instructions/no-interactive-shell.instructions.md` (enforced by `lint:safe-shell`)
 - Azure defaults: `.github/skills/azure-defaults/SKILL.md`
 - Workflow DAG: `.github/skills/workflow-engine/templates/workflow-graph.json`
-- Full validation reference: <https://jonathan-vella.github.io/azure-agentic-infraops/reference/validation-reference/>
+- Full validation reference: <https://apexops.pro/reference/validation-reference/>
