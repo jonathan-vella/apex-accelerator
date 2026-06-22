@@ -14,7 +14,7 @@
       "version": "3.14",
       "installTools": false
     },
-    "ghcr.io/devcontainers/features/node:2": {
+    "ghcr.io/devcontainers/features/node:": {
       "version": "lts",
       "pnpmVersion": "none"
     },
@@ -23,8 +23,7 @@
     },
     "ghcr.io/devcontainers/features/terraform:1": {
       "tflint": "none",
-      "terragrunt": "none",
-      "installTFsec": false
+      "terragrunt": "none"
     },
     "ghcr.io/devcontainers/features/go:1": {
       "version": "1.24.2"
@@ -124,10 +123,7 @@
         },
         "chat.hookFilesLocations": {
           ".github/hooks/tool-guardian": true,
-          ".github/hooks/secrets-scanner": true,
-          ".github/hooks/session-telemetry": true,
-          ".github/hooks/subagent-validation": true,
-          ".github/hooks/tool-audit": true
+          ".github/hooks/subagent-validation": true
         },
         "chat.useCustomAgentHooks": true,
         "chat.useAgentSkills": true,
