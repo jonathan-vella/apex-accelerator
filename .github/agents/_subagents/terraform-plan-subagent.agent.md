@@ -15,10 +15,7 @@ tools:
     execute,
     read,
     agent,
-    browser,
-    edit,
     search,
-    web,
     "terraform/*",
     "azure-mcp/*",
     todo,
@@ -66,7 +63,7 @@ This subagent does not:
   `az login`.
 - Approve destructive operations on the parent's behalf — destroys and
   replaces are surfaced for explicit human approval.
-- Run `terraform validate` or `tfsec` (those belong to
+- Run `terraform validate` (belongs to
   `terraform-validate-subagent`).
   </scope_fencing>
 
