@@ -4,7 +4,7 @@ model: ["Claude Sonnet 4.6"]
 description: "Step 3 — Design Artifacts. Generates architecture diagrams (Draw.io or Python) and Architecture Decision Records (azure-adr skill) for Azure infrastructure. Optional step — users can skip to Implementation Planning."
 user-invocable: true
 agents: ["challenger-review-subagent"]
-tools: [vscode/askQuestions, vscode/memory, vscode/runCommand, execute/runInTerminal, read/terminalSelection, read/terminalLastCommand, read/getNotebookSummary, read/problems, read/readFile, read/viewImage, read/readNotebookCellOutput, agent/runSubagent, edit/createDirectory, edit/createFile, edit/createJupyterNotebook, edit/editFiles, edit/editNotebook, edit/rename, search/codebase, search/fileSearch, search/listDirectory, search/textSearch, search/usages, drawio/add-cells, drawio/add-cells-to-group, drawio/clear-diagram, drawio/create-groups, drawio/create-layer, drawio/delete-cell-by-id, drawio/edit-cells, drawio/edit-edges, drawio/export-diagram, drawio/finish-diagram, drawio/get-diagram-stats, drawio/get-shape-categories, drawio/get-shapes-in-category, drawio/get-style-presets, drawio/import-diagram, drawio/list-group-children, drawio/list-layers, drawio/list-paged-model, drawio/move-cell-to-layer, drawio/remove-cell-from-group, drawio/search-shapes, drawio/set-active-layer, drawio/set-cell-shape, drawio/suggest-group-sizing, drawio/validate-group-containment, todo, ms-python.python/getPythonEnvironmentInfo, ms-python.python/getPythonExecutableCommand, ms-python.python/installPythonPackage, ms-python.python/configurePythonEnvironment]
+tools: [vscode/askQuestions, vscode/memory, vscode/runCommand, execute/runInTerminal, read/terminalSelection, read/terminalLastCommand, read/getNotebookSummary, read/problems, read/readFile, read/viewImage, read/readNotebookCellOutput, agent/runSubagent, edit/createDirectory, edit/createFile, edit/createJupyterNotebook, edit/editFiles, edit/editNotebook, edit/rename, search/codebase, search/fileSearch, search/listDirectory, search/textSearch, search/usages, "drawio/*", todo, ms-python.python/getPythonEnvironmentInfo, ms-python.python/getPythonExecutableCommand, ms-python.python/installPythonPackage, ms-python.python/configurePythonEnvironment]
 handoffs:
   - label: "▶ Generate Diagram"
     agent: 04-Design
@@ -44,6 +44,16 @@ that have already been approved.
 This is **Step 3** of the workflow and is **optional**. Users can skip directly
 to Step 3.5 (Governance) or Step 4 (IaC Planning).
 </role>
+
+<context_awareness>
+This agent visualises already-approved decisions; it does not invent new
+architecture. Keep the window lean: read each `SKILL.md` once (`drawio` or
+`python-diagrams`, plus `azure-adr`), use `apex-recall show <project>
+--json` for cached decisions instead of re-reading artifacts, and never
+edit the upstream architecture assessment. Draw.io diagrams run in
+transactional mode — thread `diagram_xml` between every MCP call rather
+than reloading diagram state.
+</context_awareness>
 
 ## Operating frame
 
@@ -215,6 +225,9 @@ Sequence:
 
 If the diagram needs more than two post-save adjustments, run `clear-diagram`
 and rebuild from a clean base layout. Patch-and-retry rarely beats rebuild.
+If a clean rebuild still fails validation (`validate-drawio-files.mjs` errors
+or quality score < 9/10), stop and surface the error to the user rather than
+looping a third time.
 
 After the file is saved, delete any temp JSON or working files you created;
 they are not part of the output contract.
@@ -398,8 +411,10 @@ with `artifact_type = "design-adr"`, `review_focus = "comprehensive"`,
 and `output_path =
 agent-output/{project}/challenge-findings-design-adr-<n>.json`. The
 design step does not gate on findings — present them informationally.
-Surface any `requires_step == "step-2"` finding explicitly so the user
-can decide whether to re-open the architecture.
+If the challenger subagent itself errors or times out, log it via
+`apex-recall finding` and continue — the optional ADR review never blocks
+artifact completion. Surface any `requires_step == "step-2"` finding
+explicitly so the user can decide whether to re-open the architecture.
 
 Compose the runtime `prompt` string per
 [tools/apex-prompts/utility-prompts/execution-subagent.prompt.md](../../tools/apex-prompts/utility-prompts/execution-subagent.prompt.md)

@@ -328,7 +328,7 @@ from scratch.**
    `.github/instructions/references/iac-policy-compliance.md`. Record
    the required value — these become the L2 attestations the
    `terraform-validate-subagent` will check after code generation.
-4. Merge governance tags with 4 baseline defaults (governance wins).
+4. Merge governance tags with the 9 baseline defaults (governance wins).
 5. If `04-governance-constraints.json` contains a structured `override` block
    for a Deny finding (see `04g-governance.agent.md` → Policy Override Pattern),
    validate that `reason`, `issue_link`, and a future-dated `expiry` are all
@@ -392,6 +392,12 @@ Invoke both validation subagents in parallel via simultaneous `#runSubagent` cal
 1. `terraform-validate-subagent` (path: `infra/terraform/{project}/`) — expect APPROVED (runs lint then review)
 
 Await both results. Both must pass before Phase 4.5.
+
+If a subagent **errors or times out** (distinct from returning a
+`NEEDS_REVISION`/`FAILED` verdict), apply the `iac-common` bounded-retry
+pattern: retry the call once. If it fails again, stop and ask the user via
+`askQuestions` — Retry / Fix Inline / Abort. Do not advance to Phase 4.5 on
+an unresolved subagent error.
 
 Run `npm run validate:iac-security-baseline` on `infra/terraform/{project}/` —
 violations are a hard gate (fix before Phase 4.5).
