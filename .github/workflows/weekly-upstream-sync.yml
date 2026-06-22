@@ -17,7 +17,6 @@
 #   infra/bicep/            → user project Bicep templates
 #   infra/terraform/        → user project Terraform configs
 #   .github/workflows/      → keep repository workflows as-is (GITHUB_TOKEN cannot push workflow changes)
-#   .github/ISSUE_TEMPLATE/ → accelerator-specific issue templates
 #   .github/PULL_REQUEST_TEMPLATE.md → accelerator-specific PR template
 #   .github/CODEOWNERS      → accelerator-specific code owners
 #   .github/data/           → subscription-specific governance baseline data
@@ -64,7 +63,6 @@ env:
   # Trailing slash for directories, no trailing slash for files. One path per line.
   EXCLUDE_PATHS: |
     .github/workflows/
-    .github/ISSUE_TEMPLATE/
     .github/PULL_REQUEST_TEMPLATE.md
     .github/CODEOWNERS
     .github/data/
@@ -170,7 +168,7 @@ jobs:
       - name: Assert excluded paths are unchanged
         if: steps.sync.outputs.changed == 'true'
         run: |
-          leaked=$(git diff --cached --name-only | grep -E '^(\.github/workflows/|\.github/ISSUE_TEMPLATE/|\.github/PULL_REQUEST_TEMPLATE\.md$|\.github/CODEOWNERS$|\.github/data/|agent-output/|infra/bicep/|infra/terraform/|README\.md$|CONTRIBUTING\.md$|CONTRIBUTORS\.md$|CHANGELOG\.md$|site/|docs/|logs/)' || true)
+          leaked=$(git diff --cached --name-only | grep -E '^(\.github/workflows/|\.github/PULL_REQUEST_TEMPLATE\.md$|\.github/CODEOWNERS$|\.github/data/|agent-output/|infra/bicep/|infra/terraform/|README\.md$|CONTRIBUTING\.md$|CONTRIBUTORS\.md$|CHANGELOG\.md$|site/|docs/|logs/)' || true)
           if [ -n "$leaked" ]; then
             echo "::error::Excluded paths were modified by sync."
             echo "$leaked" | sed 's/^/  /'
@@ -214,7 +212,7 @@ jobs:
           git commit -m "chore(sync): upstream sync from ${UPSTREAM_REPO}@${UPSTREAM_REF}
 
           Synced at $(date -u +"%Y-%m-%d %H:%M UTC")
-          Excluded: agent-output/ infra/ .github/workflows/ .github/ISSUE_TEMPLATE/ .github/PULL_REQUEST_TEMPLATE.md .github/CODEOWNERS .github/data/ README.md CONTRIBUTING.md CONTRIBUTORS.md CHANGELOG.md site/ docs/ logs/"
+          Excluded: agent-output/ infra/ .github/workflows/ .github/PULL_REQUEST_TEMPLATE.md .github/CODEOWNERS .github/data/ README.md CONTRIBUTING.md CONTRIBUTORS.md CHANGELOG.md site/ docs/ logs/"
 
           set +e
           push_output=$(git push --force origin "${SYNC_BRANCH}" 2>&1)
@@ -256,7 +254,7 @@ jobs:
           All root config files (\`package.json\`, \`lefthook.yml\`, etc.)
 
           **Excluded (accelerator-specific, never overwritten):**
-          \`agent-output/\` · \`infra/\` · \`.github/workflows/\` · \`.github/ISSUE_TEMPLATE/\` · \`.github/PULL_REQUEST_TEMPLATE.md\`
+          \`agent-output/\` · \`infra/\` · \`.github/workflows/\` · \`.github/PULL_REQUEST_TEMPLATE.md\`
           \`.github/CODEOWNERS\` · \`.github/data/\` · \`README.md\` · \`CONTRIBUTING.md\` · \`CONTRIBUTORS.md\` · \`CHANGELOG.md\`
           \`site/\` · \`docs/\` · \`logs/\`
 
