@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/jonathan-vella-apex-accelerator-badge.png)](https://mseep.ai/app/jonathan-vella-apex-accelerator)
+
 <!-- markdownlint-disable MD013 MD033 MD041 -->
 
 # APEX Accelerator
