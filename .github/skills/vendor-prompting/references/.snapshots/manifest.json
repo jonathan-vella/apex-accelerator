@@ -9,6 +9,15 @@
     "fetch_method": "raw"
   },
   {
+    "source_id": "anthropic-prompting-claude-sonnet-5",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/prompting-claude-sonnet-5",
+    "ref": null,
+    "sha256": "87f4ff8e5a530d8d3282044247cb8ddae857f1c89ee0735751109af2a22fda10",
+    "fetched_at": "2026-06-30T20:01:04.090Z",
+    "bytes": 737066,
+    "fetch_method": "raw"
+  },
+  {
     "source_id": "openai-prompting-guide",
     "url": "https://github.com/openai/skills/blob/724cd511c96593f642bddf13187217aa155d2554/skills/.curated/openai-docs/references/prompting-guide.md",
     "ref": "724cd511c96593f642bddf13187217aa155d2554",

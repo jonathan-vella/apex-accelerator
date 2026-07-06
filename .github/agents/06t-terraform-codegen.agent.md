@@ -1,26 +1,11 @@
 ---
 name: 06t-Terraform CodeGen
 description: "Expert Azure Terraform IaC specialist that creates near-production-ready Terraform configurations following Azure Verified Modules (AVM-TF) standards. Validates, tests, and ensures code quality."
-model: ["Claude Sonnet 4.6"]
+model: ["Claude Sonnet 5"]
 user-invocable: true
 agents: ["terraform-validate-subagent", "challenger-review-subagent"]
 tools:
-  [
-    vscode,
-    execute,
-    read,
-    agent,
-    browser,
-    edit,
-    search,
-    web,
-    web/fetch,
-    web/githubRepo,
-    "azure-mcp/*",
-    "terraform/*",
-    todo,
-    ms-azuretools.vscode-azureresourcegroups/azureActivityLog,
-  ]
+  [vscode, execute, read, agent, browser, vscodeGeneral/rename, vscodeGeneral/usages, vscodeNotebooks/createJupyterNotebook, vscodeNotebooks/editNotebook, ms-azuretools.vscode-azureresourcegroups, edit, search, web, 'azure-mcp/*', 'terraform/*', todo]
 handoffs:
   - label: "▶ Run Preflight Check"
     agent: 06t-Terraform CodeGen

@@ -447,12 +447,6 @@ default_drawio = {
     "args": ["run", "-P", "--no-check", "--cached-only", "${workspaceFolder}/tools/mcp-servers/drawio/src/index.ts"],
 }
 
-default_azure_mcp = {
-    "type": "stdio",
-    "command": "npx",
-    "args": ["-y", "@azure/mcp@latest", "server", "start"],
-}
-
 data = {"servers": {}}
 
 if config_path.exists():
@@ -469,7 +463,9 @@ servers = data.setdefault("servers", {})
 servers.setdefault("azure-pricing", default_azure_pricing)
 servers.setdefault("github", default_github)
 servers.setdefault("drawio", default_drawio)
-servers.setdefault("azure-mcp", default_azure_mcp)
+# Azure MCP is provided by the ms-azuretools.vscode-azure-mcp-server extension
+# (declared in devcontainer.json customizations.vscode.extensions) — no
+# npx-launched stdio server is registered here to avoid a duplicate server.
 config_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 PY
 
@@ -497,6 +493,14 @@ if [ -f "tools/scripts/validate-tool-versions.mjs" ]; then
         && echo "        Tool pins:      ✅ all ≥ minimum" \
         || echo "        Tool pins:      ⚠️  one or more tools below pinned minimum (see tools/registry/tool-version-pins.json)"
 fi
+
+echo ""
+echo "        ⚠️  Azure Tools pack (ms-vscode.vscode-node-azure-pack) bundles"
+echo "           ms-azuretools.vscode-azure-github-copilot and"
+echo "           ms-windows-ai-studio.windows-ai-studio — both inflate Copilot"
+echo "           chat context (~5-7k tokens/turn each). Disable both manually"
+echo "           in the Extensions view; APEX's own agent set already covers"
+echo "           their scope."
 
 step_done "All verifications complete"
 
