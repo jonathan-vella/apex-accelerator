@@ -1,10 +1,10 @@
 ---
 name: 08-As-Built
 description: "Generates Step 7 as-built documentation suite after successful deployment. Reads all prior artifacts (Steps 1-6) and deployed resource state to produce: design document, operations runbook, cost estimate, compliance matrix, backup/DR plan, resource inventory, and documentation index."
-model: ["Claude Sonnet 4.6"]
+model: ["Claude Sonnet 5"]
 user-invocable: true
 agents: ["cost-estimate-subagent"]
-tools: [vscode, execute, read, agent, browser, edit, search, web, "azure-mcp/*", "drawio/*", todo]
+tools: [vscode, execute, read, agent, browser, vscodeGeneral/rename, vscodeGeneral/usages, vscodeNotebooks/createJupyterNotebook, vscodeNotebooks/editNotebook, ms-python.python, edit, search, web, 'azure-mcp/*', todo]
 handoffs:
   - label: "▶ Generate All Documentation"
     agent: 08-As-Built

@@ -295,7 +295,7 @@ fi
 # IEEE_P1363 encoded signature"). We therefore set tflint=none in the feature
 # and install the pinned TFLint release directly here — no cosign required.
 
-TFLINT_VERSION="0.61.0"
+TFLINT_VERSION="0.63.1"
 step_start "🧹" "Installing TFLint v${TFLINT_VERSION} (cosign-free)..."
 if command -v tflint &>/dev/null && tflint --version 2>/dev/null | grep -q "$TFLINT_VERSION"; then
     step_done "TFLint v${TFLINT_VERSION} already installed"
@@ -303,18 +303,23 @@ else
     TFLINT_ARCH=$(dpkg --print-architecture)
     if [ "$TFLINT_ARCH" = "amd64" ] || [ "$TFLINT_ARCH" = "arm64" ]; then
         TFLINT_TMP=$(mktemp -d)
-        TFLINT_URL="https://github.com/terraform-linters/tflint/releases/download/v${TFLINT_VERSION}/tflint_linux_${TFLINT_ARCH}.zip"
+        # Save the download under its published asset name (arch-derived, so
+        # both amd64 and arm64 hosts work). `sha256sum -c` resolves the file
+        # by the name recorded in checksums.txt, so a generic "tflint.zip"
+        # target fails the integrity check even when the bytes are correct.
+        TFLINT_ZIP="tflint_linux_${TFLINT_ARCH}.zip"
+        TFLINT_URL="https://github.com/terraform-linters/tflint/releases/download/v${TFLINT_VERSION}/${TFLINT_ZIP}"
         TFLINT_SHA_URL="https://github.com/terraform-linters/tflint/releases/download/v${TFLINT_VERSION}/checksums.txt"
-        if curl -fsSL "$TFLINT_URL" -o "$TFLINT_TMP/tflint.zip" \
+        if curl -fsSL "$TFLINT_URL" -o "$TFLINT_TMP/${TFLINT_ZIP}" \
             && curl -fsSL "$TFLINT_SHA_URL" -o "$TFLINT_TMP/checksums.txt" \
             && (cd "$TFLINT_TMP" && grep -E " tflint_linux_${TFLINT_ARCH}\.zip$" checksums.txt | sha256sum -c -) \
-            && unzip -o -q "$TFLINT_TMP/tflint.zip" -d "$TFLINT_TMP" \
+            && unzip -o -q "$TFLINT_TMP/${TFLINT_ZIP}" -d "$TFLINT_TMP" \
             && sudo install -m 0755 "$TFLINT_TMP/tflint" /usr/local/bin/tflint; then
             rm -rf "$TFLINT_TMP"
             step_done "TFLint $(tflint --version 2>/dev/null | head -1)"
         else
             rm -rf "$TFLINT_TMP"
-            step_warn "TFLint install failed — check network access to github.com"
+            step_warn "TFLint install failed — download or checksum verification error"
         fi
     else
         step_warn "TFLint skipped: unsupported architecture $TFLINT_ARCH (supported: amd64, arm64)"
@@ -447,12 +452,6 @@ default_drawio = {
     "args": ["run", "-P", "--no-check", "--cached-only", "${workspaceFolder}/tools/mcp-servers/drawio/src/index.ts"],
 }
 
-default_azure_mcp = {
-    "type": "stdio",
-    "command": "npx",
-    "args": ["-y", "@azure/mcp@latest", "server", "start"],
-}
-
 data = {"servers": {}}
 
 if config_path.exists():
@@ -469,7 +468,9 @@ servers = data.setdefault("servers", {})
 servers.setdefault("azure-pricing", default_azure_pricing)
 servers.setdefault("github", default_github)
 servers.setdefault("drawio", default_drawio)
-servers.setdefault("azure-mcp", default_azure_mcp)
+# Azure MCP is provided by the ms-azuretools.vscode-azure-mcp-server extension
+# (declared in devcontainer.json customizations.vscode.extensions) — no
+# npx-launched stdio server is registered here to avoid a duplicate server.
 config_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 PY
 
@@ -497,6 +498,14 @@ if [ -f "tools/scripts/validate-tool-versions.mjs" ]; then
         && echo "        Tool pins:      ✅ all ≥ minimum" \
         || echo "        Tool pins:      ⚠️  one or more tools below pinned minimum (see tools/registry/tool-version-pins.json)"
 fi
+
+echo ""
+echo "        ⚠️  Azure Tools pack (ms-vscode.vscode-node-azure-pack) bundles"
+echo "           ms-azuretools.vscode-azure-github-copilot and"
+echo "           ms-windows-ai-studio.windows-ai-studio — both inflate Copilot"
+echo "           chat context (~5-7k tokens/turn each). Disable both manually"
+echo "           in the Extensions view; APEX's own agent set already covers"
+echo "           their scope."
 
 step_done "All verifications complete"
 
