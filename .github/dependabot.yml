@@ -1,6 +1,6 @@
 # Dependabot configuration for automated dependency updates.
 #
-# Scope: dev container features, GitHub Actions, npm (root + site), and the
+# Scope: dev container features, GitHub Actions, npm (root), and the
 # two in-repo Python packages (azure-pricing MCP, apex-recall). Top-level
 # requirements.txt is intentionally out of scope (managed via uv pin in
 # .devcontainer/post-start.sh).
@@ -67,27 +67,6 @@ updates:
         update-types:
           - "minor"
           - "patch"
-
-  # ─── npm: docs site (Astro/Starlight) ──────────────────────────────────────
-  - package-ecosystem: "npm"
-    directory: "/site"
-    schedule:
-      interval: "weekly"
-      day: "tuesday"
-    open-pull-requests-limit: 3
-    commit-message:
-      prefix: "chore(site)"
-    labels:
-      - "dependencies"
-      - "site"
-    groups:
-      astro-ecosystem:
-        patterns:
-          - "astro"
-          - "@astrojs/*"
-          - "@astrolibs/*"
-          - "starlight*"
-          - "@starlight/*"
 
   # ─── Python: azure-pricing MCP server ──────────────────────────────────────
   - package-ecosystem: "pip"
