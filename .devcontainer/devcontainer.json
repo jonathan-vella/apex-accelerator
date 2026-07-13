@@ -1,6 +1,6 @@
 {
   "name": "APEX",
-  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu26.04",
 
   "features": {
     "ghcr.io/devcontainers/features/azure-cli:1": {
@@ -21,10 +21,7 @@
     "ghcr.io/devcontainers/features/github-cli:1": {
       "version": "latest"
     },
-    "ghcr.io/devcontainers/features/terraform:1": {
-      "tflint": "none",
-      "terragrunt": "none"
-    },
+    "./features/terraform": {},
     "ghcr.io/devcontainers/features/go:1": {
       "version": "1.26"
     },
@@ -50,7 +47,7 @@
   },
 
   "remoteEnv": {
-    "PATH": "${containerEnv:PATH}",
+    "PATH": "/home/vscode/.local/bin:${containerEnv:PATH}",
     "AZURE_DEFAULTS_LOCATION": "swedencentral",
     // Pass GH_TOKEN from host → container. gh CLI uses it automatically, no `gh auth login` needed.
     // Each user sets this once in VS Code User Settings (Ctrl+,):
