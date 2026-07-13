@@ -90,7 +90,8 @@ if [ "$ARCH" = "amd64" ]; then
         step_warn "k6 deb install failed"
     fi
 elif [ "$ARCH" = "arm64" ]; then
-    K6_VER=$(curl -fsSL https://api.github.com/repos/grafana/k6/releases/latest | grep tag_name | head -1 | tr -dc 'v0-9.')
+    K6_VER=$(curl -fsSLI --max-time 15 -o /dev/null -w '%{url_effective}' \
+        https://github.com/grafana/k6/releases/latest | sed 's#.*/##')
     if [ -n "$K6_VER" ]; then
         curl -fsSL "https://github.com/grafana/k6/releases/download/${K6_VER}/k6-${K6_VER}-linux-arm64.tar.gz" \
             | sudo tar -xz --strip-components=1 -C /usr/local/bin/ 2>/dev/null \
@@ -289,11 +290,9 @@ else
 fi
 
 # ─── Step 9.4: TFLint (cosign-free install) ─────────────────────────────────
-# The terraform devcontainer feature installs the latest cosign (3.x) to verify
-# TFLint's signature, but cosign 3.x is incompatible with the Rekor log-query
-# API and aborts the whole feature install ("invalid signature when validating
-# IEEE_P1363 encoded signature"). We therefore set tflint=none in the feature
-# and install the pinned TFLint release directly here — no cosign required.
+# TFLint is installed separately from Terraform because cosign 3.x is
+# incompatible with the Rekor log-query API and aborts signature validation
+# ("invalid signature when validating IEEE_P1363 encoded signature").
 
 TFLINT_VERSION="0.63.1"
 step_start "🧹" "Installing TFLint v${TFLINT_VERSION} (cosign-free)..."
@@ -392,20 +391,25 @@ fi
 # ─── Step 12: Gitleaks (secret scanner) ────────────────────────────────────
 
 step_start "🔐" "Installing gitleaks secret scanner..."
-GITLEAKS_VERSION=$(curl -fsSL "https://api.github.com/repos/gitleaks/gitleaks/releases/latest" 2>/dev/null | jq -r '.tag_name' 2>/dev/null | sed 's/^v//' || echo '')
-# Map uname -m to the gitleaks archive architecture label
-case "$(uname -m)" in
-    aarch64|arm64) GITLEAKS_ARCH="arm64" ;;
-    *)             GITLEAKS_ARCH="x64"   ;;
+# The base image supports amd64 and arm64 only; keep release assets aligned.
+case "$(dpkg --print-architecture)" in
+    amd64) GITLEAKS_ARCH="x64" ;;
+    arm64) GITLEAKS_ARCH="arm64" ;;
+    *)     GITLEAKS_ARCH="" ;;
 esac
-if [ -n "$GITLEAKS_VERSION" ] && [ "$GITLEAKS_VERSION" != "null" ]; then
+if [ -z "$GITLEAKS_ARCH" ]; then
+    step_warn "gitleaks skipped: unsupported architecture $(dpkg --print-architecture) (supported: amd64, arm64)"
+else
+    GITLEAKS_VERSION=$(curl -fsSL "https://api.github.com/repos/gitleaks/gitleaks/releases/latest" 2>/dev/null | jq -r '.tag_name' 2>/dev/null | sed 's/^v//' || echo '')
+fi
+if [ -n "$GITLEAKS_ARCH" ] && [ -n "$GITLEAKS_VERSION" ] && [ "$GITLEAKS_VERSION" != "null" ]; then
     if curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_${GITLEAKS_ARCH}.tar.gz" \
         | sudo tar -xz -C /usr/local/bin gitleaks 2>/dev/null; then
         step_done "gitleaks ${GITLEAKS_VERSION} installed (${GITLEAKS_ARCH})"
     else
         step_warn "gitleaks binary download failed (pre-commit hook will soft-skip)"
     fi
-else
+elif [ -n "$GITLEAKS_ARCH" ]; then
     step_warn "gitleaks version lookup failed (pre-commit hook will soft-skip)"
 fi
 
@@ -420,7 +424,19 @@ else
     step_warn "Azure CLI config update failed"
 fi
 
-# ─── Step 14: MCP config & final verification ─────────────────────────────
+# ─── Step 14: Bicep CLI after persisted mounts ─────────────────────────────
+
+step_start "🏗️ " "Ensuring Bicep CLI is available..."
+if az bicep version --only-show-errors >/dev/null 2>&1; then
+    step_done "$(az bicep version --only-show-errors 2>/dev/null | head -1)"
+elif az bicep install --only-show-errors >/dev/null 2>&1 \
+    && az bicep version --only-show-errors >/dev/null 2>&1; then
+    step_done "$(az bicep version --only-show-errors 2>/dev/null | head -1) installed after mounts initialized"
+else
+    step_warn "Bicep install failed — IaC validation will be unavailable"
+fi
+
+# ─── Step 15: MCP config & final verification ─────────────────────────────
 
 step_start "🔍" "Verifying installations & MCP config..."
 
