@@ -168,12 +168,12 @@
     "eslint-formatter-compact": "^9.0.1",
     "eslint-plugin-n": "^18.2.2",
     "fast-xml-parser": "^5.10.1",
-    "js-yaml": "^5.2.2",
+    "js-yaml": "^5.2.3",
     "jsdom": "^29.1.1",
     "lefthook": "^2.1.10",
-    "markdown-link-check": "^3.14.2",
+    "markdown-link-check": "^3.15.0",
     "markdownlint-cli2": "^0.23.2",
-    "npm-run-all2": "^9.0.2",
+    "npm-run-all2": "^9.0.3",
     "prettier": "^3.9.6"
   },
   "repository": {
