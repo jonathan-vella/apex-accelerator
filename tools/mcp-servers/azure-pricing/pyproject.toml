@@ -44,7 +44,7 @@ admin = [
     "azure-mgmt-subscription>=3.1.1",
     "azure-mgmt-web>=11.0.0",
     "azure-mgmt-resourcegraph>=8.0.1",
-    "azure-mgmt-costmanagement>=4.0.1",
+    "azure-mgmt-costmanagement>=5.0.0",
 ]
 # Deprecated alias of [admin]. Will be removed in v6.0.
 azure = [
