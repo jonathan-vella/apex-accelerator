@@ -220,7 +220,7 @@ approach gives you the best experience over time.
 **Strategy A: Edit directly** (simplest)
 
 Edit the file you need — for example, change `swedencentral` to `westeurope` in
-`.github/skills/azure-defaults/SKILL.md`. If you don't plan to pull upstream
+`.github/skills/apex-azure-defaults/SKILL.md`. If you don't plan to pull upstream
 improvements, disable the sync workflow entirely (repo Settings → Actions → disable
 **Upstream Sync**) and manage the repo as your own.
 
@@ -236,8 +236,8 @@ excluded paths. To safely store overrides that survive sync:
 
 1. **Edit the sync exclusion list** — the sync workflow file itself is user-owned
    (`.github/workflows/` is excluded from sync). Open
-   `.github/workflows/weekly-upstream-sync.yml` and add paths to `EXCLUDE_PATHS` and
-   the matching `for path in ...` loop:
+  `.github/workflows/weekly-upstream-sync.yml` and add paths to `EXCLUDE_PATHS`.
+  The mirror and preservation check both consume this list:
 
    ```yaml
    EXCLUDE_PATHS: |
@@ -251,9 +251,11 @@ excluded paths. To safely store overrides that survive sync:
 
    Then add your overrides to root `AGENTS.md` — it will survive all future syncs.
 
-2. **Use `infra/bicep/AGENTS.md`** — since `infra/bicep/` is already excluded from
-   sync, you can place an `AGENTS.md` there with your organization defaults. VS Code
-   loads subfolder `AGENTS.md` files when working with files in that directory.
+2. **Use project-local guidance** — place organization defaults in
+  `infra/bicep/{project}/AGENTS.md` or `infra/terraform/{project}/AGENTS.md`.
+  Project folders are preserved. The shared track-level `AGENTS.md` files are
+  upstream-owned exceptions so security and workflow corrections reach both tracks.
+  To own a shared file instead, remove its entry from `SYNC_EXCEPTIONS`.
 
 3. **VS Code user-profile instructions** — place a `.instructions.md` file in your
    VS Code profile's `prompts/` folder. This lives outside the repo entirely and
@@ -270,8 +272,25 @@ excluded paths. To safely store overrides that survive sync:
 
 Agents are defined in `.github/agents/*.agent.md` and skills in
 `.github/skills/*/SKILL.md`. You can add new ones alongside the existing set.
-If you keep sync enabled, use distinctive names that won't collide with upstream
-filenames, or add your custom paths to the sync exclusion list.
+If you keep sync enabled, add your custom paths to `EXCLUDE_PATHS`.
+Distinctive names alone do not protect files: the mirror removes upstream-absent paths.
+
+### Previewing upstream updates
+
+Manual **Upstream Sync** runs default to `dry_run=true`: they mirror into the runner,
+validate contracts, and summarize changes without pushing or changing pull requests.
+Set `upstream_ref` to an upstream branch, such as `perf/apex-workflow-optimization`,
+to preview changes before upstream merge. Non-`main` branches cannot publish.
+
+Scheduled runs use upstream `main`. A manual `main` run can set `dry_run=false`
+to propose a sync PR. Every run records the exact upstream commit; review remains manual.
+The stabilization and publication test gates require the corresponding upstream changes
+to reach `main` before a scheduled sync can pass. These checks are not native agent
+acceptance or permission to deploy Azure resources.
+
+Private governance baselines, project outputs, generated infrastructure, repository
+workflows, local logs and scratch remain preserved. Shared service indexes, the public
+governance test fixture, and track-level guidance follow upstream via `SYNC_EXCEPTIONS`.
 
 ---
 
