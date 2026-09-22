@@ -1,0 +1,10 @@
+{
+  "schema_version": "consumer-workflows-v1",
+  "repository": "jonathan-vella/apex",
+  "commit": "a57ceee1ad04c38ee6df432d98c121cef2222508",
+  "files": {
+    "governance-policy-baseline.yml": "898c59c587cf6d63f2c1edbb52d8e085e7ccf4d7690af251a3581dbe16e03160",
+    "iac-checks.yml": "e42e65433ba891d61935ff96ac774762efa726cdcc951141b29648d86ab44fee",
+    "weekly-maintenance.yml": "eed13c24e13028814ad2cbabd7171c22acb1901ff7e7d51f6a514f2b27133617"
+  }
+}
