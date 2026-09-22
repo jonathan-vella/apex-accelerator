@@ -1,8 +1,8 @@
 <a id="top"></a>
 
-# Contributing to Agentic InfraOps
+# Contributing to APEX
 
-Thank you for your interest in contributing! Agentic InfraOps revolutionizes how IT Pros build
+Thank you for your interest in contributing! APEX revolutionizes how IT Pros build
 Azure environments through coordinated AI agents.
 
 This file is the quick contributor entrypoint.
@@ -155,7 +155,7 @@ npm run lint:md:fix
 
 ### 1. Fork & Clone
 
-> **Note:** For **using** Agentic InfraOps, create your own repo from the
+> **Note:** For **using** APEX, create your own repo from the
 > [Accelerator template](https://github.com/jonathan-vella/apex-accelerator)
 > instead. The instructions below are for contributing back to this upstream project.
 
@@ -275,6 +275,7 @@ doesn't follow the format, you'll see a helpful error with examples.
 2. Click "New Pull Request"
 3. Fill out the PR template
 4. Link related issues
+
 <div align="right"><a href="#top"><b>⬆️ Back to Top</b></a></div>
 
 ## 📝 Pull Request Checklist
@@ -289,6 +290,7 @@ Before submitting:
 - [ ] Terraform configs validate (`terraform validate` + `terraform fmt -check`) if applicable
 - [ ] No hardcoded secrets or subscription IDs
 - [ ] Links work correctly
+
 <div align="right"><a href="#top"><b>⬆️ Back to Top</b></a></div>
 
 ## 🤝 Community Standards
@@ -304,6 +306,7 @@ Before submitting:
 
 - **Questions**: GitHub Discussions
 - **Issues**: GitHub Issues
+
 <div align="right"><a href="#top"><b>⬆️ Back to Top</b></a></div>
 
 ## 📄 License
