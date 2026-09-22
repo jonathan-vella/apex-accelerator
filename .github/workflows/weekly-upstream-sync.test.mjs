@@ -63,10 +63,8 @@ test("workflow shell is valid and publication is gated behind validation and dry
     assert.equal(result.status, 0, `${step.name}: ${result.stderr}`);
   }
   assert.equal(workflow.on.workflow_dispatch.inputs.dry_run.default, true);
-  assert.match(
-    steps.find((step) => step.name === "Fetch upstream branch").run,
-    /Non-main upstream branches require dry_run=true/,
-  );
+  assert.equal(workflow.on.workflow_dispatch.inputs.upstream_ref.default, "main");
+  assert.equal(workflow.env.UPSTREAM_REF, "${{ inputs.upstream_ref || 'main' }}");
   const validation = steps.findIndex((step) => step.name === "Validate synchronized contracts");
   for (const name of ["Commit and push sync branch", "Ensure PR labels exist", "Create or update pull request"]) {
     const position = steps.findIndex((step) => step.name === name);
@@ -77,6 +75,27 @@ test("workflow shell is valid and publication is gated behind validation and dry
     steps.find((step) => step.name === "No-op path — report").run,
     /\[\[ "\$DRY_RUN" == true \]\] && exit 0/,
   );
+});
+
+test("only main can publish; other refs are preview-only", () => {
+  const fetch = steps.find((step) => step.name === "Fetch upstream branch").run;
+  const guardScript = fetch.slice(0, fetch.indexOf("git remote remove"));
+  assert.ok(guardScript.includes("git check-ref-format"));
+  for (const [upstreamRef, dryRun, expected] of [
+    ["main", "false", 0],
+    ["main", "true", 0],
+    ["perf/apex-workflow-optimization", "false", 1],
+    ["unapproved-branch", "false", 1],
+    ["unapproved-branch", "true", 0],
+    ["invalid ref", "true", 1],
+  ]) {
+    const result = spawnSync("bash", ["-e", "-o", "pipefail"], {
+      input: guardScript,
+      env: { ...process.env, UPSTREAM_REF: upstreamRef, DRY_RUN: dryRun },
+      encoding: "utf8",
+    });
+    assert.equal(result.status, expected, `${upstreamRef}, dry_run=${dryRun}: ${result.stderr}`);
+  }
 });
 
 test("mirror retires old tooling, syncs shared exceptions and preserves local content", () => {
