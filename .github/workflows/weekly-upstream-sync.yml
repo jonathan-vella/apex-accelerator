@@ -120,7 +120,7 @@ jobs:
           set -euo pipefail
           git check-ref-format "refs/heads/${UPSTREAM_REF}"
           if [[ "$DRY_RUN" != true && "$UPSTREAM_REF" != main ]]; then
-            echo "::error::Non-main upstream branches require dry_run=true."
+            echo "::error::Only main may publish; other branches require dry_run=true."
             exit 1
           fi
           git remote remove upstream 2>/dev/null || true
