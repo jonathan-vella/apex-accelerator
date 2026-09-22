@@ -1,0 +1,30 @@
+# Template/distribution validation only; no consumer operational jobs run here.
+name: Consumer Template Checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: node --test tools/tests/scripts/test_consumer_workflows.mjs .github/workflows/weekly-upstream-sync.test.mjs
+      - name: Install verified Actionlint
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/actionlint"
+          gh release download v1.7.12 --repo rhysd/actionlint --pattern actionlint_1.7.12_linux_amd64.tar.gz --pattern actionlint_1.7.12_checksums.txt --dir "$RUNNER_TEMP/actionlint"
+          cd "$RUNNER_TEMP/actionlint"
+          grep 'actionlint_1.7.12_linux_amd64.tar.gz' actionlint_1.7.12_checksums.txt | sha256sum -c -
+          tar -xzf actionlint_1.7.12_linux_amd64.tar.gz actionlint
+      - run: '"$RUNNER_TEMP/actionlint/actionlint" -shellcheck="" .github/consumer-workflows/*.yml .github/workflows/*.yml'

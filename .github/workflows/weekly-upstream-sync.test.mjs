@@ -12,6 +12,7 @@ const apply = steps.find((step) => step.id === "sync");
 const guard = steps.find((step) => step.name === "Assert excluded paths are unchanged");
 const exclusions = workflow.env.EXCLUDE_PATHS.trim().split("\n");
 const exceptions = workflow.env.SYNC_EXCEPTIONS.trim().split("\n");
+const seeds = workflow.env.SEED_PATHS.trim().split("\n");
 const retiredSkill = path.join(".github", "skills", "old-name", "SKILL.md");
 
 function fixture(run) {
@@ -30,13 +31,13 @@ function fixture(run) {
     git("init", "-b", "main");
     git("config", "user.name", "Sync Fixture");
     git("config", "user.email", "fixture@example.invalid");
-    for (const file of [...protectedFiles, ...exceptions]) write(file, "upstream\n");
+    for (const file of [...protectedFiles, ...exceptions, ...seeds]) write(file, "upstream\n");
     write(".github/skills/apex-new/SKILL.md", "new skill\n");
     write("tools/scripts/new-validator.mjs", "upstream\n");
     git("add", ".");
     git("commit", "-m", "upstream");
     const upstream = git("rev-parse", "HEAD");
-    for (const file of [...protectedFiles, ...exceptions]) write(file, "downstream\n");
+    for (const file of [...protectedFiles, ...exceptions, ...seeds]) write(file, "downstream\n");
     git("rm", ".github/skills/apex-new/SKILL.md");
     write(retiredSkill, "retired skill\n");
     write("tools/scripts/benchmark-e2e.mjs", "retired runner\n");
@@ -105,6 +106,7 @@ test("mirror retires old tooling, syncs shared exceptions and preserves local co
     for (const file of protectedFiles)
       assert.equal(fs.readFileSync(path.join(repo, file), "utf8"), "downstream\n", file);
     for (const file of exceptions) assert.equal(fs.readFileSync(path.join(repo, file), "utf8"), "upstream\n", file);
+    for (const file of seeds) assert.equal(fs.readFileSync(path.join(repo, file), "utf8"), "downstream\n", file);
     assert.equal(fs.existsSync(path.join(repo, retiredSkill)), false);
     assert.equal(fs.existsSync(path.join(repo, "tools/scripts/benchmark-e2e.mjs")), false);
     assert.equal(fs.existsSync(path.join(repo, ".github/skills/apex-new/SKILL.md")), true);
@@ -124,6 +126,26 @@ test("leak guard rejects unauthorized changes including renames from protected p
     write("agent-output/local sentinel.txt", "downstream\n");
     git("add", "agent-output/local sentinel.txt");
     git("mv", "agent-output/local sentinel.txt", "leaked.txt");
+    assert.notEqual(shell(guard.run).status, 0);
+  });
+});
+
+test("absent refresh data is seeded once and later modifications are protected", () => {
+  fixture(({ repo, git, write, shell }) => {
+    for (const file of seeds) git("rm", file);
+    git("commit", "-m", "unseeded consumer");
+    assert.equal(shell(apply.run).status, 0);
+    assert.equal(shell(guard.run).status, 0);
+    for (const file of seeds) assert.equal(fs.readFileSync(path.join(repo, file), "utf8"), "upstream\n");
+    git("commit", "-m", "seeded consumer");
+    for (const file of seeds) write(file, "refreshed by consumer\n");
+    git("add", ".");
+    git("commit", "-m", "consumer refresh");
+    assert.equal(shell(apply.run).status, 0);
+    assert.equal(shell(guard.run).status, 0);
+    for (const file of seeds) assert.equal(fs.readFileSync(path.join(repo, file), "utf8"), "refreshed by consumer\n");
+    write(seeds[0], "unexpected overwrite\n");
+    git("add", seeds[0]);
     assert.notEqual(shell(guard.run).status, 0);
   });
 });

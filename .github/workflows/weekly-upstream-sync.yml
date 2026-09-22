@@ -75,6 +75,8 @@ env:
     .github/PULL_REQUEST_TEMPLATE.md
     .github/CODEOWNERS
     .github/data/
+    .github/consumer-workflows-state.json
+    tools/scripts/_data/avm-module-cache.json
     agent-output/
     infra/bicep/
     infra/terraform/
@@ -90,11 +92,13 @@ env:
   SYNC_EXCEPTIONS: |
     infra/bicep/AGENTS.md
     infra/terraform/AGENTS.md
+    .github/data/governance-policy-baseline.fixture.json
+  SEED_PATHS: |
     .github/data/avm-bicep-modules.csv
     .github/data/avm-terraform-modules.csv
     .github/data/avm-module-index.json
     .github/data/azure-deprecations.json
-    .github/data/governance-policy-baseline.fixture.json
+    tools/scripts/_data/avm-module-cache.json
 
 jobs:
   sync:
@@ -163,6 +167,13 @@ jobs:
             fi
           done <<< "${SYNC_EXCEPTIONS}"
 
+          while IFS= read -r path; do
+            [[ -z "$path" ]] && continue
+            if ! git cat-file -e "${BASE_SHA}:$path" 2>/dev/null; then
+              git checkout "${UPSTREAM_SHA}" -- "$path"
+            fi
+          done <<< "${SEED_PATHS}"
+
           # Stage everything and use a single cached diff for change detection.
           git add -A
 
@@ -204,10 +215,16 @@ jobs:
           set -euo pipefail
           mapfile -t excludes < <(printf '%s\n' "$EXCLUDE_PATHS" | sed '/^[[:space:]]*$/d')
           mapfile -t exceptions < <(printf '%s\n' "$SYNC_EXCEPTIONS" | sed '/^[[:space:]]*$/d')
+          mapfile -t seeds < <(printf '%s\n' "$SEED_PATHS" | sed '/^[[:space:]]*$/d')
           while IFS= read -r -d '' changed; do
             allowed=false
             for exception in "${exceptions[@]}"; do
               [[ "$changed" == "$exception" ]] && allowed=true
+            done
+            for seed in "${seeds[@]}"; do
+              if [[ "$changed" == "$seed" ]] && ! git cat-file -e "HEAD:$seed" 2>/dev/null; then
+                allowed=true
+              fi
             done
             [[ "$allowed" == true ]] && continue
             for excluded in "${excludes[@]}"; do
@@ -318,6 +335,9 @@ jobs:
 
           **Shared-file exceptions (upstream-owned):**
           ${SYNC_EXCEPTIONS}
+
+          **Seeded only when absent (consumer-owned thereafter):**
+          ${SEED_PATHS}
 
           Contract validators and focused stabilization/publication tests passed before push.
           This is not native agent acceptance or Azure deployment validation.

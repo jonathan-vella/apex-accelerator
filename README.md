@@ -288,8 +288,23 @@ The stabilization and publication checks run before publishing. These checks are
 native agent acceptance or permission to deploy Azure resources.
 
 Private governance baselines, project outputs, generated infrastructure, repository
-workflows, local logs and scratch remain preserved. Shared service indexes, the public
-governance test fixture, and track-level guidance follow upstream via `SYNC_EXCEPTIONS`.
+workflows, local logs and scratch remain preserved. AVM indexes, the module cache and deprecation
+data are seeded only when absent, then owned by consumer maintenance. The public governance
+fixture and shared track-level guidance continue to follow upstream via `SYNC_EXCEPTIONS`.
+
+### Consumer Automation
+
+The accelerator distributes governance, IaC and weekly maintenance workflows from APEX's
+`.github/consumer-workflows/` templates. Operational jobs are disabled in APEX, this accelerator
+and template repositories. Repositories created from this template run IaC checks and maintenance
+automatically when Actions is enabled. Governance additionally requires
+`GOVERNANCE_BASELINE_ENABLED=true`, a Management Group ID and configured Azure OIDC credentials.
+
+Preview template updates with `npm run sync:workflows -- --dry-run`, then apply a reviewed
+commit using `npm run sync:workflows -- --apply --ref <commit-sha>`.
+Modified workflows block the update; retired files are reported for review, never deleted automatically.
+The updater provenance is preserved by content sync. See
+[consumer workflow ownership](tools/scripts/consumer-workflows.md).
 
 ---
 
