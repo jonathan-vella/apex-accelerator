@@ -6,9 +6,14 @@ Steps for cost query execution, pricing validation, metrics collection, report g
 
 ## Step 4: Query Actual Costs
 
-Get actual cost data from Azure Cost Management API (last 30 days):
+Get actual cost data for the last 30 days with the ARM MCP `query_costs` tool: `from`/`to` as `YYYY-MM-DD`,
+`granularity=None`, `groupBy=ResourceId`, `top=5000`, at subscription or resource-group scope. Follow the
+[cost query guardrails](cost-query/guardrails.md) and label partial results.
 
-**Create cost query file:**
+Use the Cost Management Query API below only when `query_costs` is unavailable, as defined in the
+[tool and safety guidance](tools-and-safety.md#tool-preference).
+
+**Create cost query file (fallback):**
 
 Create a unique run-owned scratch directory before creating the query:
 
@@ -48,35 +53,25 @@ Use the file editing tool to create `$queryPath` with:
 
 > **Action Required**: Calculate `<START_DATE>` (30 days ago) and `<END_DATE>` (today) in ISO 8601 format (e.g., `2025-11-03T00:00:00Z`).
 
-**Execute cost query:**
+**Execute cost query (fallback):**
 
 ```powershell
-# Query using REST API (more reliable than az costmanagement query)
 az rest --method post `
   --url "https://management.azure.com/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/<RESOURCE_GROUP>/providers/Microsoft.CostManagement/query?api-version=2023-11-01" `
   --body "@$queryPath"
 ```
 
-**Important:** Save the query results to `output/cost-query-result<timestamp>.json` for audit trail.
+If the response has a `nextLink`, follow every page before using the results; the fallback is not bounded by the
+`query_costs` row limit.
+
+**Important:** Save the query results to `agent-output/{project}/cost-query-result<timestamp>.json` for audit trail.
 
 ## Step 5: Validate Pricing
 
-Fetch current pricing from official Azure pricing pages using `fetch_webpage`:
-
-```javascript
-// Validate pricing for key services
-fetch_webpage({
-  urls: ["https://azure.microsoft.com/en-us/pricing/details/container-apps/"],
-  query: "pricing tiers and costs",
-});
-```
-
-**Key services to validate:**
-
-- Container Apps: https://azure.microsoft.com/pricing/details/container-apps/
-- Virtual Machines: https://azure.microsoft.com/pricing/details/virtual-machines/
-- App Service: https://azure.microsoft.com/pricing/details/app-service/
-- Log Analytics: https://azure.microsoft.com/pricing/details/monitor/
+Validate unit prices with the ARM MCP `get_retail_prices` tool, following the
+[pricing guidance](../../apex-azure-defaults/references/pricing-guidance.md). Record the query parameters and the
+returned meter in the audit trail. Pricing pages such as
+<https://azure.microsoft.com/pricing/details/container-apps/> are human references, not price evidence.
 
 > **Important**: Check for free tier allowances - many Azure services have generous free limits that may explain $0 costs.
 
@@ -119,9 +114,9 @@ az monitor metrics list `
 
 ## Step 7: Generate Optimization Report
 
-Create a comprehensive cost optimization report in the `output/` folder:
+Create a comprehensive cost optimization report in `agent-output/{project}/`:
 
-**Use the `create_file` tool** with path `output/costoptimizereport<YYYYMMDD_HHMMSS>.md`:
+**Use the `create_file` tool** with path `agent-output/{project}/costoptimizereport<YYYYMMDD_HHMMSS>.md`:
 
 **Report Structure:**
 
@@ -186,7 +181,7 @@ Create a comprehensive cost optimization report in the `output/` folder:
 
 ### Data Sources and Files
 
-- **Cost Query Results**: `output/cost-query-result<timestamp>.json`
+- **Cost Query Results**: `agent-output/{project}/cost-query-result<timestamp>.json`
   - Raw cost data from Azure Cost Management API
   - Audit trail proving actual costs at report generation time
   - Keep for at least 12 months for historical comparison
@@ -194,7 +189,7 @@ Create a comprehensive cost optimization report in the `output/` folder:
 - **Pricing Sources**: [Links to Azure pricing pages]
 - **Free Tier Allowances**: [Applicable allowances]
 
-> **Note**: Record the exact run-owned query path separately from permanent audit data in `output/`.
+> **Note**: Record the exact run-owned query path separately from permanent audit data in `agent-output/{project}/`.
 ```
 
 **Portal Link Format:**
@@ -207,7 +202,7 @@ https://portal.azure.com/#@<TENANT_ID>/resource/subscriptions/<SUBSCRIPTION_ID>/
 
 Save all cost query results for validation:
 
-**Use the `create_file` tool** with path `output/cost-query-result<YYYYMMDD_HHMMSS>.json`:
+**Use the `create_file` tool** with path `agent-output/{project}/cost-query-result<YYYYMMDD_HHMMSS>.json`:
 
 ```json
 {
@@ -233,4 +228,4 @@ delete generic `temp`, shared temporary roots, pre-existing files, or report evi
 If cleanup is separately requested, review the run's exact file manifest and
 delete only those approved files with editing tools, leaving all other files intact.
 
-> **Note**: Preserve the actual query and results in `output/cost-query-result*.json` for audit purposes.
+> **Note**: Preserve the actual query and results in `agent-output/{project}/cost-query-result*.json` for audit purposes.

@@ -1,6 +1,6 @@
 ---
 name: 07b-Bicep Deploy
-model: ["GPT-5.6 Luna (copilot)"]
+model: ["GPT-6-Luna"]
 description: "Executes Azure deployments using generated Bicep templates. Uses azd provision (default; deploy.ps1 retained only for legacy projects without azure.yaml). Performs what-if analysis and manages deployment lifecycle. Step 6 of the agentic workflow."
 argument-hint: Deploy the Bicep templates for a specific project
 user-invocable: true
@@ -96,8 +96,7 @@ what-if gate and at any destructive operation.
   fixes from this agent.
 - Prefer `azd` for projects with `azure.yaml`; fall back to `az deployment` only
   for legacy projects without an azd manifest. Do not introduce `deploy.ps1`.
-- Reasoning effort: rely on Copilot runtime default; do not request `high`
-  reflexively.
+- Reasoning effort: max when supported by the active runtime.
 
 ## Output
 
@@ -255,7 +254,10 @@ Before `azd provision` / `az deployment ... create`, for every entry in
 
 1. For each `(env, region)` pair (base `regions[]` + per-env
    `environment_overrides`), call the **`apex-azure-quotas` skill** to confirm
-   the SKU is available and quota is sufficient.
+   the SKU is `AVAILABLE` per
+   [SKU availability](../skills/apex-azure-quotas/references/sku-availability.md)
+   and quota is sufficient. `RESTRICTED`, `NOT_OFFERED` or insufficient quota
+   triggers the block-with-escalation pattern below.
 2. Set `decisions.sku_manifest_status = "deploying"` via `apex-recall decide`.
 
 ### Block-with-escalation pattern (no deadlock)
@@ -265,7 +267,7 @@ Escalate via the orchestrator:
 
 1. Surface the conflict to the human with the available substitutes
    (call `apex-azure-quotas` for the same service family in the same region
-   and the failover region).
+   and the failover region; offer only `AVAILABLE` SKUs with sufficient quota).
 2. The human (via the Orchestrator) responds with one of the four
    `sku_conflict_resolution` enum values:
    `revert_to_plan` │ `accept_substitute` │ `change_region` │ `abort`.

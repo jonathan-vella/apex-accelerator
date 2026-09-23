@@ -75,6 +75,7 @@ __pycache__/
 .venv/
 venv/
 .pytest_cache/
+*.egg-info/
 
 # Test results
 TestResults/
@@ -94,9 +95,6 @@ freshness-report.json
 # Use a contents-only ignore (rather than the directory itself) so
 # that single committed deliverables can be re-included with `!`.
 agent-output/_baselines/*
-
-# Preserve ignored local residue from the retired site checkout.
-site/
 
 # Terraform
 *.tfstate
