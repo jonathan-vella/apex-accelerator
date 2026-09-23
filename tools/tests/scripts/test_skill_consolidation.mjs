@@ -102,6 +102,18 @@ test("manual maintenance skills retain validation and import approval boundaries
   assert.doesNotMatch(authoring, /\| Vendor-specific prompt audit \| `\.\.\/apex-vendor-prompting\/SKILL.md`/);
   const modelPolicy = read(new URL("apex-agent-authoring/references/model-policy.md", skillsRoot));
   assert.match(modelPolicy, /Do not load that manual-only skill automatically/);
+  assert.match(modelPolicy, /Architect and IaC Planner recommend medium/);
+  assert.match(modelPolicy, /Bicep and Terraform CodeGen agents recommend max/);
+  assert.doesNotMatch(modelPolicy, /High: architecture|Medium: structured code generation/);
+  for (const name of ["03-architect", "05-iac-planner"]) {
+    assert.match(
+      read(new URL(`../../../.github/agents/${name}.agent.md`, import.meta.url)),
+      /Reasoning effort: medium/,
+    );
+  }
+  for (const name of ["06b-bicep-codegen", "06t-terraform-codegen"]) {
+    assert.match(read(new URL(`../../../.github/agents/${name}.agent.md`, import.meta.url)), /Reasoning effort: max/);
+  }
   const docsTriggers = read(new URL("../../../.github/instructions/docs-trigger.instructions.md", import.meta.url));
   assert.match(docsTriggers, /Required documentation updates do not depend on loading a skill/);
 });
@@ -275,7 +287,7 @@ test("skill CLI accepts every surviving skill and its descriptor without alterin
   assert.match(result.output, new RegExp(`Found ${survivors.length} skill directories`));
 });
 
-test("skill CLI scans live guidance, tooling and MDX without blanket migration or site exemptions", async (context) => {
+test("skill CLI scans live guidance, tooling and MDX without blanket migration exemptions", async (context) => {
   const liveFiles = [
     ".github/agents/example.agent.md",
     ".github/instructions/example.instructions.md",
@@ -286,8 +298,8 @@ test("skill CLI scans live guidance, tooling and MDX without blanket migration o
     "tools/tests/prompts/example.prompt.md",
     "tools/tests/fixtures-guide.md",
     "tools/schemas-guide.md",
-    "site/src/content/docs/guide.mdx",
-    "site/src/content/docs/migration/guide.md",
+    "tools/guides/guide.mdx",
+    "tools/guides/migration/guide.md",
     "AGENTS.md",
     "README.md",
     "CONTRIBUTING.md",
@@ -337,7 +349,6 @@ test("skill CLI excludes history, schemas, vendor snapshots and execution eviden
     "agent-output/example/legacy.md",
     "tmp/evidence.md",
     "logs/copilot/evidence.txt",
-    "site/public/downloads/legacy.md",
   ]) {
     fixture.write(file, `${retiredName}\nRead skills/example/SKILL.md\n`);
   }
@@ -354,7 +365,7 @@ test("skill CLI rejects retired Host callers and accepts the explicit resume ope
     ".github/skills/apex-example/SKILL.md",
     "tools/registry/entries.json",
     "tools/scripts/entry.mjs",
-    "site/src/content/docs/resume.mdx",
+    "tools/guides/resume.mdx",
   ]) {
     const original = file.endsWith("SKILL.md")
       ? '---\nname: apex-example\ndescription: "Valid workflow caller."\n---\n'
@@ -492,7 +503,7 @@ test("cost-specific queries and cost evidence/report obligations survive sharing
   const source = read(costQueries);
   assert.deepEqual(kqlBlocks(source), [
     "Resources\n| where isnotempty(sku.name)\n| summarize count() by type, tostring(sku.name)\n| order by count_ desc\n",
-    "Resources\n| extend hasCostCenter = isnotnull(tags['CostCenter'])\n| summarize total=count(), tagged=countif(hasCostCenter) by type\n| extend coverage=round(100.0 * tagged / total, 1)\n| order by total desc\n",
+    "Resources\n| extend hasCostCenter = isnotnull(tags['costcenter'])\n| summarize total=count(), tagged=countif(hasCostCenter) by type\n| extend coverage=round(100.0 * tagged / total, 1)\n| order by total desc\n",
     "Resources\n| where type =~ 'microsoft.network/loadbalancers'\n| where array_length(properties.backendAddressPools) == 0\n| project id, subscriptionId, name, resourceGroup, location, sku=sku.name\n",
     "AdvisorResources\n| where properties.category == 'Cost'\n| project name, impact=properties.impact, description=properties.shortDescription.solution\n",
   ]);
@@ -514,8 +525,11 @@ test("cost-specific queries and cost evidence/report obligations survive sharing
   assert.equal(query.type, "ActualCost");
   assert.deepEqual(query.dataset.grouping, [{ type: "Dimension", name: "ResourceId" }]);
   assert.match(section(workflow, "Step 6: Collect Utilization Metrics"), /Query Azure Monitor for utilization data/);
-  assert.match(section(workflow, "Step 7: Generate Optimization Report"), /output\/costoptimizereport/);
-  assert.match(section(workflow, "Step 8: Save Audit Trail"), /output\/cost-query-result/);
+  assert.match(
+    section(workflow, "Step 7: Generate Optimization Report"),
+    /agent-output\/\{project\}\/costoptimizereport/,
+  );
+  assert.match(section(workflow, "Step 8: Save Audit Trail"), /agent-output\/\{project\}\/cost-query-result/);
 });
 
 test("shared procedure relative links and section anchors resolve locally", () => {
