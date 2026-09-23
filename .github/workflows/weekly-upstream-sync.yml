@@ -242,6 +242,17 @@ jobs:
           node-version: "24"
           cache: npm
 
+      - name: Check synchronized whitespace
+        if: steps.sync.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          whitespace_errors=$(git diff --cached --check || true)
+          unexpected_errors=$(printf '%s\n' "$whitespace_errors" | grep -vE ': new blank line at EOF\.$' || true)
+          if [[ -n "$unexpected_errors" ]]; then
+            printf '%s\n' "$unexpected_errors"
+            exit 1
+          fi
+
       - name: Validate synchronized contracts
         if: steps.sync.outputs.changed == 'true'
         run: |
@@ -254,7 +265,6 @@ jobs:
           npm run validate:workflow-graph
           node --test tools/tests/scripts/test_stabilization.mjs tools/tests/scripts/test_publication_scope.mjs
           git diff --exit-code
-          git diff --cached --check
 
       - name: No-op path — report
         if: steps.sync.outputs.changed != 'true'

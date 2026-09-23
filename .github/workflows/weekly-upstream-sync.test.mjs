@@ -10,6 +10,7 @@ const workflow = yaml.load(fs.readFileSync(new URL("./weekly-upstream-sync.yml",
 const steps = workflow.jobs.sync.steps;
 const apply = steps.find((step) => step.id === "sync");
 const guard = steps.find((step) => step.name === "Assert excluded paths are unchanged");
+const whitespace = steps.find((step) => step.name === "Check synchronized whitespace");
 const exclusions = workflow.env.EXCLUDE_PATHS.trim().split("\n");
 const exceptions = workflow.env.SYNC_EXCEPTIONS.trim().split("\n");
 const seeds = workflow.env.SEED_PATHS.trim().split("\n");
@@ -127,6 +128,21 @@ test("leak guard rejects unauthorized changes including renames from protected p
     git("add", "agent-output/local sentinel.txt");
     git("mv", "agent-output/local sentinel.txt", "leaked.txt");
     assert.notEqual(shell(guard.run).status, 0);
+  });
+});
+
+test("whitespace check permits blank EOFs but rejects other whitespace errors", () => {
+  fixture(({ git, write, shell }) => {
+    assert.equal(shell(apply.run).status, 0);
+    write("blank-eof.md", "content\n\n");
+    git("add", "blank-eof.md");
+    assert.equal(shell(whitespace.run).status, 0);
+
+    write("trailing-whitespace.md", "content \n");
+    git("add", "trailing-whitespace.md");
+    const result = shell(whitespace.run);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout, /trailing whitespace/);
   });
 });
 
