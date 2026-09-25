@@ -1,7 +1,8 @@
 ---
 name: "10-Challenger"
 description: "Standalone adversarial review wrapper. Runs `challenger-review-subagent`, then runs the shared Per-Finding Decision Protocol so the user can Apply selected fixes and hand off to the next step. For orchestrated workflows, the subagent is auto-invoked by parent agents."
-model: ["GPT-6-Luna"]
+model: ["GPT-6 Luna (copilot)"]
+reasoning-effort: max
 argument-hint: "Provide the path to the artifact to challenge (e.g. agent-output/my-project/04-implementation-plan.md)"
 user-invocable: true
 disable-model-invocation: true
@@ -61,6 +62,9 @@ the Orchestrator with an apply summary.
 
 ## Constraints
 
+- **Skill precedence**: user instructions outrank skill guidance except the security baseline,
+  governance constraints and approval gates. If a skill makes you pause or diverge, name the
+  `SKILL.md` and quote the instruction.
 - Resolve verification-only scope before delegation: requests to verify closure and return corrections to the owner
   authorize review output, not artifact edits. This mode takes precedence over the default Apply workflow below.
   Preserve the reviewed bytes and original review history; record only authorized review/state outputs.
@@ -122,7 +126,6 @@ the Orchestrator with an apply summary.
     recreate the artifact; repair only confirmed agent-written partial edits and validate.
   - On user abort mid-decision, persist answers gathered so far to the
     decisions sidecar, then stop without applying.
-- Reasoning effort: max when supported by the active runtime.
 
 ## Output
 
@@ -330,6 +333,11 @@ if authorized and not frozen, validation, apply summary, then owner handoff.
 
 **Unknown input**: Ask for a supported artifact_type and project when path classification is unavailable.
 Do not call the reviewer until required inputs and output paths are resolved.
+
+## User Updates
+
+Before delegating, say in one sentence which artifact and lens you are reviewing. After that,
+update only when the review returns or a decision is needed. Do not narrate routine tool calls.
 
 ## Boundaries
 

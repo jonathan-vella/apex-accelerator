@@ -59,8 +59,8 @@ Exact catalog matches take precedence over stripping optional handoff qualifiers
 
 ### Reasoning-Effort Policy
 
-Use higher effort for creative, multi-artifact decisions and default or medium
-effort for structured execution. Assignments and rationale:
+Set effort only in frontmatter `reasoning-effort`: `max` for `GPT-6 Luna (copilot)`
+agents and subagents, `default` for all others. Do not restate effort in the body. Rationale:
 [`apex-agent-authoring/references/model-policy.md`](../skills/apex-agent-authoring/references/model-policy.md).
 
 Repository structure and sourced vendor advice are distinguished in
@@ -69,7 +69,7 @@ Repository structure and sourced vendor advice are distinguished in
 ## Body Rules
 
 - The body is prepended to every turn; keep it concise and action-oriented.
-- Follow the limits in `context-optimization.instructions.md`.
+- Follow the size limits in [`context-optimization.instructions.md`](context-optimization.instructions.md).
 - Move long templates and phase-specific detail to references.
 - Use `#tool:<tool-name>` for tool references.
 - Prefer relative links and verify they resolve from the agent file.
@@ -84,8 +84,6 @@ Repository structure and sourced vendor advice are distinguished in
 
 Workflow, hierarchy, delegation, and PR checklist:
 [`apex-agent-authoring/SKILL.md`](../skills/apex-agent-authoring/SKILL.md).
-Context budgets and size limits:
-[`context-optimization.instructions.md`](context-optimization.instructions.md).
 
 ## Context Hygiene (Token Efficiency)
 
