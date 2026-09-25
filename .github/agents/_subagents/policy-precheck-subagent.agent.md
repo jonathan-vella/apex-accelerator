@@ -1,7 +1,8 @@
 ---
 name: policy-precheck-subagent
 description: "Live Azure Policy precheck subagent (L3). Cross-checks live policy state vs governance constraints, runs what-if/plan validation, returns deterministic deploy_gate (PROCEED|BLOCK) + status (CLEAN|INFORMATIONAL|BLOCKED|FAILED) for Deploy agents (07b/07t)."
-model: ["GPT-6-Luna"]
+model: ["GPT-6 Luna (copilot)"]
+reasoning-effort: max
 user-invocable: false
 disable-model-invocation: false
 agents: []
@@ -18,6 +19,8 @@ queries live policy state via `az policy state list`, cross-checks against
 a structured CLEAN|INFORMATIONAL|BLOCKED|FAILED status and PROCEED|BLOCK gate so Deploy agents (07b/07t)
 can route via `apex-iac-common/references/governance-drift-routing.md` before
 `az deployment ... create` or `terraform apply`.
+The parent's invocation outranks skill guidance; report any conflict in the result
+with the `SKILL.md` path and a quote of the instruction.
 
 ## Input Contract
 The parent agent passes **artifact paths plus the explicit input fields
@@ -61,8 +64,8 @@ This subagent does not:
   `04-governance-constraints.json` only.
 - Refresh the L0 envelope — it reports stale or missing evidence and lets the parent
   invoke `▶ Refresh Governance`.
-- Retry on transient API failures more than once with exponential
-  backoff — it bubbles up `FAILED` instead of looping.
+- Retry a transient API failure (timeout, throttling, HTTP 429/5xx) more than once:
+  it retries exactly once with identical inputs, then bubbles up `FAILED` instead of looping.
 
 ## Output Contract
 Return results in this exact text shape. The `Deploy gate` keyword is
@@ -166,12 +169,6 @@ block deploy` entry — paraphrasing is a defect.
 5. Cache live policy state for ≤ 5 minutes keyed by
    `{subscription_id}+{resource_group}+{target_scope}`; never reuse
    across deploy invocations.
-
-## Effort calibration
-
-Use medium effort when supported for structured checks. Raise to high only
-when the parent deploy agent flags a deployment with >50 resource
-changes or a destructive replace (`-/+`).
 
 ## Inputs
 

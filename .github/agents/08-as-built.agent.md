@@ -2,6 +2,7 @@
 name: 08-As-Built
 description: "Generates Step 7 as-built documentation suite after successful deployment. Reads all prior artifacts (Steps 1-6) and deployed resource state to produce: design document, operations runbook, cost estimate, compliance matrix, backup/DR plan, resource inventory, and documentation index."
 model: ["GPT-5.6 Terra (copilot)"]
+reasoning-effort: default
 user-invocable: true
 disable-model-invocation: true
 agents: ["cost-estimate-subagent"]
@@ -115,7 +116,6 @@ the deployed state — not from prior plan estimates.
   and `.svg` siblings are emitted; missing either sibling is a hard fail.
 - Read deployed state via Azure Resource Graph + `az` CLI; do not infer state
   from IaC source when the deployment is reachable.
-- Reasoning effort: medium when supported by the active runtime.
 
 ## Output
 
@@ -474,6 +474,7 @@ or `markdownlint-cli2` directly against `agent-output/**` (see
 
 ## User Updates
 
+Before the first tool call, say in one sentence what you will do first.
 After completing each major phase, provide a brief status update in chat:
 
 - What was just completed (phase name, key results)
@@ -485,7 +486,8 @@ This keeps the user informed during multi-phase operations.
 ## Boundaries
 
 - **Always**: Read required predecessor evidence for the requested scope and verify deployment state
-- **Ask first**: Non-standard documentation formats, skipping optional sections
+- **Needs approval** (other in-scope work proceeds without asking): Non-standard documentation formats,
+  skipping optional sections
 - **Never**: Modify deployed infrastructure, change IaC templates, skip prior artifact review
 
 ## Validation Checklist
