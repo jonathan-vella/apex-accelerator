@@ -181,6 +181,35 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_tr.add_argument("--json", action="store_true", help="Output as JSON")
 
+    p_gate = sub.add_parser("check-gate", help="Read-only current Plan/CodeGen/lab deployment readiness")
+    p_gate.add_argument("project")
+    p_gate.add_argument(
+        "--action",
+        required=True,
+        choices=["plan-complete", "codegen", "code-complete", "deploy", "deployment-complete", "teardown-complete"],
+    )
+    p_gate.add_argument(
+        "--authorization-only",
+        action="store_true",
+        help="Evaluate authorization before separate human gate approval; grants no progression",
+    )
+    p_gate.add_argument("--json", action="store_true")
+
+    for order_parser in (p_complete, p_tr, p_start):
+        order_parser.add_argument(
+            "--allow-out-of-order",
+            default=None,
+            metavar="REASON",
+            help="Human override: proceed although the previous step is not complete; the reason is logged.",
+        )
+
+    for risk_parser in (p_complete, p_tr, p_start, p_gate):
+        risk_parser.add_argument("--risk-authorization", help="Explicit signed lab risk authorization envelope")
+        risk_parser.add_argument("--risk-approval", help="Separate signed human gate approval envelope")
+        risk_parser.add_argument(
+            "--deployment-context", help="Actual lab tenant/subscription/event/tree/input/phase context"
+        )
+
     for completion_parser in (p_complete, p_tr):
         completion_parser.add_argument(
             "--plan-review",
@@ -250,6 +279,8 @@ def main(argv: list[str] | None = None) -> int:
         from .commands.review_audit import run
     elif args.command == "transition":
         from .commands.transition import run
+    elif args.command == "check-gate":
+        from .risk_gate import run
     elif args.command == "recover-state":
 
         def run(options):

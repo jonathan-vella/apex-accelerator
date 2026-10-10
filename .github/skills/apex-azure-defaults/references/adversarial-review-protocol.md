@@ -19,6 +19,10 @@ required lenses, human gates and existing repair caps remain authoritative; this
 2. Verify primary and declared supporting inputs with `--verify-cache`, review identity/lens and unresolved findings.
   A current hash alone is not semantic approval. An accepted mitigation is not verified closure. Missing/stale
   evidence or unresolved current must-fix findings block advancement, regardless of historical step completion.
+  The only supported residual-risk route is the explicit [lab authorization contract](../../../../tools/apex-recall/docs/risk-authorizations.md).
+  Validate authorization separately from review integrity; never change findings, severity, verdicts or review hashes.
+  A current `exception-authorized` action retains NEEDS_REVISION and unresolved findings, and still needs separate
+  human gate approval. Kit permission cannot authorize adopter deployment; unknown authority/eligibility fails closed.
 3. Before an authorized repair, compare the proposed change with approved resource types, SKUs, subnet placement,
   access modes and cost basis. Verify the reviewer's recommendation against provider or recorded proof evidence.
   Fix the finding without inventing topology. A proof establishes tested behavior, not authority to copy all its
@@ -400,7 +404,8 @@ Before building the panel:
 1. If `challenge-findings-{type}-decisions.json` exists, read it.
 2. Compute `issue_id` for every finding in the merged source set (2e).
 3. Reuse an existing decision only for an unchanged issue and mitigation. Verify closure independently;
-  unresolved blockers remain blocking even when previously accepted, rejected or deferred.
+  unresolved blockers remain blocking even when previously accepted, rejected or deferred. Ordinary finding consent
+  is not risk authorization; only the current explicit lab evaluator can authorize a listed action without closure.
 
 If the sidecar is absent, treat as "no prior decisions" — legacy
 artifacts that pre-date this protocol work unchanged.
@@ -461,10 +466,11 @@ Per finding:
 | `header`             | `{artifact-type}-pass{N}-{idx}` (≤50 chars). Examples: `architecture-pass1-3`, `cost-estimate-pass1-0`. **Hard rule** — must be unique across the merged batched call. |
 | `question`           | `title` (≤200 chars; truncate with `…`).                                                                                                                               |
 | `message`            | Markdown block with severity badge + `category` + `description` + `failure_scenario` + `artifact_section` + `suggested_mitigation`.                                    |
-| `options`            | Four fixed labels (in this order): `Accept (apply mitigation)`, `Reject (accept risk)`, `Defer (carry to handoff)`, `Edit (custom guidance)`.                          |
+| `options`            | Four fixed labels (in this order): `Accept (apply mitigation)`, `Reject (do not apply)`, `Defer (carry to handoff)`, `Edit (custom guidance)`.                          |
 | `recommended`        | `Accept` for `must_fix`; `Defer` for `should_fix`.                                                                                                                     |
 | `allowFreeformInput` | `true` (enables Edit + per-finding notes).                                                                                                                             |
-
+Rejecting a `must_fix` finding records a disagreement only. It does not close the finding or accept the risk; the
+finding stays blocking unless a lab risk authorization covers it.
 ### 2h. Edit / freeText / skipped semantics
 
 Deterministic — no agent-level interpretation:
@@ -519,8 +525,8 @@ If `must_fix + should_fix == 0`:
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | 02-Requirements | Apply Accepted fixes → re-run challenger (`overwrite: true`) → re-build panel (skipping issues with prior decisions per 2c) → re-present gate. |
 | 03-Architect    | Same as Requirements; re-run all relevant passes per the configured pass count.                                                                |
-| 04g-Governance  | Apply Accepted fixes → **DO NOT re-run challenger** (cap = 1 pass) → re-present final aggregated gate only with the existing decision sidecar. |
-| 05-IaC Planner  | Same as Requirements.                                                                                                                          |
+| 04g-Governance  | Apply Accepted fixes → any reviewed-input change invalidates the review: block completion and return to the owner and human `10-Challenger` under the one-pass ceiling. |
+| 05-IaC Planner  | Repair `must_fix` without a panel (Stage 1 of the Planner approval gate); panel only `should_fix`; re-run affected reviews. |
 
 ### 2l. Final aggregated gate
 
@@ -557,7 +563,7 @@ Two-finding panel for an Architect gate. Source files merged per 2e
       "message": "**must_fix** · cost-feasibility\n\n**Description**: Configured 4000 RU/s autoscale max but plan caps at 2900.\n\n**Failure scenario**: Burst traffic triggers autoscale to ceiling, monthly bill overruns committed budget.\n\n**Artifact section**: §4 Cost — Cosmos DB row.\n\n**Suggested mitigation**: Lower max_throughput to 2900 or split workload across two containers.",
       "options": [
         { "label": "Accept (apply mitigation)", "recommended": true },
-        { "label": "Reject (accept risk)" },
+        { "label": "Reject (do not apply)" },
         { "label": "Defer (carry to handoff)" },
         { "label": "Edit (custom guidance)" }
       ],
@@ -569,7 +575,7 @@ Two-finding panel for an Architect gate. Source files merged per 2e
       "message": "**must_fix** · security-governance\n\n**Description**: …",
       "options": [
         { "label": "Accept (apply mitigation)", "recommended": true },
-        { "label": "Reject (accept risk)" },
+        { "label": "Reject (do not apply)" },
         { "label": "Defer (carry to handoff)" },
         { "label": "Edit (custom guidance)" }
       ],

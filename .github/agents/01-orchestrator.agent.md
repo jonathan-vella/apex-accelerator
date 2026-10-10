@@ -356,6 +356,9 @@ At each approval gate:
 4. Step 4 Plan review remains mandatory in default mode. Step 5 Code review
   is opt-in, enabled by the existing deep-review path or an explicit user request.
   Keep validation and deployment previews regardless of review depth.
+5. For explicit lab risk acceptance, consume current `session.gate_readiness` for the exact next action and
+  follow the [authorization contract](../../tools/apex-recall/docs/risk-authorizations.md). Keep unresolved findings
+  visible; authorization does not replace separate human gate approval. Kit readiness cannot authorize deployment.
 
 Legacy gate question — _"Run additional adversarial review? (recommended
 for complex projects)"_ — is **removed**. Multi-pass review is enabled
@@ -371,7 +374,8 @@ Challenger handoff. When the ceiling would be exceeded, emit
 **"Accept findings"**, **"Override ceiling"**, **"Abort step"**. Persist
 via
 `apex-recall decide <project> --key challenger_decision_<step> --value <accept|override|abort> --json`
-(override flag: `challenger_override_<step>`). Keys registered in
+(override flag: `challenger_override_<step>`). Neither choice closes findings, resets the review budget or replaces
+risk authorization. Keys registered in
 [`decision-keys.md`](../../tools/apex-recall/docs/decision-keys.md).
 Lint: `npm run validate:review-ceiling`.
 
