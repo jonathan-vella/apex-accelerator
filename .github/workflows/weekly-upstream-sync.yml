@@ -4,8 +4,7 @@
 #
 # ALWAYS synced from upstream (upstream wins):
 #   .devcontainer/          .vscode/               .github/agents/
-#   .github/skills/         .github/instructions/  .github/prompts/
-#   .github/hooks/          .github/plugins/
+#   .github/skills/         .github/instructions/  .github/plugins/
 #   .github/copilot-instructions.md                .github/dependabot.yml
 #   .github/terminology-blocklist.json
 #   tools/                  assets/                package.json
@@ -326,8 +325,8 @@ jobs:
 
           **Always synced from upstream:**
           \`.devcontainer/\` · \`.vscode/\` · \`tools/\` · \`assets/\`
-          \`.github/agents/\` · \`.github/skills/\` · \`.github/instructions/\` · \`.github/prompts/\`
-          \`.github/hooks/\` · \`.github/plugins/\` · \`.github/copilot-instructions.md\`
+          \`.github/agents/\` · \`.github/skills/\` · \`.github/instructions/\`
+          \`.github/plugins/\` · \`.github/copilot-instructions.md\`
           All root config files (\`package.json\`, \`lefthook.yml\`, etc.)
 
           **Preserved accelerator paths:**
