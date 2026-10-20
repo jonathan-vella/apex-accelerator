@@ -69,8 +69,7 @@ from the Command Palette). The container build takes 3-5 minutes and pre-install
 - Terraform CLI with TFLint
 - GitHub CLI (`gh`)
 - Node.js + npm (validation scripts)
-- Python 3 + pip (MCP server, diagram generation)
-- Go (Terraform MCP server)
+- Python 3 + pip (diagram generation, apex-recall CLI)
 
 ### 3. Initialize Your Repository
 
@@ -90,7 +89,7 @@ npm run sync:workflows
 | `npm run init`           | **One-time setup** — replaces all references to the accelerator template repo with your repo's URL (auto-detected from git remote). Run `npm run init -- --dry-run` first to preview changes. |
 | `npm run sync:workflows` | Fetches the latest GitHub Actions workflows from the [upstream APEX project](https://github.com/jonathan-vella/apex) into your `.github/workflows/` directory                |
 
-> **Note:** Python dependencies (diagrams, Azure Pricing MCP server, apex-recall) are installed
+> **Note:** Python dependencies (diagrams and apex-recall) are installed
 > automatically by the dev container's `post-create.sh` script. No manual `pip install` is needed.
 
 After running, review and commit:
@@ -155,7 +154,7 @@ gh workflow run "Governance Policy Baseline"
 
 | Workflow                       | Purpose                                                                                                                                              | Schedule                |
 | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
-| **Weekly Maintenance**         | Refreshes the AVM module index, tracks Azure service deprecations, runs the quarterly docs/orphan audit, validates Draw.io tooling, and link-checks docs. | Mondays 06:00 UTC       |
+| **Weekly Maintenance**         | Refreshes the AVM module index, tracks Azure service deprecations, runs the quarterly docs/orphan audit, and link-checks docs. | Mondays 06:00 UTC       |
 | **Governance Policy Baseline** | Collects effective Azure Policy assignments (including management-group inheritance) from your subscription into `agent-output/_baseline/` so the IaC planner consumes real governance constraints. Requires step 4 to be complete. | Mondays 05:00 UTC       |
 
 Verify both runs succeeded before continuing:
@@ -189,9 +188,8 @@ infra/
   bicep/{project}/     # Bicep templates (main.bicep + modules/)
   terraform/{project}/ # Terraform configurations (main.tf + modules/)
 tools/
-  mcp-servers/         # MCP servers (azure-pricing, drawio)
+  apex-recall/         # Progressive session recall CLI
   scripts/             # Validation and maintenance scripts
-site/                  # Documentation site source (Astro Starlight)
 ```
 
 ### What's Yours vs. What's Upstream
@@ -202,7 +200,7 @@ site/                  # Documentation site source (Astro Starlight)
 | `infra/bicep/` — your Bicep templates                | `.github/skills/` — agent skills             |
 | `.github/workflows/` — your CI/CD workflows          | `.github/instructions/` — coding rules       |
 | `README.md` — your documentation                     | `.github/copilot-instructions.md`            |
-|                                                      | `tools/`, `site/`, `package.json`            |
+|                                                      | `tools/`, `package.json`            |
 |                                                      | `AGENTS.md`, `.devcontainer/`, `.vscode/`    |
 
 > **Note**: If you disable the sync workflow, everything becomes yours to edit freely.

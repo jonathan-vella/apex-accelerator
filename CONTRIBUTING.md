@@ -53,7 +53,7 @@ GitHub Actions CI.
 
 | Prefix          | Scope                                                        | Example                         |
 | --------------- | ------------------------------------------------------------ | ------------------------------- |
-| `docs/`         | Documentation (`docs/`, `site/`, `README.md`)                | `docs/update-workflow-guide`    |
+| `docs/`         | Documentation (`docs/`, `README.md`)                | `docs/update-workflow-guide`    |
 | `agents/`       | Agent definitions (`.github/agents/`, `agent-registry.json`) | `agents/improve-conductor`      |
 | `skills/`       | Skill files (`.github/skills/`, `skill-affinity.json`)       | `skills/add-tf-patterns`        |
 | `infra/`        | Infrastructure code (`infra/bicep/`, `infra/terraform/`)     | `infra/add-private-endpoints`   |
@@ -81,7 +81,7 @@ narrow-scope branches.
 
 | Domain Prefix   | Allowed File Paths                                               |
 | --------------- | ---------------------------------------------------------------- |
-| `docs/`         | `docs/`, `site/`, `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md` |
+| `docs/`         | `docs/`, `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md` |
 | `agents/`       | `.github/agents/`, `.github/agent-registry.json`                 |
 | `skills/`       | `.github/skills/`, `.github/skill-affinity.json`                 |
 | `infra/`        | `infra/`                                                         |
