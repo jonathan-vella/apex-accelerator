@@ -3,7 +3,7 @@
 # Plan Design Decisions Panel
 
 Canonical question set for the IaC Planner's Phase 3.5 batched
-`askQuestions` panel. Replaces the previous freeform Phase 1.5
+`ask_user` panel. Replaces the previous freeform Phase 1.5
 deployment-context prompt and the Phase 3.5 deployment-strategy gate's
 loose tail with a single structured panel. Every answer persists via
 `apex-recall decide --key <id> --value <choice>` so downstream CodeGen
@@ -11,7 +11,7 @@ phases can consume it without re-asking.
 
 ## When the Planner reads this file
 
-- Phase 3.5 (Deployment Strategy Gate): builds one `askQuestions` panel
+- Phase 3.5 (Deployment Strategy Gate): builds one `ask_user` panel
   from the four canonical questions below, prepending any deferred
   rules from `plan-consistency-checks.md` (e.g. `zone_redundancy`).
 
@@ -70,9 +70,11 @@ phases can consume it without re-asking.
 
 ### 4. `az_posture`
 
+- **Applies to**: production environments only. For non-production, record
+  `single-zone-mvp` without asking.
 - **Question**: "What is the target Availability Zone posture?"
 - **Options**:
-  - `single-zone-mvp` (cheapest; acceptable for non-prod)
+  - `single-zone-mvp` (cheapest; the only posture for non-prod)
   - `zone-redundant` (recommended for prod; requires P1v4+/v2+ SKUs
     and 2+ instances)
   - `regional-pair` (zone-redundant primary + read-only or warm
@@ -99,7 +101,7 @@ apex-recall decide <project> \
 ```
 
 If the user picks `custom` (where allowed), follow up with one
-free-text `askQuestions` to capture the custom value, then persist as
+free-text `ask_user` to capture the custom value, then persist as
 `{persistence_key}_custom = "<value>"`.
 
 ## Downstream consumer impact table
@@ -113,7 +115,7 @@ free-text `askQuestions` to capture the custom value, then persist as
 
 ## Rules
 
-- The panel is **single-shot**: one `askQuestions` call with up to 4
+- The panel is **single-shot**: one `ask_user` call with up to 4
   questions (plus any deferred plan-consistency questions). Never split
   into multiple turns.
 - Recommended defaults are pre-selected; the user clicks to confirm or
@@ -122,11 +124,18 @@ free-text `askQuestions` to capture the custom value, then persist as
   (e.g. from a resume), omit that question from the panel.
 - Do not ask for `identity_model` when the project has zero compute
   resources; default to `none` and persist that.
+- **Show the architecture's value.** Before building the panel, read
+  `02-architecture-assessment.md` for a stated value of each key (for
+  example system-assigned identity) and add it to that option's
+  description as "Architecture assessment: {value}". When the answer
+  differs, record the deviation with `apex-recall decide --decision
+  "{key} deviates from architecture: {old} -> {new}" --step 4` and in
+  the plan's decision table.
 
 ## Anti-patterns
 
 - Do not present these questions in chat text; always use
-  `askQuestions`.
+  `ask_user`.
 - Do not introduce a fifth question without updating this file
   first — the panel cap is 4 + deferred consistency rules.
 - Do not record the persistence key under a different name (e.g.

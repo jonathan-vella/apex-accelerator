@@ -10,6 +10,14 @@ and `04-governance-constraints.json` before writing templates. These
 artifacts contain discovered Azure Policy constraints for the target
 subscription.
 
+## Policy Source And Precedence
+
+Use effective policy discovered in the target tenant. When discovery is not used, the ALZ Corp default
+(`baseline_kind: alz-corp-default`) is assumed governance, never discovered policy; its floor is in the
+[security baseline](iac-security-baseline.md#alz-corp-inherited-policy-floor). Where the APEX baseline
+and ALZ differ, ALZ governs and the stricter APEX rule is reported to the owner. Do not present assumed
+governance as verified.
+
 ## Dynamic Tag List
 
 Tags come from governance constraints, not hardcoded defaults. The greenfield fallback set
@@ -32,7 +40,8 @@ For every policy in `04-governance-constraints.json`:
 
 ### Deny Policies
 
-1. Read property path and `requiredValue` from JSON
+1. Read `required_value` and applicable property paths from JSON; these fields are conditional.
+   If the mapping or required value is missing/ambiguous, return to Governance/Planner for reconciliation.
 2. Translate to IaC-specific argument (Bicep or Terraform)
 3. Verify the generated code sets the property to the required value
 4. If the property is missing, add it
@@ -70,8 +79,11 @@ as the ARM property path.
 ### `azurePropertyPath` Translation
 
 For each Deny or Modify policy in `04-governance-constraints.json`,
-read the `azurePropertyPath` field and translate it to the corresponding
+read the `azurePropertyPath` field when available and translate it to the corresponding
 `azurerm_*` resource argument:
+
+If discovery cannot map the policy, reconcile it with Governance/Planner rather than
+guessing a Terraform argument or treating the missing path as proof of compliance.
 
 1. Split `azurePropertyPath` on `.` → `[resourceType, "properties", ...rest]`
 2. Map `resourceType` to the corresponding `azurerm_*` resource using the table below
@@ -105,6 +117,8 @@ read the `azurePropertyPath` field and translate it to the corresponding
 | `sqlServer.properties.publicNetworkAccess`           | `public_network_access_enabled`           |
 | `keyVault.properties.enableSoftDelete`               | `soft_delete_retention_days` (> 0 = true) |
 | `keyVault.properties.enablePurgeProtection`          | `purge_protection_enabled`                |
+| `keyVault.properties.enableRbacAuthorization`        | `rbac_authorization_enabled`              |
+| `webApp.properties.publicNetworkAccess`              | `public_network_access_enabled`           |
 | `containerRegistry.properties.publicNetworkAccess`   | `public_network_access_enabled`           |
 | `webApp.properties.httpsOnly`                        | `https_only`                              |
 

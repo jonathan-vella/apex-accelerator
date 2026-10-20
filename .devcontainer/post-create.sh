@@ -25,6 +25,9 @@ uv pip install --system --quiet --requirement "${PWD}/requirements.txt" --editab
 python3 -c "import diagrams, matplotlib, PIL, pytest, ruff, apex_recall"
 apex-recall --version
 
+printf "Installing pinned PowerShell script analysis tooling...\n"
+npm run setup:powershell
+
 printf "Installing required Azure PowerShell modules...\n"
 pwsh -NoProfile -NonInteractive -Command '
     $ErrorActionPreference = "Stop"
@@ -55,6 +58,9 @@ elif ! az bicep version --only-show-errors; then
     az bicep install --only-show-errors
     az bicep version --only-show-errors
 fi
+
+printf "Installing pinned azqr for the Azure MCP extension_azqr tool...\n"
+bash .devcontainer/install-azqr.sh || printf "azqr install skipped; compliance scans fall back to the azqr CLI.\n"
 
 printf "Adding only missing MCP defaults...\n"
 node .devcontainer/configure-mcp.mjs

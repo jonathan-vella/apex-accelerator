@@ -12,6 +12,9 @@ committed under `.github/data/governance-policy-baseline.json.gz`.
 **GATE**: This is a mandatory gate. If Azure connectivity fails or policies
 cannot be retrieved during live discovery, STOP and inform the user.
 Do NOT generate governance constraints from assumptions.
+**Single exception**: the user may explicitly choose the shipped `alz-corp-default` baseline as *assumed*
+governance (see `baseline-check.md`). It must be labelled assumed and not tenant-verified in every artifact,
+and the Step 3.5 review stays mandatory.
 Do NOT accept arbitrary static files as governance input — only the approved
 workflow output file (`.github/data/governance-policy-baseline.json.gz`) is valid
 for cached baseline mode.
@@ -65,8 +68,10 @@ to the Code Generator and validation subagents:
 1. Code Generators (Phase 1.5) read `04-governance-constraints.json`
    and build a compliance map before writing any code
 2. Review subagents verify every Deny policy constraint is satisfied
-3. Both require `bicepPropertyPath`, `azurePropertyPath`, and
-   `requiredValue` fields in the JSON for programmatic verification
+3. Use `required_value` and applicable property paths for programmatic verification.
+   `azurePropertyPath` and `bicepPropertyPath` are conditional mapping aids, not
+   universally required schema fields; `terraformPropertyPath` is reserved for planning.
+   Missing mappings or values require policy/plan reconciliation, never guessed compliance.
 
 See `.github/instructions/references/iac-policy-compliance.md` for the
 full enforcement mandate.

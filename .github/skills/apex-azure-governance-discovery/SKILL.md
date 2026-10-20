@@ -38,6 +38,7 @@ pulling raw Azure REST responses into LLM context.
 - **Defender filtering is narrow** — the collector retains enforcement-bearing assignments; `--include-defender-auto` retains all
 - **Exit codes are contract** — `0` = COMPLETE, `1` = PARTIAL, `2` = FAILED; argparse errors also return nonzero. COMPLETE is collection status, not planning approval
 - **No artifact writing** — the script emits JSON + a `.preview.md`; the agent owns the final `04-governance-constraints.md` content and traffic-light rendering
+- **Never hand-edit the envelope** — a re-run overwrites additions and any edit breaks the recorded signature; put additions in owner-controlled artifacts
 - **Reuse only current scoped evidence** — project, subscription, options, schema, COMPLETE status, valid TTL and exemptions must match
 - **Resolve confirmations before review** — all topics require current evidence-bound answers; unknowns block. See [inline resolution](references/inline-resolution-gate.md)
 
@@ -56,8 +57,10 @@ Flags:
 | `--project <name>`             | Required. Used only for cache key and provenance.                  |
 | `--out <path>`                 | Required. Full envelope written here (overwrites).                 |
 | `--subscription <id\|default>` | Optional. `default` uses `az account show`.                        |
+| `--arch <path>`                | Optional. Path to `02-architecture-assessment.md` for preview mapping. |
 | `--refresh`                    | Force re-discovery even if `<out>` already exists.                 |
 | `--include-defender-auto`      | Include Defender-for-Cloud auto-assignments (excluded by default). |
+| `--verbose`                    | Emit informational progress diagnostics to stderr.                 |
 
 Exit codes:
 
@@ -68,7 +71,8 @@ Exit codes:
 | `2`  | `FAILED` — auth/network/permission error                        |
 | `2`  | Invalid arguments (argparse), distinguished from failures by diagnostics |
 
-Stdout — always exactly one machine-readable JSON line first, optional
+Stdout — always exactly one machine-readable JSON line first (using key `"status"`,
+whereas the persisted `<out>` envelope stores `"discovery_status"`), optional
 human-readable preview after:
 
 ```json

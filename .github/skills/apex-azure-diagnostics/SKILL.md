@@ -3,7 +3,7 @@ name: apex-azure-diagnostics
 user-invocable: true
 disable-model-invocation: false
 argument-hint: "resource scope, symptom and time range"
-description: "**WORKFLOW SKILL** — Debug Azure production issues: Container Apps, Functions, App Service, AKS, VMs and messaging, with KQL log analysis. WHEN: 'troubleshoot container apps', 'troubleshoot AKS', 'pod crashloop', 'VM RDP or SSH failure', 'app service high CPU', 'service bus errors'. DO NOT USE FOR: pre-deploy validation (apex-azure-validate), cost (apex-azure-cost-optimization), AKS design (apex-azure-kubernetes)."
+description: "**WORKFLOW SKILL** — Debug Azure production issues: Container Apps, Functions, App Service, AKS, VMs and messaging with KQL log analysis. WHEN: 'troubleshoot container apps', 'troubleshoot AKS', 'pod crashloop', 'app service high CPU', 'service bus errors'. DO NOT USE FOR: pre-deploy validation (apex-azure-validate), cost (apex-azure-cost-optimization), AKS design (apex-azure-kubernetes)."
 license: MIT
 metadata:
   author: Microsoft
@@ -117,9 +117,11 @@ For AI-powered diagnostics, use:
 ```
 mcp_azure-mcp_applens
   intent: "diagnose issues with <resource-name>"
-  command: "diagnose"
+  command: "applens_resource_diagnose"
   parameters:
-    resourceId: "<resource-id>"
+    resource: "<resource-name>"
+    question: "<what to diagnose>"
+    resource-group: "<resource-group>"
 
 Provides:
 - Automated issue detection
@@ -134,9 +136,11 @@ For querying logs and metrics:
 ```
 mcp_azure-mcp_monitor
   intent: "query logs for <resource-name>"
-  command: "logs_query"
+  command: "monitor_workspace_log_query"
   parameters:
-    workspaceId: "<workspace-id>"
+    subscription: "<subscription-id>"
+    workspace: "<workspace-name-or-id>"
+    table: "<table>"
     query: "<KQL-query>"
 ```
 
@@ -151,7 +155,7 @@ See [kql-queries.md](references/kql-queries.md) for common diagnostic queries.
 ```
 mcp_azure-mcp_resourcehealth
   intent: "check health status of <resource-name>"
-  command: "get"
+  command: "resourcehealth_availability-status_get"
   parameters:
     resourceId: "<resource-id>"
 ```
