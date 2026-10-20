@@ -101,7 +101,7 @@ git push
 ```
 
 > **Expected diff:** You will see changes to `AGENTS.md`, `CONTRIBUTING.md`, and one or more
-> `.github/workflows/` files. You may also see formatting-only changes to `.vscode/mcp.json`
+> `.github/workflows/` files. You may also see formatting-only changes to `.mcp.json`
 > (the dev container normalizes its JSON arrays to multi-line format on first start) — this is
 > expected and safe to commit.
 >
