@@ -29,7 +29,7 @@ with AI agents.
 | 1    | Mounted directories            | Ensure uv, gh config, and Terraform cache directories are writable |
 | 2    | npm and workspace dependencies | Ensure npm 12.1.0, then `npm ci` from `package-lock.json`       |
 | 3    | Python and apex-recall         | One `uv pip install` for requirements and editable recall; import and CLI verification |
-| 4    | PowerShell Az modules          | Synchronous `Install-Module`, then verify each required module exists |
+| 4    | PowerShell analysis and Az modules | `npm run setup:powershell` for the pinned analyzer, then synchronous Az module install/verification |
 | 5    | Build tools and Terraform      | Check gitleaks, uv, and Terraform versions                     |
 | 6    | Azure CLI and Bicep            | Stable extension auto-install, disable CLI auto-upgrade, check Bicep with fallback install |
 | 7    | MCP defaults and tool versions | Add missing defaults via JSONC edits; run tool-version validation |
@@ -38,6 +38,13 @@ Required setup errors stop the script with a nonzero exit. PowerShell installs A
 Storage, Network, KeyVault, and Websites modules without bypassing publisher checks; missing modules
 or installation errors fail setup. Setup does not change global Git settings or credentials.
 
+PowerShell analysis uses the exact PSScriptAnalyzer version in
+[`requirements.psd1`](../tools/powershell/requirements.psd1), installed from PSGallery in `CurrentUser` scope.
+It does not change repository trust or require root. Run `npm run setup:powershell` to provision it manually,
+then `npm run lint:powershell` and `npm run test:powershell`. Missing PowerShell or the pinned analyzer fails closed.
+The checker only parses/analyzes maintained sources; it never executes Azure or Kubernetes collection scripts.
+Installation requires HTTPS access to PowerShell Gallery; analysis is offline once the module is installed.
+
 ### Build-Time Tools (installed via `Dockerfile`)
 
 Stable APT dependencies (`ca-certificates`, `curl`, `jq`, `tar`, `gzip`, `graphviz`, `dos2unix`, and `bats`)
@@ -45,11 +52,15 @@ are installed in the image layer. uv 0.12.23 and gitleaks 8.30.1 are pinned and 
 `amd64` and `arm64` using [the download manifest](download-checksums.json).
 The existing tool updater does not update these pins; maintain their versions and checksums explicitly.
 
+`post-create.sh` also installs azqr 4.2.0 to `~/.local/bin` with `install-azqr.sh`, verified against the same manifest.
+Azure MCP 3.0.0 lists `extension_azqr` only while azqr 3.0.0 or later is on `PATH`. The install is optional: if it
+fails, the compliance and cost skills fall back to running `azqr` directly.
+
 ### MCP Servers (auto-configured in `.vscode/mcp.json`)
 
 | Server            | Transport         | Purpose                                          |
 | ----------------- | ----------------- | ------------------------------------------------ |
-| Azure Resource Manager MCP | http      | Retail pricing and Azure cost management         |
+| Azure Resource Manager MCP | http      | Azure cost management (retail pricing uses Azure MCP) |
 | GitHub MCP        | http              | Copilot-provided GitHub context                  |
 | Azure MCP Server  | stdio (`npx`)      | RBAC-aware Azure context for agents              |
 
@@ -275,8 +286,13 @@ Runs on every container start without installing or upgrading dependencies:
 
 | Check | Method |
 | --- | --- |
-| Hook permissions | Restore executable bits on mounted shell hooks |
 | azd authentication | Read-only status check |
+
+APEX agent runtime hooks are retired: container and workspace settings no longer register `.github/hooks/`.
+No replacement tool-guardian or automatic post-subagent validator is installed.
+Lefthook Git hooks, gitleaks and CI checks remain independent; they do not replace runtime tool interception.
+Use `npm run test:git-hooks` for the retained Lefthook configuration tests and
+`npm run validate:vscode` to check configuration, including retired hook registrations.
 
 ### When to Rebuild vs. Restart
 

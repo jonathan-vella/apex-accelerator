@@ -106,6 +106,52 @@ function reviewSidecar(sessionStatePath, defaultSidecar) {
   return defaultSidecar;
 }
 
+const COST_FILES = /^(02-cost-estimate|02-cost-candidates|03-des-cost-estimate).*\.json$/;
+
+// Same rule as apex-recall's Step 2 completion check; top level only, `_meta/` is the archive.
+function step2Residue(projectDir) {
+  const found = [];
+  for (const entry of fs.readdirSync(projectDir, { withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+    if (entry.name.endsWith(".tmp.md")) found.push(`${entry.name}: scratch file`);
+    else if (COST_FILES.test(entry.name)) {
+      try {
+        const doc = JSON.parse(fs.readFileSync(path.join(projectDir, entry.name), "utf-8"));
+        if (doc?.status === "FAILED") found.push(`${entry.name}: cost estimate with status FAILED`);
+      } catch {
+        // unreadable files are not this check's concern
+      }
+    }
+  }
+  return found;
+}
+
+const STEP_ORDER = ["1", "2", "3", "3_5", "4", "5", "6", "7"];
+
+function isStepInProgressBeforeHandoff(sessionStatePath, stepKey) {
+  if (!fs.existsSync(sessionStatePath)) return false;
+  try {
+    const state = JSON.parse(fs.readFileSync(sessionStatePath, "utf8"));
+    const steps = state?.steps;
+    if (!steps || typeof steps !== "object") return false;
+    if (steps[stepKey]?.status !== "in_progress") return false;
+    const idx = STEP_ORDER.indexOf(stepKey);
+    if (idx === -1) return false;
+    const laterSteps = STEP_ORDER.slice(idx + 1);
+    return !laterSteps.some((k) => steps[k]?.status === "in_progress" || steps[k]?.status === "complete");
+  } catch {
+    return false;
+  }
+}
+
+function step2Complete(sessionStatePath) {
+  try {
+    return JSON.parse(fs.readFileSync(sessionStatePath, "utf-8"))?.steps?.["2"]?.status === "complete";
+  } catch {
+    return false;
+  }
+}
+
 const projects = listProjects(ROOT);
 if (projects.length === 0) {
   console.log("  ℹ️  No projects under agent-output/ — nothing to validate.\n");
@@ -141,12 +187,25 @@ for (const project of projects) {
       continue;
     }
 
+    if (isStepInProgressBeforeHandoff(sessionState, stepKey)) {
+      r.info(`${project}/${gate.label}`, `step ${stepKey} is in_progress (pre-review draft before handoff)`);
+      continue;
+    }
+
     r.error(
       `${project}/${gate.label}`,
       `gating artifact ${gatingArtifact} exists but required findings ` +
         `sidecar(s) ${missingSidecars.join(", ")} are missing or unreadable. Run the ` +
         `challenger-review-subagent (or 10-Challenger agent) to produce it.`,
     );
+  }
+  if (step2Complete(sessionState)) {
+    for (const item of step2Residue(projectDir)) {
+      r.error(
+        `${project}/Step 2 Architecture`,
+        `${item}. Move superseded or failed cost files to ${projectDir}/_meta/ and delete scratch *.tmp.md files.`,
+      );
+    }
   }
 }
 

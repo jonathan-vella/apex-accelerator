@@ -80,7 +80,9 @@ function checkDenyCoverage(data, fileRel, r) {
     return;
   }
   const mapped = new Set(
-    (data.policies ?? []).filter((policy) => policy.effect === "Deny").map((policy) => policy.policy_id),
+    (data.policies ?? [])
+      .filter((policy) => typeof policy.effect === "string" && policy.effect.toLowerCase() === "deny")
+      .map((policy) => policy.policy_id),
   );
   for (const id of denyIds) {
     if (!mapped.has(id)) {
@@ -94,13 +96,31 @@ function checkDenyCoverage(data, fileRel, r) {
 
 function checkDenyEnrichment(data, fileRel, r) {
   for (const p of data.policies ?? []) {
-    if (p.effect !== "Deny") continue;
+    if (typeof p.effect !== "string" || p.effect.toLowerCase() !== "deny") continue;
     if (!p.evidence_required) {
       r.error(fileRel, `Deny policy "${p.policy_id}" missing evidence_required (mandatory for Deny entries).`);
     }
     if (data.governance_depth === "full" && !p.rationale) {
       r.error(fileRel, `Deny policy "${p.policy_id}" missing rationale (mandatory when governance_depth="full").`);
     }
+  }
+}
+
+function checkPolicyStatus(data, fileRel, r) {
+  for (const p of data.policies ?? []) {
+    if (p.status === "not-applicable" && !p.not_applicable_reason?.trim()) {
+      r.error(fileRel, `Policy "${p.policy_id}" is not-applicable but has no not_applicable_reason.`);
+    }
+    if (p.status !== "not-applicable" && p.not_applicable_reason !== undefined) {
+      r.error(fileRel, `Policy "${p.policy_id}" has not_applicable_reason but status is not not-applicable.`);
+    }
+    if (p.status === "unsatisfiable") {
+      r.error(
+        fileRel,
+        `Policy "${p.policy_id}" is unsatisfiable: no plan shape satisfies it; return to 04g-Governance via Refresh Governance.`,
+      );
+    }
+    if (p.status === "pending") r.warn(fileRel, `Policy "${p.policy_id}" is still pending.`);
   }
 }
 
@@ -178,6 +198,7 @@ function main() {
     checkUniquePolicyIds(data, fileRel, r);
     checkDenyCoverage(data, fileRel, r);
     checkDenyEnrichment(data, fileRel, r);
+    checkPolicyStatus(data, fileRel, r);
     checkConstraintsRefHash(data, fileRel, r);
     if (r.errors === errorsBefore) {
       r.ok(fileRel, `policy-property-map (${data.policies.length} policies, depth=${data.governance_depth})`);
