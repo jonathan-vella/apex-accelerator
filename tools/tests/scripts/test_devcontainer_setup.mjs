@@ -166,6 +166,68 @@ test("extension policy requires exclusions and rejects direct or pinned duplicat
   }
 });
 
+for (const [name, sources, expected, notice] of [
+  [
+    "public defaults",
+    ["https://registry.npmjs.org/", "https://pypi.org/simple/", "https://pypi.org/simple/"],
+    "npm: public, pip: public, uv: public",
+    /opt in to CFS/,
+  ],
+  [
+    "complete CFS opt-in",
+    Array(3).fill("https://packagefeedproxy.microsoft.io/x/"),
+    "npm: Microsoft CFS, pip: Microsoft CFS, uv: Microsoft CFS",
+    null,
+  ],
+  [
+    "npm-only CFS opt-in",
+    ["https://packagefeedproxy.microsoft.io/npm/", "https://pypi.org/simple/", "https://pypi.org/simple/"],
+    "npm: Microsoft CFS, pip: public, uv: public",
+    /CFS opt-in is incomplete/,
+  ],
+  [
+    "Python-only CFS opt-in",
+    [
+      "https://registry.npmjs.org/",
+      "https://packagefeedproxy.microsoft.io/p/",
+      "https://packagefeedproxy.microsoft.io/p/",
+    ],
+    "npm: public, pip: Microsoft CFS, uv: Microsoft CFS",
+    /CFS opt-in is incomplete/,
+  ],
+  [
+    "custom and spoofed sources",
+    ["https://user:secret@mirror.example/npm/", "", "https://packagefeedproxy.microsoft.io@evil.test/p/"],
+    "npm: custom, pip: unset, uv: custom",
+    /opt in to CFS/,
+  ],
+]) {
+  test(`startup reports each package source separately: ${name}`, (context) => {
+    const root = fixture(context);
+    const bin = path.join(root, "bin");
+    fs.mkdirSync(bin);
+    fs.writeFileSync(path.join(bin, "npm"), '#!/bin/bash\nprintf "{}\\n"\n', { mode: 0o755 });
+    fs.writeFileSync(path.join(bin, "azd"), "#!/bin/bash\nexit 0\n", { mode: 0o755 });
+    const result = spawnSync("/bin/bash", [startup], {
+      cwd: root,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: bin,
+        NPM_CONFIG_REGISTRY: sources[0],
+        PIP_INDEX_URL: sources[1],
+        UV_INDEX_URL: sources[2],
+      },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const sourceLine = result.stdout.split("\n").find((line) => line.includes("package sources"));
+    assert.ok(sourceLine?.endsWith(expected), `unexpected package sources line: ${sourceLine}`);
+    if (notice) assert.match(result.stdout, notice);
+    else assert.doesNotMatch(result.stdout, /opt in to CFS|incomplete/);
+    assert.doesNotMatch(result.stdout, /secret|mirror\.example|evil\.test|https:\/\//);
+  });
+}
+
 for (const scenario of ["current", "outdated", "offline", "timeout", "missing-npm"]) {
   test(`startup release check is advisory and read-only: ${scenario}`, (context) => {
     const root = fixture(context);
@@ -193,6 +255,9 @@ for (const scenario of ["current", "outdated", "offline", "timeout", "missing-np
         ...process.env,
         PATH: bin,
         CALL_LOG: calls,
+        NPM_CONFIG_REGISTRY: "",
+        PIP_INDEX_URL: "",
+        UV_INDEX_URL: "",
         RELEASE_RESULT: scenario === "current" ? '{"status":"CURRENT"}' : `fixture ${scenario}`,
         RELEASE_EXIT: scenario === "current" ? "0" : "1",
       },
@@ -354,6 +419,7 @@ test("tool version gate supports Azure CLI Bicep fallback without waiving minimu
 for (const failure of [
   "",
   "npm",
+  "sudo",
   "uv",
   "python3",
   "apex-recall",
@@ -370,7 +436,9 @@ for (const failure of [
       fs.mkdirSync(path.join(root, directory), { recursive: true });
     }
     const calls = path.join(root, "calls");
+    const sudoCalls = path.join(root, "sudo-calls");
     fs.writeFileSync(calls, "");
+    fs.writeFileSync(sudoCalls, "");
     for (const command of [
       "npm",
       "uv",
@@ -390,11 +458,12 @@ for (const failure of [
     ]) {
       fs.writeFileSync(
         path.join(root, "bin", command),
-        `#!/bin/sh\nprintf '%s\\n' '${command}' >> "$CALL_LOG"\nif [ '${command}' = npm ] && [ "$1" = --version ]; then echo 12.1.0; exit 0; fi\nif [ '${command}' = "$FAIL_COMMAND" ]; then exit 17; fi\nexit 0\n`,
+        `#!/bin/sh\nprintf '%s\\n' '${command}' >> "$CALL_LOG"\nif [ '${command}' = sudo ]; then printf '%s\\n' "$*" >> "$SUDO_CALL_LOG"; fi\nif [ '${command}' = npm ] && [ "$1" = --version ]; then echo 12.2.0; exit 0; fi\nif [ '${command}' = "$FAIL_COMMAND" ]; then exit 17; fi\nif [ '${command}' = npm ] && [ "$1 $2" = 'run setup:powershell' ]; then exec pwsh; fi\nexit 0\n`,
         { mode: 0o755 },
       );
     }
-    const result = spawnSync("bash", ["-c", setup], {
+    const pythonEnvironment = path.join(root, "python-environment");
+    const result = spawnSync("bash", ["-c", setup.replaceAll("/usr/local/python/current", pythonEnvironment)], {
       cwd: root,
       encoding: "utf8",
       env: {
@@ -403,6 +472,7 @@ for (const failure of [
         PATH: `${root}/bin:${process.env.PATH}`,
         TF_PLUGIN_CACHE_DIR: `${root}/.terraform.d/plugin-cache`,
         CALL_LOG: calls,
+        SUDO_CALL_LOG: sudoCalls,
         FAIL_COMMAND: failure,
       },
     });
@@ -417,6 +487,8 @@ for (const failure of [
         "--",
         "--variant",
         "candidate",
+        "--expected-distro-id",
+        "ubuntu",
         "--expected-os",
         "26.04",
         "--expected-arch",
@@ -433,7 +505,11 @@ for (const failure of [
     assert.equal(summary.status, failure ? 1 : 0, summary.stdout + summary.stderr);
     assert.equal(/^Setup complete\.$/m.test(log), !failure);
     assert.equal(result.status, failure ? 17 : 0, result.stdout + result.stderr);
-    assert.ok(!commands.some((command) => ["sudo", "git", "curl", "pip", "pip3"].includes(command)));
+    assert.ok(!commands.some((command) => ["git", "curl", "pip", "pip3"].includes(command)));
+    const expectedRepair =
+      failure === "npm" ? "" : `-n chown -R ${process.getuid()}:${process.getgid()} ${pythonEnvironment}\n`;
+    assert.equal(fs.readFileSync(sudoCalls, "utf8"), expectedRepair);
+    if (failure === "sudo") assert.ok(!commands.includes("uv"), "ownership errors must block dependency installation");
     if (!failure) {
       assert.equal(commands.filter((command) => command === "uv").length, 2);
       assert.match(result.stdout, /Setup complete/);
@@ -441,13 +517,28 @@ for (const failure of [
   });
 }
 
-test("PowerShell module installation surfaces actual installation and verification failures", () => {
-  const command = setup.match(/pwsh -NoProfile -NonInteractive -Command '([\s\S]*?)'\n/)[1];
-  for (const behavior of ["throw", "missing", "present"]) {
-    const mocks = `function Get-Module { param($Name, [switch]$ListAvailable) ${behavior === "present" ? "return @{ Name = $Name }" : ""} }\nfunction Install-Module { ${behavior === "throw" ? 'throw "fixture failure"' : ""} }\n`;
-    const result = spawnSync("pwsh", ["-NoProfile", "-NonInteractive", "-Command", mocks + command], {
+test("setup leaves an already writable Python environment unchanged", (context) => {
+  const root = fixture(context);
+  const pythonEnvironment = path.join(root, "python-environment");
+  fs.mkdirSync(pythonEnvironment);
+  const start = setup.indexOf("if [[ ! -w /usr/local/python/current ]]");
+  const end = setup.indexOf("uv pip install", start);
+  assert.ok(start >= 0 && end > start);
+  const result = spawnSync(
+    "bash",
+    ["-c", setup.slice(start, end).replaceAll("/usr/local/python/current", pythonEnvironment)],
+    {
       encoding: "utf8",
-    });
-    assert.equal(result.status, behavior === "present" ? 0 : 1, result.stdout + result.stderr);
-  }
+    },
+  );
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(result.stdout, "");
+  assert.equal(result.stderr, "");
+});
+
+test("setup retains pinned PowerShell analysis without installing unused Azure modules", () => {
+  assert.match(setup, /npm run setup:powershell/);
+  assert.doesNotMatch(setup, /Az\.(Accounts|Resources|Storage|Network|KeyVault|Websites)|Install-Module/);
+  assert.match(setup, /azqr is unavailable/);
+  assert.doesNotMatch(setup, /compliance scans fall back to the azqr CLI/);
 });
