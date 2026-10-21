@@ -35,7 +35,7 @@ the [upstream APEX project](https://github.com/jonathan-vella/apex).
 | ---------------------- | ---------------------------------------------------- |
 | **VS Code**            | Latest stable release                                |
 | **GitHub Copilot**     | Active license (Individual, Business, or Enterprise) |
-| **Docker Desktop**     | For the dev container (or GitHub Codespaces)         |
+| **Docker Desktop**     | Validated on x86-64 and ARM64, including Windows with WSL 2; Linux hosts are supported (GitHub Codespaces is not separately validated) |
 | **Azure subscription** | Required (Owner or Contributor on the target subscription) |
 
 ---
