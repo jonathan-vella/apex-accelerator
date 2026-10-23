@@ -83,6 +83,9 @@ It does not change repository trust or require root. Run `npm run setup:powershe
 then `npm run lint:powershell` and `npm run test:powershell`. Missing PowerShell or the pinned analyzer fails closed.
 The checker only parses/analyzes maintained sources; it never executes Azure or Kubernetes collection scripts.
 Installation requires HTTPS access to PowerShell Gallery; analysis is offline once the module is installed.
+The full-inventory regression test allows up to 180 seconds on slower hosts; focused fixture checks retain their
+60-second limit. CI contracts distinguish upstream product CI from the accelerator's consumer-template validation;
+local Git hooks still require the complete PowerShell analysis and regression suite.
 On corporate dev boxes, the verified CFS PowerShell endpoint is
 `https://packagefeedproxy.microsoft.io/powershell/v2`. Configure an approved source before provisioning:
 the repository name `PSGallery` alone does not establish CFS routing. Analyzer 1.25.0 was successfully
@@ -97,8 +100,9 @@ The base's `coreutils-single` is retained because installing the conflicting `co
 explicitly instead of being reported as file changes.
 `libatomic` supplies `libatomic.so.1`, required by the selected Node.js binary on ARM64.
 The image explicitly creates `vscode` and noninteractive sudo, rather than inheriting them from an Ubuntu base.
-Package-feed environment defaults are set in `devcontainer.json` `containerEnv`, so they apply to the running
-container only. Image and Feature builds do not use them; this matches the previous Ubuntu image.
+Package-feed host opt-ins are passed through `devcontainer.json` build arguments and `containerEnv`, so npm,
+pip, and uv use the selected feeds during image/Feature builds and in the running container. Build arguments
+contain only non-secret host/path values; never put credentials in them.
 
 The CFS proxy, `packagefeedproxy.microsoft.io`, is intended for Microsoft maintainers' corporate laptops and dev boxes,
 not automated builds or CI. Those workloads require an authenticated, approved team-owned Azure Artifacts feed.
@@ -421,8 +425,9 @@ protection instead of changing credentials.
 | ------------------------- | ----------------------------- | -------------------------------------------------------- |
 | `AZURE_DEFAULTS_LOCATION` | `swedencentral`               | Default Azure region (EU GDPR-compliant)                 |
 | `GH_TOKEN`                | `${localEnv:GH_TOKEN}`        | Optional token inherited by the host VS Code process     |
-| `NPM_CONFIG_REGISTRY`     | `https://` + `APEX_NPM_REGISTRY_HOST_PATH`, default `registry.npmjs.org/` | npm registry for the running container |
+| `NPM_CONFIG_REGISTRY`     | `https://` + `APEX_NPM_REGISTRY_HOST_PATH`, default `registry.npmjs.org/` | npm registry for image builds and the running container |
 | `PIP_INDEX_URL`, `UV_INDEX_URL` | `https://` + `APEX_PIP_INDEX_HOST_PATH`, default `pypi.org/simple/` | Python package index for pip and uv |
+| `APEX_POWERSHELL_REPOSITORY_URL` | Optional host-process value; unset by default | HTTPS feed for pinned analyzer installation; otherwise the declared PSGallery repository |
 | `PYTHONDONTWRITEBYTECODE` | `1`                           | Skip `.pyc` generation                                   |
 | `PYTHONUNBUFFERED`        | `1`                           | Unbuffered Python output                                 |
 | `UV_CACHE_DIR`            | `~/.cache/uv`                 | uv package cache                                         |
@@ -430,9 +435,16 @@ protection instead of changing credentials.
 
 ### Package Sources
 
-By default the running container uses the public registries: `registry.npmjs.org` for npm and `pypi.org` for pip and
-uv. `post-create.sh` installs packages with these settings and stops on any failure, so a source your network
-cannot reach fails the setup.
+By default image/Feature builds and the running container use the public registries: `registry.npmjs.org` for
+npm and `pypi.org` for pip and uv. PowerShell uses the declared PSGallery repository unless explicitly overridden.
+`post-create.sh` installs packages with these settings and stops on any failure, so an unreachable source fails setup.
+
+For the simplest Microsoft employee setup, follow the
+[pre-container host instructions](../README.md#microsoft-employees-run-this-before-starting-the-container):
+fully exit VS Code, then run `open-microsoft.ps1` on Windows or `bash .devcontainer/open-microsoft.sh` from the
+repository root on Linux/macOS/WSL. These host launchers set the opt-ins only for the editor they launch, without
+editing shell profiles or persistent host settings. The WSL launcher forwards the opt-ins to Windows through
+`WSLENV`, preserving unrelated entries. Use the launcher for each fresh VS Code process.
 
 **Microsoft maintainers opt in** to the CFS proxy, as the CFS policy in [AGENTS.md](../AGENTS.md) requires. Anyone
 else can use their own registry or mirror the same way. Set these on the **host** before VS Code starts (for example
@@ -443,12 +455,18 @@ host VS Code process, as it does for `GH_TOKEN`:
 | ----------------------------- | ------------------------------------------- | ----------------- |
 | `APEX_NPM_REGISTRY_HOST_PATH` | `packagefeedproxy.microsoft.io/npm/`        | `registry.npmjs.org/` |
 | `APEX_PIP_INDEX_HOST_PATH`    | `packagefeedproxy.microsoft.io/pypi/simple/` | `pypi.org/simple/`    |
+| `APEX_POWERSHELL_REPOSITORY_URL` | `https://packagefeedproxy.microsoft.io/powershell/v2` | Unset (declared PSGallery repository) |
 
-Values are host and path without `https://`. The prefix is fixed in `devcontainer.json`, because the Dev Containers
+The npm/Python values are host and path without `https://`; the PowerShell value is a full HTTPS URL.
+Never include credentials in these values. The npm/Python prefix is fixed in `devcontainer.json`, because the Dev Containers
 CLI cuts a default value at its first colon. `post-start.sh` prints the npm, pip and uv sources separately at every
 start (labels only: `Microsoft CFS`, `public`, `custom` or `unset`; URLs are never printed) and warns when the CFS
 opt-in is incomplete, so a maintainer who forgot one variable is not silently on a public source. The substitution
-was checked with the bundled Dev Containers CLI (`read-configuration`), not with a full rebuild.
+must resolve in a fresh host VS Code process; integrated-terminal environment settings do not configure image builds.
+
+The PowerShell override registers an untrusted temporary repository only while installing the pinned analyzer,
+then unregisters it on success or failure. It does not change PSGallery or its trust policy. When the override
+is unset, the original repository behavior is unchanged. A failed approved feed never triggers a public fallback.
 
 Outside the container, npm reads `NPM_CONFIG_REGISTRY`, pip reads `PIP_INDEX_URL` and uv reads `UV_INDEX_URL`.
 The `package-lock.json` URLs point at `registry.npmjs.org`, which npm replaces with the configured registry host.

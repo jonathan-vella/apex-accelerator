@@ -54,22 +54,69 @@ This repository is a **GitHub Template** — not a fork.
 > Your new repo has the same directory structure and files but a **clean commit history**
 > and no fork relationship. It is entirely yours.
 
-### 2. Clone and Open in Dev Container
+### 2. Clone and Configure Your Host
 
 ```bash
 git clone https://github.com/YOUR-USERNAME/my-infraops-project.git
 cd my-infraops-project
+```
+
+#### Microsoft Employees: Run This Before Starting the Container
+
+**If you are a Microsoft employee, use the Microsoft launcher below instead of `code .`.**
+Run it on your **host**, immediately after cloning, not inside a container or a VS Code integrated terminal.
+Connect to your approved corporate network/VPN as required, and **fully exit all VS Code windows first**:
+opening another window can reuse an existing process that does not have the feed settings.
+
+On **Windows**, run from PowerShell:
+
+```powershell
+.\.devcontainer\open-microsoft.ps1
+```
+
+On **Linux, macOS, or WSL**, run from your host shell:
+
+```bash
+bash .devcontainer/open-microsoft.sh
+```
+
+The launcher opens this repository in VS Code with Microsoft's CFS package feeds for npm, Python, and
+PowerShell. The npm/Python settings apply to **image and Feature builds as well as the running container**.
+It needs no administrator access, Node.js, or Python on the host; the Windows launcher also works with
+Windows PowerShell 5.1. It does not install packages, edit global settings or shell profiles, change credentials,
+disable TLS checks, or fall back to public registries. Do not bypass a corporate execution policy if it blocks
+the script; use your organization's approved execution method.
+
+Use the launcher again whenever opening a fresh VS Code process for this project. No feed settings are
+persisted to your host. Other organizations can supply their own approved feeds using the opt-ins documented
+in [Package Sources](.devcontainer/README.md#package-sources).
+Microsoft maintainers must also follow the publication-age and approved-source policy in [AGENTS.md](AGENTS.md);
+choosing a feed alone does not prove every package meets that policy.
+
+#### Everyone Else: Open Normally
+
+**Not a Microsoft employee? Skip the Microsoft launchers.** The default public registries are unchanged;
+apply your own organization's package-source requirements if applicable.
+
+```bash
 code .
 ```
 
+#### Start the Dev Container
+
 When prompted by VS Code, click **"Reopen in Container"** (or run `Dev Containers: Reopen in Container`
-from the Command Palette). The container build takes 3-5 minutes and pre-installs:
+from the Command Palette). Build time depends on downloads and host resources. The container pre-installs:
 
 - Azure CLI with Bicep extension
 - Terraform CLI with TFLint
 - GitHub CLI (`gh`)
 - Node.js + npm (validation scripts)
 - Python 3 + pip (diagram generation, apex-recall CLI)
+
+If setup fails, inspect **Dev Containers: Show Container Log**. A `HandshakeFailure` while fetching pip from
+`files.pythonhosted.org` means that build attempted public PyPI: check that you launched a fresh VS Code process
+through the Microsoft script, then rebuild. If the approved feed itself is unavailable or lacks a required
+package, stop and resolve that with your package-feed administrator; do not switch to public downloads.
 
 ### 3. Initialize Your Repository
 
