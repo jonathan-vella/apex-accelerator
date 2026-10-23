@@ -124,7 +124,14 @@ test("build uses Azure Linux 4 with explicit user prerequisites and preserves ho
   const config = parseJsonc(readFileSync(new URL("devcontainer.json", containerDir), "utf8"));
   const lock = JSON.parse(readFileSync(new URL("devcontainer-lock.json", containerDir), "utf8"));
   const dockerfile = readFileSync(new URL("Dockerfile", containerDir), "utf8");
-  assert.deepEqual(config.build, { dockerfile: "Dockerfile", context: "." });
+  assert.deepEqual(config.build, {
+    dockerfile: "Dockerfile",
+    context: ".",
+    args: {
+      APEX_NPM_REGISTRY_HOST_PATH: "${localEnv:APEX_NPM_REGISTRY_HOST_PATH:registry.npmjs.org/}",
+      APEX_PIP_INDEX_HOST_PATH: "${localEnv:APEX_PIP_INDEX_HOST_PATH:pypi.org/simple/}",
+    },
+  });
   assert.equal(config.image, undefined);
   const expectedImage =
     process.env.APEX_EXPECTED_BASE_IMAGE ??
@@ -162,8 +169,12 @@ test("build uses Azure Linux 4 with explicit user prerequisites and preserves ho
       /\$\{localEnv:[^}]*:[^}]*:/,
       `${name} default must not contain a colon`,
     );
-    assert.ok(!dockerfile.includes(`${name}=`), `${name} must not change image or Feature builds`);
+    const source = name === "NPM_CONFIG_REGISTRY" ? "APEX_NPM_REGISTRY_HOST_PATH" : "APEX_PIP_INDEX_HOST_PATH";
+    assert.ok(dockerfile.includes(`${name}="https://\${${source}}"`), `${name} must reach Feature builds`);
   }
+  assert.match(dockerfile, /ARG APEX_NPM_REGISTRY_HOST_PATH=registry\.npmjs\.org\//);
+  assert.match(dockerfile, /ARG APEX_PIP_INDEX_HOST_PATH=pypi\.org\/simple\//);
+  assert.equal(config.containerEnv.APEX_POWERSHELL_REPOSITORY_URL, "${localEnv:APEX_POWERSHELL_REPOSITORY_URL}");
   assert.equal(config.onCreateCommand, "az version --output none");
   assert.equal(config.postCreateCommand, "bash .devcontainer/post-create.sh");
   assert.equal(config.remoteUser, "vscode");
