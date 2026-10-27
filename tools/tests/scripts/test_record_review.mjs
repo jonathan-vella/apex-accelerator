@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID, createHash } from "node:crypto";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { once } from "node:events";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { extractReview, recordReview } from "../../scripts/record-review.mjs";
+import { extractReview, recordReview, preflightReviewRequest } from "../../scripts/record-review.mjs";
 import {
   cacheInputs,
   findingId,
@@ -139,6 +140,225 @@ function fixture(t, { batch = false, supporting = false, parent = "root", review
   };
   return state;
 }
+
+test("request preflight rejects malformed revisions before any worker or publication", (t) => {
+  const f = fixture(t, { supporting: true });
+  const before = fs.readdirSync(path.join(f.root, "agent-output/example")).sort();
+  const valid = preflightReviewRequest(f.input, f.root);
+  assert.deepEqual(valid.attempt_inputs, [artifact, f.input.supporting_inputs[0].path]);
+  assert.deepEqual(fs.readdirSync(path.join(f.root, "agent-output/example")).sort(), before);
+  assert.equal(fs.existsSync(path.join(f.root, output)), false);
+  f.input.prior_findings = { findings: [] };
+  assert.throws(() => preflightReviewRequest(f.input, f.root), /prior_findings/);
+  f.input.prior_findings = [];
+  const focus = f.input.review_focus;
+  f.input.review_focus = "invented-lens";
+  assert.throws(() => preflightReviewRequest(f.input, f.root), /lenses/);
+  f.input.review_focus = focus;
+  f.write(output, "preserved previous result");
+  assert.throws(() => preflightReviewRequest(f.input, f.root), /overwrite/);
+  f.input.overwrite = true;
+  assert.doesNotThrow(() => preflightReviewRequest(f.input, f.root));
+  f.write(f.input.supporting_inputs[0].path, "changed");
+  assert.throws(() => preflightReviewRequest(f.input, f.root), /supporting bytes changed/);
+  assert.equal(fs.readFileSync(path.join(f.root, output), "utf8"), "preserved previous result");
+});
+
+test("request-only CLI cannot silently invoke the recorder or accept stale inputs", (t) => {
+  const f = fixture(t);
+  f.write("request.json", JSON.stringify(f.input));
+  const run = () =>
+    spawnSync(process.execPath, [recorder, "--preflight", "--request", "request.json"], {
+      cwd: f.root,
+      encoding: "utf8",
+    });
+  const passing = run();
+  assert.equal(passing.status, 0, passing.stderr);
+  assert.equal(JSON.parse(passing.stdout).permission_granted, false);
+  assert.equal(fs.existsSync(path.join(f.root, output)), false);
+  f.write(artifact, "drift");
+  assert.equal(run().status, 1);
+});
+
+test("manual Step 6 deployment-preview requests pass preflight and final recording", (t) => {
+  const f = fixture(t);
+  const preview = "agent-output/example/06-deploy-approval.json";
+  const findings = "agent-output/example/challenge-findings-deployment-preview.json";
+  f.write(preview, JSON.stringify({ preview: "Synthetic preview; no apply authorized" }));
+  Object.assign(f.input, {
+    step: "6",
+    artifact_path: preview,
+    artifact_type: "deployment-preview",
+    output_path: findings,
+    cache_inputs: cacheInputs(preview, f.root, STRUCTURED_REVIEWER),
+  });
+  Object.assign(f.doc, {
+    challenged_artifact: preview,
+    artifact_type: "deployment-preview",
+    cache_inputs: structuredClone(f.input.cache_inputs),
+  });
+  f.options.output = findings;
+  assert.doesNotThrow(() => preflightReviewRequest(f.input, f.root));
+  f.record();
+  assert.equal(f.persisted().review_execution.step, "6");
+  assert.equal(f.persisted().artifact_type, "deployment-preview");
+});
+
+test("editorial compatibility preserves provenance but never accepts changed material inputs", (t) => {
+  const f = fixture(t);
+  f.record();
+  const original = f.persisted();
+  const guidance = ".github/skills/apex-azure-defaults/references/adversarial-review-protocol.md";
+  f.write(guidance, "Protocol\nEditorial clarification\n");
+  assert.match(validateReview(original, { root: f.root, verifyCurrent: true }).join("\n"), /protocol_sha/);
+  const next = cacheInputs(artifact, f.root, STRUCTURED_REVIEWER);
+  const fields = ["checklists_sha", "protocol_sha", "reviewer_contract_sha", "reviewer_definition_sha"];
+  const snapshot = (cache) => Object.fromEntries(fields.map((key) => [key, cache[key] ?? null]));
+  f.write(
+    "tools/registry/review-contract.json",
+    JSON.stringify({
+      contract: "review-v1",
+      editorial_compatibility: [
+        {
+          classification: "editorial",
+          rationale: "Synthetic repository-reviewed editorial mapping",
+          from: snapshot(original.cache_inputs),
+          to: snapshot(next),
+        },
+      ],
+    }),
+  );
+  const bytes = fs.readFileSync(path.join(f.root, output), "utf8");
+  assert.deepEqual(validateReview(original, { root: f.root, verifyCurrent: true }), []);
+  assert.equal(fs.readFileSync(path.join(f.root, output), "utf8"), bytes);
+  f.write(artifact, "Materially changed requirement");
+  assert.match(validateReview(original, { root: f.root, verifyCurrent: true }).join("\n"), /artifact_sha/);
+});
+
+test("practical initial and closure evidence complete a scoped stage without a third review", (t) => {
+  const f = fixture(t);
+  const repo = path.resolve(fileURLToPath(new URL("../../../", import.meta.url)));
+  fs.symlinkSync(path.join(repo, "tools"), path.join(f.root, "tools"));
+  const recall = (...args) => {
+    const result = spawnSync("python3", ["-m", "apex_recall", ...args], {
+      cwd: f.root,
+      encoding: "utf8",
+      env: { ...process.env, APEX_ROOT: f.root, PYTHONPATH: path.join(repo, "tools/apex-recall/src") },
+    });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    return JSON.parse(result.stdout);
+  };
+  recall("init", "example", "--json");
+  recall("decide", "example", "--adopt-workflow", "practical-v1", "--rationale", "Synthetic owner opt-in", "--json");
+  f.write(
+    "input.json",
+    JSON.stringify({
+      input_id: "scope",
+      value: "Synthetic DEV scope; production not authorized",
+      environments: ["dev"],
+      owner: "synthetic-owner",
+      request_id: "synthetic-owner-input",
+    }),
+  );
+  recall("decide", "example", "--input-record", path.join(f.root, "input.json"), "--json");
+  f.write(
+    "scope.json",
+    JSON.stringify({
+      input_ids: ["scope"],
+      environments: ["dev"],
+      request_id: "synthetic-phase-approval",
+    }),
+  );
+  recall("decide", "example", "--phase-scope", path.join(f.root, "scope.json"), "--step", "1", "--json");
+  recall("checkpoint", "example", "1", "finalize", "--sync-assessment", "--json");
+  f.input.step = "1";
+  f.input.supporting_inputs = [
+    {
+      path: "agent-output/example/assessment-step-1.json",
+      sha256: hash(fs.readFileSync(path.join(f.root, "agent-output/example/assessment-step-1.json"))),
+    },
+  ];
+  f.doc.supporting_inputs = structuredClone(f.input.supporting_inputs);
+  const requestFile = path.join(f.root, "request.json");
+  const audit = (outcome, ...extra) => {
+    f.write("request.json", JSON.stringify(f.input));
+    return recall(
+      "review-audit",
+      "example",
+      "1",
+      "--attempt-kind",
+      "invocation",
+      "--review-request",
+      requestFile,
+      "--attempt-outcome",
+      outcome,
+      ...extra,
+      "--json",
+    );
+  };
+  audit("started");
+  audit("completed", "--review-output", "nonempty");
+  f.flush();
+  const parentRecords = [f.events[0], f.events.at(-1)];
+  fs.writeFileSync(
+    f.options.events,
+    [...f.events.slice(1, -1), ...parentRecords].map((event) => JSON.stringify(event)).join("\n"),
+  );
+  recordReview(f.options);
+  audit("completed", "--review-output", "nonempty", "--review-result", path.join(f.root, output));
+  const recovered = recall("show", "example", "--json");
+  assert.equal(Object.values(recovered.session.decisions.review_cycles)[0].calls, 1);
+  assert.equal(recovered.session.review_attempts.length, 2);
+  const original = fs.readFileSync(path.join(f.root, output), "utf8");
+  f.write(artifact, "# Requirements\nSynthetic routine correction, unchanged material scope\n");
+  const closure = "agent-output/example/challenge-findings-requirements-closure.json";
+  f.input.request_id = "request-2";
+  f.input.output_path = closure;
+  f.input.prior_findings = [];
+  f.input.cache_inputs = cacheInputs(artifact, f.root, STRUCTURED_REVIEWER);
+  f.doc.cache_inputs = structuredClone(f.input.cache_inputs);
+  f.options.output = closure;
+  audit("started", "--closure-of", "request-1");
+  f.record();
+  audit("completed", "--closure-of", "request-1", "--review-result", path.join(f.root, closure));
+  const completed = recall("complete-step", "example", "1", "--json");
+  assert.equal(completed.status, "complete");
+  const shown = recall("show", "example", "--json");
+  assert.deepEqual(shown.session.steps["1"].completed_environments, ["dev"]);
+  assert.equal(shown.session.effective_reviews["1"].status, "current");
+  assert.equal(fs.readFileSync(path.join(f.root, output), "utf8"), original);
+  const cycles = Object.values(shown.session.decisions.review_cycles);
+  assert.equal(cycles.length, 1);
+  assert.equal(cycles[0].calls, 2);
+  assert.equal(cycles[0].current_path, path.basename(closure));
+
+  recall("start-step", "example", "2", "--json");
+  f.write(
+    "architecture-scope.json",
+    JSON.stringify({
+      input_ids: ["scope"],
+      environments: ["dev"],
+      request_id: "synthetic-architecture-scope-approval",
+    }),
+  );
+  recall("decide", "example", "--phase-scope", path.join(f.root, "architecture-scope.json"), "--step", "2", "--json");
+  recall("checkpoint", "example", "2", "draft", "--sync-assessment", "--json");
+  f.write("agent-output/example/02-architecture-assessment.md", "# Architecture\nUnreviewed draft\n");
+  f.write("agent-output/example/03-des-cost-estimate.md", "# Cost\nUnpriced draft; no verified estimate\n");
+  f.write("agent-output/example/sku-manifest.json", JSON.stringify({ services: [] }));
+  const statePath = path.join(f.root, "agent-output/example/00-session-state.json");
+  const beforeDraftCompletion = fs.readFileSync(statePath, "utf8");
+  const blocked = spawnSync("python3", ["-m", "apex_recall", "complete-step", "example", "2", "--json"], {
+    cwd: f.root,
+    encoding: "utf8",
+    env: { ...process.env, APEX_ROOT: f.root, PYTHONPATH: path.join(repo, "tools/apex-recall/src") },
+  });
+  assert.equal(blocked.status, 2, blocked.stdout + blocked.stderr);
+  assert.equal(JSON.parse(blocked.stdout).error, "challenger_findings_missing");
+  assert.equal(fs.readFileSync(statePath, "utf8"), beforeDraftCompletion);
+  assert.equal(fs.existsSync(path.join(f.root, "agent-output/example/02-cost-estimate.json")), false);
+  assert.equal(recall("show", "example", "--json").session.steps["2"].status, "in_progress");
+});
 
 function addReadTurns(f, count = 7) {
   const response = f.events.find((event) => event.type === "assistant.message");
@@ -784,6 +1004,73 @@ test("request ID resolves an exact worker in an explicit session without UUID sc
   recordReview({ ...f.options, workerId: undefined, parentId: undefined, requestId: f.input.request_id });
   assert.equal(f.persisted().review_execution.worker_id, "worker-1");
 });
+
+test("late parent task records preserve the completed review and its original metadata", (t) => {
+  const f = fixture(t);
+  f.events[1].data.resumable = false;
+  f.events[0].timestamp = "2026-10-17T15:04:00.000Z";
+  f.events.at(-1).timestamp = "2026-10-17T15:04:00.001Z";
+  f.flush();
+  const parent = [f.events[0], f.events.at(-1)];
+  fs.writeFileSync(f.options.events, [...f.events.slice(1, -1), ...parent].map(JSON.stringify).join("\n"));
+  const result = recordReview({
+    ...f.options,
+    workerId: undefined,
+    parentId: undefined,
+    requestId: f.input.request_id,
+  });
+  assert.equal(result.review_execution.worker_id, "worker-1");
+  assert.equal(result.review_execution.completed_at, "2026-10-17T15:00:00.000Z");
+  assert.deepEqual(f.persisted().cache_inputs, f.input.cache_inputs);
+  assert.equal(f.persisted().overall_assessment, "APPROVED");
+  assert.deepEqual(f.persisted().findings, []);
+  assert.deepEqual(validateReview(f.persisted(), { root: f.root, verifyCurrent: true }), []);
+});
+
+for (const ambiguous of [false, true]) {
+  test(`request lookup ${ambiguous ? "rejects ambiguous" : "waits for late"} parent records after worker completion`, async (t) => {
+    const f = fixture(t);
+    f.events[1].data.resumable = false;
+    f.flush();
+    const parent = [f.events[0], f.events.at(-1)];
+    if (ambiguous) {
+      const duplicate = structuredClone(parent[0]);
+      duplicate.data.toolCallId = "another-call";
+      parent.push(duplicate);
+    }
+    fs.writeFileSync(f.options.events, `${f.events.slice(1, -1).map(JSON.stringify).join("\n")}\n`);
+    const child = spawn(process.execPath, [
+      "-e",
+      "const fs=require('node:fs');setTimeout(()=>fs.appendFileSync(process.argv[1],process.argv[2]),100);",
+      f.options.events,
+      `${parent.map(JSON.stringify).join("\n")}\n`,
+    ]);
+    const exited = once(child, "exit");
+    const record = () =>
+      recordReview({
+        ...f.options,
+        workerId: undefined,
+        parentId: undefined,
+        requestId: f.input.request_id,
+      });
+    let result;
+    try {
+      if (ambiguous) assert.throws(record, /Request ID must identify exactly one review dispatch/);
+      else result = record();
+    } catch (error) {
+      child.kill();
+      throw error;
+    } finally {
+      await exited;
+    }
+    assert.equal(child.exitCode, 0);
+    if (ambiguous) assert.equal(fs.existsSync(path.join(f.root, output)), false);
+    else {
+      assert.equal(result.review_execution.request_id, f.input.request_id);
+      assert.equal(f.persisted().overall_assessment, "APPROVED");
+    }
+  });
+}
 
 test("request lookup rejects ambiguity, wrong identity and missing session instead of choosing newest", (t) => {
   const f = fixture(t);

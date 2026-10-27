@@ -5,7 +5,7 @@ user-invocable: true
 disable-model-invocation: false
 agents: ["bicep-validate-subagent", "challenger-review-subagent"]
 tools:
-  [execute, read, agent, edit, search, web, 'azure-mcp/*', 'bicep/*', todo, ask_user]
+  [execute, read, agent, edit, search, web, 'azure-mcp/*', todo, ask_user]
 
 ---
 
@@ -31,6 +31,15 @@ compiler, governance, independent-validation and provider-validation evidence.
 
 ## Interaction
 
+For `decisions.workflow_contract=practical-v1`, use the
+[practical workflow](../skills/apex-workflow-engine/references/practical-workflow.md).
+Batch granted owned repairs; frozen upstream scope still returns to its owner.
+Keep validation gates and explicitly scoped stage/deployment permissions.
+
+Before direct display or delegated return, apply the
+[shared question-form checks](../copilot-instructions.md#user-question-forms):
+distinct contextual titles, no unconditional companion note fields, reuse custom answers and only triggered follow-ups.
+
 - Direct selection uses native #tool:ask_user for material missing/conflicting inputs and decisions.
   Batch independent fields with `message` and `requestedSchema.properties`; validate freeform values,
   reuse current answers, and treat proposed defaults as suggestions, not owner answers.
@@ -46,6 +55,9 @@ compiler, governance, independent-validation and provider-validation evidence.
   `task`; otherwise the user selects that owner. UI handoff controls are not prerequisites or next-step authorization.
 
 ## Constraints
+
+For each enabled independent review, preflight the exact request and persist `started` before native dispatch.
+Record the actual invocation outcome separately from successful publication using the shared one-shot lifecycle.
 
 - Allowed writes: `infra/bicep/{project}/`, listed CodeGen outputs, project README,
   `00-handoff.md`, code-review decisions/recorded findings and authorized recall updates.

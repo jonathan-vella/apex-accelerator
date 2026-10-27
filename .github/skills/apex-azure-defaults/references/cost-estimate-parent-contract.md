@@ -13,8 +13,9 @@ user-facing artifact MUST read this file before invocation.
 ## Model And Harness Contract
 
 Active agent definitions do not pin model or reasoning effort. The operator and
-runtime control selection, including Auto and HydraFusion. Readiness verifies the
-named worker's identity, linked dispatch, tool-free turns and same-worker ACK.
+runtime control selection, including Auto and HydraFusion. Verify the actual named
+worker result, its authorized output and pricing evidence under the native task lifecycle.
+No readiness handshake or extra acknowledgement turn is required.
 Model names, effort, picker selection and model-source labels are diagnostic only,
 not acceptance gates. Catalog model metadata remains descriptive
 and does not establish runtime cost-tier eligibility, model availability, or API
@@ -27,6 +28,13 @@ model/tools and require explicit selection of the owning agent.
 ---
 
 ## Pricing Accuracy Gate (HARD)
+
+For adopted practical projects, evidence-equivalent scenario arithmetic may use the existing
+deterministic `cost-estimate.mjs scenarios` command over the pricing owner's current verified
+output. This is not parent-authored pricing: rates and calculation bases retain provenance,
+different SKUs/meters require the pricing owner, and scenario outputs are comparison-only.
+Do not launch a worker per scenario merely to repeat equivalent arithmetic. Preserve the
+independent cost-feasibility review and actual query counts.
 
 Parent-side model evaluation found agents hallucinating Azure SKU prices
 (e.g., AKS Standard at $0.60/hr instead of $0.10/hr) when writing from
@@ -106,6 +114,12 @@ Inspect the exact output path, draft and referenced evidence before deciding whe
 Preserve existing files, the original input contract and retry history; never launch another full estimate by default.
 Recovery is permitted only within an existing retry allowance or explicit human authorization. If exhausted or the
 worker is unavailable, stop with the saved paths and error rather than bypassing the worker or resetting the allowance.
+
+If the pricing tool is unavailable after discovery, preserve the observed tool exposure and issued-query count.
+Do not require worker self-attestation, infer an authentication failure or ask the user to restore an unverified cause.
+Source declarations and cached session configuration may differ; compare available evidence without another runtime gate.
+Do not automatically repeat a failed attempt. Preserve history and keep usage restricted to the pricing tool;
+an exhausted project allowance needs separate recovery approval after the underlying capability is verified.
 
 When the canonical output exists, verify it and its source evidence read-only before reuse. When only a draft exists,
 send the pricing worker the same pricing inputs plus `recovery: {draft_path, evidence_paths, remaining_requests,

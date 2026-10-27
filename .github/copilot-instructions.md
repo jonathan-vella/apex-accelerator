@@ -115,6 +115,42 @@ missing/stale evidence or blocking findings must be resolved before approval.
 Deep review requires `decisions.review_depth = "deep"` or an explicit user request,
 never complexity alone. Production handoffs and approval gates remain human-controlled.
 
+## User Question Forms
+
+For explicitly adopted `practical-v1` projects, the
+[practical workflow](skills/apex-workflow-engine/references/practical-workflow.md)
+replaces administrative disposition questions with granted mechanical work and a change summary.
+Retain material decisions and final stage approvals. Legacy projects keep their existing contract
+until explicit migration; source maintenance does not rewrite their histories or allowances.
+
+Apply these checks to every agent producing a user-question form, for any workflow phase,
+before direct display or delegated return:
+
+- Ask only missing, applicable material inputs. Reuse captured custom answers; do not reconfirm settled fields.
+- Use distinct contextual titles and one field per independent input. Native fields already accept custom text:
+  never append unconditional companion note/guidance fields or separate "Other, explain" fields.
+- Ask a dependent follow-up only after its actual trigger or genuine ambiguity remains.
+  Identify its subject in the title and omit inputs already answered; batch independent pending follow-ups.
+- Preflight the native shape: only `message` and `requestedSchema` reach `ask_user`;
+  `requestedSchema` contains only `properties`. Keep delegated metadata outside that payload.
+- Validate explicit applicability as well as shape. For authorized scoped files, run
+  `python3 tools/scripts/validate_question_batching.py --form <scoped-form.json> --context <question-context.json> --require-context`.
+  Without context, the compatibility check certifies shape only, not readiness to display.
+  Do not widen write permissions to create validation files: read-only roles check the same contract in memory.
+  Send only the validated payload to `ask_user`; recheck after edits. Remove any owned temporary payload after use.
+- Keep context separate: `answers` maps stable material-input IDs to captured values; `fields` maps each displayed
+  property to `{input_id, kind}`. Use `kind: input|follow_up|approval|disposition`; never default approval/disposition.
+  Conditional fields add `when: {input_id, equals}` against an actual captured answer, not a suggested default.
+  Every follow-up needs that trigger; omit already answered or duplicate material inputs.
+  A renamed global guidance field is still conditional, not a new independent requirement.
+  Genuine independent requirements may share a word such as "notes"; identify their distinct material input.
+  Return this context alongside delegated forms, never inside the native payload.
+- The reusable `validate_payload(form, context, require_context=True)` function in the same script performs the
+  check without filesystem writes. For discovery, retain the tested helper's separate `context` and complete ledger.
+  Ambiguous context returns for correction; do not invent a trigger or relabel a companion as independent to pass.
+- Return malformed delegated forms for one schema-only correction; another failure blocks with the error.
+  Validation is not evidence that a follow-up was triggered, human approval or permission to bypass role boundaries.
+
 ## Skills
 
 Skills auto-discover via the `description` field in `.github/skills/{name}/SKILL.md`.
@@ -125,6 +161,17 @@ body explicitly points to one. There is one tier — no digest, no minimal.
 
 - Target the GitHub Copilot SDK harness inside VS Code. Archived Local prompts are
   historical, not entry points. Skills inherit caller model/tools and grant no permissions.
+- Describe the actual selected/calling role only when native context establishes it; otherwise report it as unknown.
+  A default coordinating chat is not evidence that `01-Orchestrator` was selected. General assistance remains available,
+  but a role name in prose, loaded skill or returned form never supplies that role's permissions or approvals.
+- Missing role telemetry is not a workflow gate. For an explicit start/resume request, continue otherwise-authorized
+  coordination under actual tools, calling constraints, scope and human approvals; report unknown identity honestly.
+  Project `session.metadata` and generic session-information tools are not role-selection evidence.
+  Do not request repeated UI selection or dispatch a role-verification worker merely because a role label is absent.
+  Known role restrictions, missing required capabilities and unapproved operations still block the affected action.
+- Load missing current coordinator and owner contracts before delegation; reuse available unchanged guidance.
+  Preserve approved requirements and pass the full requested phase contract, not just a list of files to draft.
+  Partial artifacts are not phase completion; follow the existing worker lifecycle for validation and continuation.
 - `01-Orchestrator` remains human-selected (`disable-model-invocation: true`).
   Deploy, Diagnose and manual Challenger entries also disable implicit invocation;
   this metadata is not proof of credential isolation or consequential authorization.
@@ -157,8 +204,8 @@ body explicitly points to one. There is one tier — no digest, no minimal.
   Missing or differing model telemetry is diagnostic only. Verify named-worker
   actual task results without per-call model, effort or context overrides.
   Continue the same task only when its native handle supports it; one-shot tasks need new bounded input.
-  Missing required tools or approval still blocks the affected execution. Catalog entries remain
-  descriptive metadata and legacy fixture support, not active assignments or
+  Missing required tools or approval still blocks the affected execution. Optional legacy model labels remain
+  descriptive fixture support, not active assignments or
   proof of runtime cost-tier eligibility.
 - Active agents have no UI handoff metadata: the owner observed no controls in the tested Copilot client.
   Tool restrictions were not established by that probe; role metadata is not credential isolation.

@@ -3,10 +3,11 @@
 ## Setup Commands
 
 ```bash
-# Clone the Accelerator template and open in dev container
+# Clone the Accelerator template
 # https://github.com/jonathan-vella/apex-accelerator
 git clone https://github.com/YOUR-USERNAME/my-infraops-project.git && cd my-infraops-project
-code . # then: F1 → Dev Containers: Reopen in Container
+# Microsoft employees: use the host launcher below before opening the container.
+# Everyone else: code . then F1 → Dev Containers: Reopen in Container.
 
 npm install                              # Node.js deps (validators, linting)
 npm run setup                            # Azure + GitHub OIDC/secrets/RBAC
@@ -15,6 +16,16 @@ npm run setup                            # Azure + GitHub OIDC/secrets/RBAC
 > Python deps (diagrams and apex-recall) install automatically
 > via the dev container's `post-create.sh`. Setup details:
 > https://apexops.pro/getting-started/azure-setup/
+
+Microsoft employees must fully exit all VS Code windows, connect to the approved corporate network/VPN as required,
+then launch VS Code from the host with the CFS package feeds before starting the container:
+
+```powershell
+.\.devcontainer\open-microsoft.ps1
+```
+
+On Linux, macOS, or WSL, run `bash .devcontainer/open-microsoft.sh` instead. The launcher is not for a VS Code
+integrated terminal or an already-running VS Code process; see [.devcontainer/README.md](.devcontainer/README.md#package-sources).
 
 Install only versions whose upstream artifacts are at least seven days old, through CFS-approved sources.
 Microsoft maintainers keep package managers on `packagefeedproxy.microsoft.io` for corporate laptops/dev boxes, or an
@@ -89,6 +100,12 @@ Use [Conventional Commits](https://www.conventionalcommits.org/):
 relevant validations before committing.
 
 ## Agent Workflow
+
+New recall projects use the [practical workflow](.github/skills/apex-workflow-engine/references/practical-workflow.md):
+existing stage approvals and independent lenses remain, with an initial and optional closure call
+per required artifact/lens inside actual granted scope. Legacy projects adopt explicitly; histories
+and exhausted allowances are never reset. Preliminary policy feasibility precedes final Architecture
+approval when read scope is available; it does not complete formal Governance.
 
 | Step | Phase        | Output                                                   | Review                                                    |
 | ---- | ------------ | -------------------------------------------------------- | --------------------------------------------------------- |

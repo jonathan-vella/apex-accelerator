@@ -4,9 +4,26 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { buildDiscoveryForm, DISCOVERY_STAGES } from "../../scripts/requirements-discovery.mjs";
+import { buildDiscoveryForm, DISCOVERY_STAGES, answersFromRecall } from "../../scripts/requirements-discovery.mjs";
 
 const fields = (stage, answers) => buildDiscoveryForm(stage, answers).form?.requestedSchema.properties ?? {};
+
+test("practical discovery consumes actual scoped recall answers without asking them again", () => {
+  const view = {
+    session: {
+      material_inputs: {
+        industry: { value: "Nonprofit", environments: ["dev"] },
+        company_size: { value: "Small team", environments: ["dev", "prod"] },
+      },
+    },
+  };
+  const answers = answersFromRecall(view, "dev");
+  const form = buildDiscoveryForm("business", answers);
+  assert.ok(!("industry" in form.form.requestedSchema.properties));
+  assert.ok(!("company_size" in form.form.requestedSchema.properties));
+  assert.deepEqual(answersFromRecall(view, "prod"), { company_size: "Small team" });
+  assert.throws(() => answersFromRecall({}, "dev"), /Actual scoped/);
+});
 
 test("business discovery restores guided menus instead of bare text and duplicate other fields", () => {
   const questions = fields("business");
@@ -151,6 +168,18 @@ test("all generated forms match the actual native question surface and have no i
       assert.ok(!("required" in field));
     }
   }
+});
+
+test("discovery emits separate applicability context without changing the native payload", () => {
+  const answers = { company_size: "Small charity", scenario: "greenfield" };
+  const result = buildDiscoveryForm("business", answers);
+  assert.deepEqual(result.context.answers, answers);
+  assert.notEqual(result.context.answers, answers);
+  assert.deepEqual(Object.keys(result.context.fields), Object.keys(result.form.requestedSchema.properties));
+  for (const [key, field] of Object.entries(result.context.fields)) {
+    assert.deepEqual(field, { input_id: key, kind: "input" });
+  }
+  assert.deepEqual(Object.keys(result.form).sort(), ["message", "requestedSchema"]);
 });
 
 test("invalid stages and answer snapshots fail explicitly", () => {

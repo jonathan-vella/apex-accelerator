@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 
 from . import __version__
 
@@ -77,6 +78,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_cp.add_argument("sub_step", help="Sub-step identifier")
     p_cp.add_argument("--json", action="store_true", help="Output as JSON")
     p_cp.add_argument("--artifact", type=str, default=None, help="Artifact path to append")
+    p_cp.add_argument("--sync-assessment", action="store_true", help="Regenerate authorized consumed-decision views")
+    p_cp.add_argument(
+        "--policy-feasibility", type=Path, help="Bind an offline-validated preliminary discovery snapshot"
+    )
     # Telemetry (Wave 0 — measure-workflow-baseline.mjs consumes these)
     p_cp.add_argument("--telemetry-step-start", type=str, default=None, help="ISO-8601 timestamp marking step start")
     p_cp.add_argument("--telemetry-step-end", type=str, default=None, help="ISO-8601 timestamp marking step end")
@@ -113,6 +118,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_decide.add_argument("--rationale", type=str, default=None, help="Rationale (Mode B)")
     p_decide.add_argument("--step", type=str, default=None, help="Step reference (Mode B)")
     p_decide.add_argument("--json", action="store_true", help="Output as JSON")
+    p_decide.add_argument(
+        "--input-record", type=Path, help="Scoped material input JSON; current authority plus history"
+    )
+    p_decide.add_argument("--phase-scope", type=Path, help="Explicit phase scope JSON, with --step")
+    p_decide.add_argument("--adopt-workflow", choices=["practical-v1"], help="Explicit owner-approved legacy adoption")
+    p_decide.add_argument("--dry-run", action="store_true", help="Read-only adoption assessment; grants no permission")
+    p_decide.add_argument(
+        "--review-extension", type=Path, help="Explicit bounded extension of an existing review cycle"
+    )
 
     # finding
     p_finding = sub.add_parser("finding", help="Manage open_findings")
@@ -132,6 +146,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     # review-audit
     p_ra = sub.add_parser("review-audit", help="Manage review_audit entries")
+    p_ra.add_argument(
+        "--reconcile-events", type=Path, help="Read-only comparison with an explicitly scoped native capture"
+    )
     p_ra.add_argument("project", help="Project name")
     p_ra.add_argument("step", help="Step key (1, 2, 3, 3_5, 4, 5, 6, 7)")
     p_ra.add_argument("--complexity", type=str, default=None, help="Complexity level")
@@ -152,7 +169,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Frozen input file or directory; the digest is computed from these (repeatable, instead of --input-digest)",
     )
     p_ra.add_argument("--attempt-outcome", choices=["started", "completed", "failed", "unknown"], default=None)
+    p_ra.add_argument(
+        "--review-output",
+        choices=["empty", "nonempty", "unknown"],
+        default=None,
+        help="Observed reviewer output, separate from the completed/failed native task outcome",
+    )
     p_ra.add_argument("--retry-of", default=None, help="Original attempt ID for an identical-input empty-output retry")
+    p_ra.add_argument("--review-request", type=Path, help="Exact preflighted request; derives identity and cycle")
+    p_ra.add_argument("--closure-of", help="Initial attempt ID for a bounded closure; not a new cycle")
+    p_ra.add_argument("--review-result", type=Path, help="Published attributed result to select after validation")
 
     # transition — composite checkpoint + decide + complete-step + start next
     # (#425, Wave 4). Atomic across a single 00-session-state.json write.

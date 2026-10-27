@@ -18,7 +18,7 @@ function analyze(args = [], options = {}) {
     timeout: 60_000,
     ...options,
   });
-  assert.equal(result.error, undefined, `PowerShell analysis failed to run: ${result.error?.message}`);
+  assert.equal(result.error, undefined, `PowerShell must be installed: ${result.error?.message}`);
   return { ...result, output: result.stdout + result.stderr };
 }
 
@@ -36,7 +36,7 @@ function runCommand(command, options = {}) {
 const quote = (value) => `'${value.replaceAll("'", "''")}'`;
 
 test("maintained PowerShell scripts and analyzer data files pass without executing cloud commands", () => {
-  const result = analyze([], { timeout: 180_000 });
+  const result = analyze();
   assert.equal(result.status, 0, result.output);
   assert.match(result.stdout, /Analyzed .*tools\/scripts\/collect-governance-baseline\.ps1/);
   assert.match(result.stdout, /Analyzed .*\.github\/skills\/apex-azure-diagnostics\/scripts\/run-ig\.ps1/);
@@ -130,32 +130,16 @@ test("analyzer exceptions and unknown configured rules fail closed", (context) =
   assert.match(failedAnalyzer.stdout, /Analysis failed: synthetic analyzer failure/);
 });
 
-test("repository CI runs its declared validation suite", () => {
-  const productCi = path.join(root, ".github/workflows/ci.yml");
-  if (fs.existsSync(productCi)) {
-    const ci = load(fs.readFileSync(productCi, "utf8"));
-    const commands = ci.jobs.ci.steps.map((step) => step.run).filter(Boolean);
-    for (const name of ["setup:powershell", "lint:powershell", "test:powershell"]) {
-      assert.ok(commands.includes(`npm run ${name}`), `${name} must run in required CI`);
-    }
-    assert.ok(commands.indexOf("npm run setup:powershell") < commands.indexOf("npm run lint:powershell"));
-  } else {
-    const ci = load(fs.readFileSync(path.join(root, ".github/workflows/consumer-template-checks.yml"), "utf8"));
-    assert.equal(ci.name, "Consumer Template Checks");
-    const commands = ci.jobs.validate.steps.map((step) => step.run).filter(Boolean);
-    assert.ok(
-      commands.includes(
-        "node --test tools/tests/scripts/test_consumer_workflows.mjs .github/workflows/weekly-upstream-sync.test.mjs",
-      ),
-      "accelerator CI must run the consumer workflow and upstream-sync contracts",
-    );
-  }
-});
-
-test("npm, provisioning and Git hooks route to the PowerShell checks", () => {
+test("npm, CI, provisioning and Git hooks route to the PowerShell checks", () => {
   const scripts = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).scripts;
   assert.match(scripts["validate:_external"], /\blint:powershell\b/);
   assert.match(scripts["validate:_external"], /\btest:powershell\b/);
+  const ci = load(fs.readFileSync(path.join(root, ".github/workflows/ci.yml"), "utf8"));
+  const commands = ci.jobs.ci.steps.map((step) => step.run).filter(Boolean);
+  for (const name of ["setup:powershell", "lint:powershell", "test:powershell"]) {
+    assert.ok(commands.includes(`npm run ${name}`), `${name} must run in required CI`);
+  }
+  assert.ok(commands.indexOf("npm run setup:powershell") < commands.indexOf("npm run lint:powershell"));
   const hooks = load(fs.readFileSync(path.join(root, "lefthook.yml"), "utf8"));
   assert.deepEqual(hooks["pre-commit"].commands.powershell.glob, [
     "tools/scripts/*.{ps1,psm1,psd1}",

@@ -6,7 +6,7 @@ user-invocable: true
 disable-model-invocation: false
 agents: ["challenger-review-subagent"]
 tools:
-  [execute, read, agent, edit, search, web, todo, ask_user]
+  [execute, read, agent, edit, search, web, "azure-mcp/*", todo, ask_user]
 
 ---
 
@@ -38,6 +38,16 @@ produce validated constraints and run required reconciliation review before Gate
 
 ## Interaction and execution
 
+For `decisions.workflow_contract=practical-v1`, use the
+[practical workflow](../skills/apex-workflow-engine/references/practical-workflow.md).
+The legacy one-pass and per-finding administrative acceptance rules below are replaced by
+the granted initial-plus-closure artifact/lens cycle, authoritative decisions and derived views.
+Keep Gate 2.5 and material risk/scope decisions. Never reclassify policy facts as preferences.
+
+Before direct display or delegated return, apply the
+[shared question-form checks](../copilot-instructions.md#user-question-forms):
+distinct contextual titles, no unconditional companion note fields, reuse custom answers and only triggered follow-ups.
+
 Honor caller `execution_mode: direct|delegated`. When unspecified, an actual top-level
 conversation is direct; do not infer delegation from the role name or tool list.
 Resolve genuinely ambiguous context before consequential approval.
@@ -59,6 +69,9 @@ Resolve genuinely ambiguous context before consequential approval.
 
 ## Constraints
 
+For each enabled independent review, preflight the exact request and persist `started` before native dispatch.
+Record the actual invocation outcome separately from successful publication using the shared one-shot lifecycle.
+
 - Write only governance artifacts/preview, authorized discovery caches and workspace-local scratch,
   decision sidecar, recorder-owned findings, README, handoff, recall and derived `sku_allowlist_snapshot`.
   No SKU services/revisions, requirements, architecture, IaC, Azure resources or Azure Policy mutations.
@@ -78,6 +91,13 @@ Resolve genuinely ambiguous context before consequential approval.
 
 ## Prerequisites and phase guidance
 
+Practical preliminary `policy-feasibility` mode is allowed after approved requirements/read scope,
+before Architecture exists. Use only deterministic collection; write `04-policy-feasibility.json`
+and bind it with recall checkpoint's `--policy-feasibility`. Do not start/complete Step 3.5,
+ask for architecture findings dispositions or imply approval. Formal mode retains prerequisites
+below and reuses current full-coverage evidence/scope. Discovery includes Defender auto-assignments
+by default; explicit legacy exclusion is not equivalent full coverage.
+
 Recover state via `apex-recall show <project> --json`. Require approved `02-architecture-assessment.md`
 and current Step 2 completion evidence (no self-edit of upstream artifacts).
 Missing architecture returns to `03-Architect`, not a replacement assessment.
@@ -85,6 +105,10 @@ Resolve the target project/subscription from confirmed inputs. Missing/ambiguous
 requires a question; never default to the active Azure CLI subscription.
 Scope is subscription and below, including applicable management-group inheritance.
 Honor explicit resource-type narrowing; do not ask users to choose an unnecessary scope tier.
+Apply the [resource-group lifecycle](../skills/apex-azure-governance-discovery/references/reconciliation-disposition.md#resource-group-lifecycle).
+Do not require resource-group names or existence before planning when the groups are confirmed planned.
+Reuse that captured lifecycle answer; planned absence is not a Governance defect or a TTL failure.
+Ask for existing target groups only when their actual scope is needed and not already captured.
 
 After prerequisites, load `.github/skills/apex-azure-defaults/SKILL.md`,
 `.github/skills/apex-azure-governance-discovery/SKILL.md` and its
@@ -133,7 +157,8 @@ set +H && python .github/skills/apex-azure-governance-discovery/scripts/discover
   --arch agent-output/<project>/02-architecture-assessment.md
 ```
 
-Add `--refresh` when required. Add `--include-defender-auto` only on explicit request.
+Add `--refresh` when required. Defender auto-assignments are included by default.
+Legacy `--exclude-defender-auto` requires explicit filtered-coverage scope and is not full coverage.
 Use [discovery output rules](../skills/apex-azure-governance-discovery/references/discover-output.md).
 Read the first stdout JSON status line; the remaining preview is user-facing, not bulk model input.
 
@@ -168,6 +193,9 @@ Before authoring, form a compact structured outline; use context compression onl
    Keep `services[]` and `revisions[]` unchanged. Run
    `node tools/scripts/derive-sku-allowlist.mjs <project> --check-only`;
    invoke full projection only when SKU restrictions apply. Only the derived snapshot may change.
+5. Describe confirmed planned resource groups as an informational lifecycle handoff, not a should-fix.
+   Do not tell Planner to wait for creation or re-run subscription discovery merely because names are decided.
+   Preserve inherited constraints and require later intended-scope/deployment checks under the lifecycle contract.
 
 Checkpoint `phase_2_artifacts`.
 Use the [drift matrix](../skills/apex-iac-common/references/governance-drift-routing.md)
@@ -221,6 +249,10 @@ Do not route conflicts, auto-dispose findings or edit reviewed inputs at this ph
 ## Phase 3 — Findings, overrides and Gate 2.5
 
 Present assignment/blocker/warning/auto-remediation totals, policy-to-plan adaptations and all findings.
+Use current review IDs and severities for review-disposition fields, not old annotation labels or severities.
+Do not promote a suggestion about an overstated planned-group gap into an actionable acceptance question.
+Present such suggestions as information, preserving the actual review and its exhausted allowance.
+Separate genuine unresolved policy decisions from those findings; do not re-ask confirmed lifecycle facts.
 Apply the Per-Finding Decision Protocol to every must-fix/should-fix, including `requires_step=step-2`:
 separate batched typed fields, canonical Accept/Reject/Defer/Edit, notes and existing panel cap.
 Persist `challenge-findings-governance-constraints-decisions.json` and recall findings.
