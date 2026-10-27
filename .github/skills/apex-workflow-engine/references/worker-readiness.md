@@ -14,6 +14,11 @@ allowed writes/commands, outputs, review/validation expectations, cutoff and fai
 Skills and frontmatter do not grant permissions, enforce credential isolation or certify model routing.
 Leave model/effort/context overrides unset unless explicitly required and supported.
 
+Read the owner's current contract before framing the task; reuse it when already available.
+Preserve approved requirements as authority, including mandatory capability and security dependencies.
+A full-phase request includes its required decisions, evidence, validations and reviews, not only document drafting.
+An explicitly bounded research/repair slice stays bounded and cannot claim completion of the whole phase.
+
 Use a synchronous bounded task when no follow-up is needed.
 For background work retain the returned handle, await the actual completion/idle notification,
 then read the result. Use `write_agent` only for same-task running/idle workers whose contract
@@ -32,6 +37,11 @@ answers and supplies them against the same request. Leaves return their role-spe
 failure and never ask users, manage parent todos or delegate.
 Every resumed/replacement main task receives the complete captured-answer ledger, not just
 the latest form response. Preserve confirmed values, custom answers, unknowns and skipped branches.
+Carry explicit applicability context alongside forms, outside the native question payload.
+Include current phase, frozen-input references, changed dependency paths, actual review/attempt IDs,
+the explicitly selected successful cost revision and next authorized operation. Prefer a compact
+summary plus exact authorized ledger/evidence paths; recover missing content rather than rereading
+unchanged full artifacts. Never omit required security/approval evidence to meet a size target.
 Before rendering a form remove answered/inapplicable fields; don't ask migration details for Greenfield
 or create separate Other-description fields when native choices already accept freeform.
 Pass only the actual native tool's supported form fields. `requestedSchema` contains `properties`;
@@ -44,6 +54,12 @@ a successful form or task result is not independent human authorization.
 
 Consume the actual result in the role's declared file/text/verdict format.
 Validate artifact/result shape, relevant input freshness and real command outcomes.
+Treat a partial result as remaining work, not a completed phase. File presence and JSON syntax do not prove readiness.
+Continue remaining authorized activities through the same owner/lifecycle, or relay genuinely missing inputs,
+an actual capability failure or the final approval gate. Do not require another user "continue" for routine in-phase work.
+Do not blindly repeat unchanged tasks; preserve actual blockers and the existing retry/review accounting.
+For final Architecture approval, inspect pricing status `COMPLETE` and run the existing cost validator;
+also require the separate Architecture and cost-feasibility review evidence. A valid FAILED cost payload is not readiness.
 Missing capability, malformed result, stale evidence or permission denial blocks the affected action.
 Never replace a missing reviewer with self-review, an arbitrary worker or a main-wrapper fallback.
 Nested task capability missing on a delegated artifact owner is not reviewer unavailability:
@@ -53,6 +69,8 @@ The actual interactive parent captures inputs and records results under its own 
 Only a real missing parent capability or failed/invalid result blocks that relay.
 Keep the existing single identical-input empty-review retry and actual invocation budget.
 New tasks/contexts never reset review accounting, findings or approvals.
+Before any reviewer dispatch, use the shared request preflight and record its attempt start.
+Use the actual task/recording outcome afterward; a completed task is not a published review or approval.
 
 After compaction/new chat, recover missing domain evidence through artifacts and `apex-recall`;
 an old task handle is not guaranteed resumable. No automatic backup restoration or approval reconstruction.

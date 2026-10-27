@@ -5,6 +5,19 @@
 
 Use the GitHub Copilot SDK harness inside VS Code. Archived Local prompts are not
 entry points. A skill inherits the active session's model/tools; it cannot switch agents.
+Use actual native selection/calling context for role identity; when unavailable, report unknown.
+A default coordinating chat, role name in prose or loaded skill is not selected `01-Orchestrator`.
+Do not add a role attestation, model gate or synthetic readiness handshake.
+
+For an explicit start/resume, a missing role label alone is not a blocker when
+actual tools, calling constraints, scope and human approvals permit the requested coordination.
+Project `session.metadata` and generic `get_current_session`/session-list output are
+not role-selection evidence; do not query them to prove the active owner or persist a replacement role field.
+Do not dispatch a role-verification worker or repeat a selection question merely because those fields are absent.
+Report native identity as unknown without claiming that the user selected the wrong role.
+Loading a definition supplies workflow guidance, not native activation or broader permission.
+Known leaf/main restrictions, unavailable capabilities and missing approvals still apply.
+An explicit known incompatible role is a reason to request the appropriate owner, not to silently upgrade the caller.
 
 Select `01-Orchestrator` for end-to-end work only if that role is not already active.
 When it is already selected, continue the requested operation in the same conversation;
@@ -37,11 +50,18 @@ For a direct step start, select
 that step's owner and validate its graph prerequisites first. Selection is not
 approval to skip prior steps or gates.
 
+Recover missing current [coordination guidance](../../../agents/01-orchestrator.agent.md)
+and the graph-selected owner's contract before delegation; reuse them when already available.
+Pass their phase scope and completion criteria, not only filenames. A research/draft slice is not a full-phase handoff.
+
 Read [the workflow engine](../SKILL.md), then use
 `apex-recall show <project> --json` for current state. Recover an empty or failed
 lookup from existing handoff and artifact evidence; do not reset prior work or
 read/write session-state JSON directly. Refresh missing/stale required inputs.
 Artifact numbering never proves completion, reviews, or human approval.
+Consult current `effective_reviews` and applicable `gate_readiness` as well as historical step status.
+Changed review guidance can stale an otherwise unchanged artifact: return it to its owner without
+restamping hashes, automatically reopening steps or spending another review allowance.
 
 Use the [workflow graph](../templates/workflow-graph.json) and current owner body
 as the execution authority. The following is an entry/output map, not a second

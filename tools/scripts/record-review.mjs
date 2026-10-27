@@ -13,12 +13,30 @@ import {
   cacheInputs,
   findingId,
   isRecordedReviewer,
+  mutableInputProblem,
   STRUCTURED_REVIEWER,
   validateReview,
 } from "./validate-challenger-findings.mjs";
 
 const nonempty = (value) => typeof value === "string" && value.trim().length > 0;
 const object = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+const ACTIVE_REVIEW_LENSES = new Set([
+  "comprehensive",
+  "security-governance",
+  "architecture-reliability",
+  "cost-feasibility",
+  "governance-reconciliation",
+]);
+const ACTIVE_ARTIFACT_TYPES = new Set([
+  "requirements",
+  "architecture",
+  "implementation-plan",
+  "governance-constraints",
+  "cost-estimate",
+  "iac-code",
+  "design-adr",
+  "deployment-preview",
+]);
 const requireEvidence = (condition, message) => {
   if (!condition) throw new Error(message);
 };
@@ -127,14 +145,40 @@ function normalizeReviewDoc(doc, input, root) {
     }
   }
 }
+function matchesRequest(prompt, requestId) {
+  return (
+    typeof prompt === "string" &&
+    prompt.startsWith("APEX_REVIEW\n") &&
+    JSON.parse(prompt.slice("APEX_REVIEW\n".length)).request_id === requestId
+  );
+}
+
 function resolveReviewer(events, requestId) {
   const dispatches = events.filter((event) => {
     if (event.type !== "tool.execution_start" || event.data?.toolName !== "task") return false;
     const args = event.data.arguments;
-    if (!isRecordedReviewer(args?.agent_type) || !args.prompt?.startsWith("APEX_REVIEW\n")) return false;
-    const input = JSON.parse(args.prompt.slice("APEX_REVIEW\n".length));
-    return input.request_id === requestId;
+    return isRecordedReviewer(args?.agent_type) && matchesRequest(args.prompt, requestId);
   });
+  if (dispatches.length === 0) {
+    const requests = events.filter(
+      (event) => event.type === "user.message" && matchesRequest(event.data?.content, requestId),
+    );
+    const starts = events.filter(
+      (event) =>
+        event.type === "subagent.started" &&
+        isRecordedReviewer(event.data?.agentName) &&
+        event.data?.executionMode === "sync" &&
+        event.data?.resumable === false &&
+        nonempty(event.agentId) &&
+        nonempty(event.data?.toolCallId) &&
+        requests.some((request) => request.agentId === event.agentId),
+    );
+    requireEvidence(
+      requests.length === 1 && starts.length === 1,
+      "Request ID must identify exactly one review dispatch in --events",
+    );
+    return { workerId: starts[0].agentId, parentId: starts[0].data.parentId ?? "root" };
+  }
   requireEvidence(dispatches.length === 1, "Request ID must identify exactly one review dispatch in --events");
   const dispatch = dispatches[0];
   const starts = events.filter(
@@ -280,8 +324,8 @@ export function extractReview(events, workerId, parentId) {
       ),
     "Worker interaction lacks exact linked identity or final response",
   );
+  // Parent task records can be flushed after the complete worker stream.
   const ordered = [
-    dispatch,
     start,
     configured,
     user,
@@ -429,13 +473,22 @@ function outputPath(root, project, output) {
   return resolved;
 }
 
-function checkReview(input, doc, root) {
+export function preflightReviewRequest(input, root = process.cwd()) {
+  requireEvidence(object(input), "Review request must be an object");
+  requireEvidence(
+    /^[A-Za-z0-9_-]{1,100}$/.test(input.request_id ?? "") &&
+      ["1", "2", "3", "3_5", "3.5", "4", "5", "6"].includes(input.step) &&
+      ["default", "deep"].includes(input.review_depth),
+    "Review request_id, step and review_depth must be explicit",
+  );
   for (const key of ["artifact_path", "project_name", "artifact_type", "output_path"]) {
     requireEvidence(nonempty(input[key]), `Missing review input ${key}`);
   }
+  requireEvidence(ACTIVE_ARTIFACT_TYPES.has(input.artifact_type), "Unsupported review artifact type");
   requireEvidence(
     typeof input.overwrite === "boolean" &&
       (input.prior_findings === null || Array.isArray(input.prior_findings)) &&
+      (input.prior_findings === null || input.prior_findings.every(object)) &&
       object(input.cache_inputs),
     "Review requires explicit overwrite, prior_findings and cache_inputs",
   );
@@ -452,11 +505,68 @@ function checkReview(input, doc, root) {
       lenses.length > 0 &&
       (!batch || (!Object.hasOwn(input, "review_focus") && !Object.hasOwn(input, "pass_number"))) &&
       lenses.every(
-        (lens) => nonempty(lens.review_focus) && Number.isInteger(lens.pass_number) && lens.pass_number > 0,
+        (lens) =>
+          object(lens) &&
+          ACTIVE_REVIEW_LENSES.has(lens.review_focus) &&
+          Number.isInteger(lens.pass_number) &&
+          lens.pass_number > 0,
       ) &&
       new Set(lenses.map((lens) => `${lens.review_focus}:${lens.pass_number}`)).size === lenses.length,
     "Review lenses and pass numbers must be explicit and unambiguous",
   );
+  const target = outputPath(root, input.project_name, input.output_path);
+  const artifact = path.resolve(root, input.artifact_path);
+  requireEvidence(
+    artifact.startsWith(`${path.resolve(root)}${path.sep}`) &&
+      !input.artifact_path.split(/[\\/]/).includes("..") &&
+      target !== artifact &&
+      !target.startsWith(`${artifact}${path.sep}`),
+    "Review artifact must remain in the workspace and output cannot be a reviewed input",
+  );
+  requireEvidence(!fs.existsSync(target) || input.overwrite === true, "Output exists without explicit overwrite:true");
+  requireEvidence(
+    input.cache_inputs.reviewer === STRUCTURED_REVIEWER &&
+      isDeepStrictEqual(input.cache_inputs, cacheInputs(input.artifact_path, root, input.cache_inputs.reviewer)),
+    "Dispatched cache snapshot does not match current artifact or reviewer contract bytes",
+  );
+  if (input.supporting_inputs !== undefined) {
+    requireEvidence(
+      Array.isArray(input.supporting_inputs) && input.supporting_inputs.length > 0,
+      "Invalid supporting inputs",
+    );
+    const seen = new Set();
+    for (const support of input.supporting_inputs) {
+      requireEvidence(
+        object(support) && nonempty(support.path) && /^[a-f0-9]{64}$/.test(support.sha256 ?? ""),
+        "Invalid supporting input record",
+      );
+      const resolved = path.resolve(root, support.path);
+      const mutableProblem = mutableInputProblem(support.path);
+      requireEvidence(!mutableProblem, mutableProblem);
+      requireEvidence(
+        resolved.startsWith(`${path.resolve(root)}${path.sep}`) &&
+          !support.path.split(/[\\/]/).includes("..") &&
+          !seen.has(resolved) &&
+          resolved !== target,
+        "Supporting input must be unique, immutable and within the workspace",
+      );
+      seen.add(resolved);
+      requireEvidence(
+        cacheInputs(support.path, root, input.cache_inputs.reviewer).artifact_sha === support.sha256,
+        "supporting bytes changed",
+      );
+    }
+  }
+  return {
+    lenses,
+    batch,
+    output: target,
+    attempt_inputs: [input.artifact_path, ...(input.supporting_inputs ?? []).map((support) => support.path)],
+  };
+}
+
+function checkReview(input, doc, root) {
+  const { lenses, batch } = preflightReviewRequest(input, root);
   requireEvidence(
     isRecordedReviewer(input.cache_inputs.reviewer) &&
       input.cache_inputs.reviewer === doc.review_execution?.reviewer &&
@@ -491,18 +601,22 @@ function checkReview(input, doc, root) {
 
 function loadEventsWithFlushWait(eventsPath, workerId) {
   let events = parseEvents(eventsPath);
-  const hasLiveSyncStart = events.some(
+  const start = events.find(
     (event) =>
       event.agentId === workerId &&
       event.type === "subagent.started" &&
       event.data?.executionMode === "sync" &&
-      event.data?.resumable === false,
+      event.data?.resumable === false &&
+      nonempty(event.data?.toolCallId),
   );
-  if (!hasLiveSyncStart) return events;
+  if (!start) return events;
   const sleepBuf = new Int32Array(new SharedArrayBuffer(4));
   const deadline = Date.now() + 25_000;
   while (
-    !events.some((event) => event.agentId === workerId && event.type === "subagent.completed") &&
+    (!events.some((event) => event.agentId === workerId && event.type === "subagent.completed") ||
+      !["tool.execution_start", "tool.execution_complete"].every((type) =>
+        events.some((event) => event.type === type && event.data?.toolCallId === start.data.toolCallId),
+      )) &&
     Date.now() < deadline
   ) {
     Atomics.wait(sleepBuf, 0, 0, 500);
@@ -534,7 +648,15 @@ export function recordReview({
     parentId = resolved.parentId;
   }
   requireEvidence(nonempty(workerId) && nonempty(parentId), "Supply --request-id or both --worker-id and --parent-id");
-  const { input, doc, execution } = extractReview(loadEventsWithFlushWait(eventsPath, workerId), workerId, parentId);
+  const ready = loadEventsWithFlushWait(eventsPath, workerId);
+  if (requestId !== undefined) {
+    const resolved = resolveReviewer(ready, requestId);
+    requireEvidence(
+      resolved.workerId === workerId && resolved.parentId === parentId,
+      "Review identity changed while waiting for native records",
+    );
+  }
+  const { input, doc, execution } = extractReview(ready, workerId, parentId);
   requireEvidence(
     execution.reviewer === STRUCTURED_REVIEWER,
     "New recordings require challenger-review-subagent; historical rubber-duck receipts are read-only compatibility",
@@ -583,16 +705,38 @@ export function runRecorder(argv = process.argv.slice(2)) {
         "parent-id": { type: "string" },
         "request-id": { type: "string" },
         output: { type: "string" },
+        preflight: { type: "boolean" },
+        request: { type: "string" },
         help: { type: "boolean" },
       },
     });
     if (values.help) {
       console.log(
         "Usage: record-review.mjs --events /absolute/events.jsonl --output PATH " +
-          "(--request-id ID | --worker-id ID --parent-id root|ID)",
+          "(--request-id ID | --worker-id ID --parent-id root|ID)\n" +
+          "Read-only preflight: record-review.mjs --preflight --request request.json",
       );
       return 0;
     }
+    if (values.preflight) {
+      requireEvidence(
+        nonempty(values.request) &&
+          !["events", "output", "worker-id", "parent-id", "request-id"].some((key) => values[key]),
+        "Preflight requires only --preflight --request",
+      );
+      const input = JSON.parse(fs.readFileSync(values.request, "utf8"));
+      const result = preflightReviewRequest(input);
+      console.log(
+        JSON.stringify({
+          request_id: input.request_id,
+          status: "preflight_passed",
+          attempt_inputs: result.attempt_inputs,
+          permission_granted: false,
+        }),
+      );
+      return 0;
+    }
+    requireEvidence(values.request === undefined, "--request requires --preflight");
     for (const key of ["events", "output"]) requireEvidence(nonempty(values[key]), `Missing --${key}`);
     console.log(
       JSON.stringify(

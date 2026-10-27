@@ -19,21 +19,34 @@ function fixture(context) {
   const directory = mkdtempSync(path.join(tmpdir(), "apex-microsoft-host-"));
   context.after(() => rmSync(directory, { recursive: true, force: true }));
   mkdirSync(path.join(directory, "bin"));
+  const emptyPath = path.join(directory, "empty-bin");
+  mkdirSync(emptyPath);
   const log = path.join(directory, "launch.json");
-  writeFileSync(
-    path.join(directory, "bin", "code"),
-    `#!${process.execPath}
+  const runner = `const { writeFileSync } = require("node:fs");
+writeFileSync(process.env.LAUNCH_LOG, JSON.stringify({args: process.argv.slice(2), env: process.env}));
+process.exit(Number(process.env.CODE_EXIT || 0));
+`;
+  if (process.platform === "win32") {
+    writeFileSync(path.join(directory, "bin", "code-runner.cjs"), runner);
+    writeFileSync(path.join(directory, "bin", "code.cmd"), '@echo off\r\n"%NODE_EXE%" "%~dp0\\code-runner.cjs" %*\r\n');
+  } else {
+    writeFileSync(
+      path.join(directory, "bin", "code"),
+      `#!${process.execPath}
 import { writeFileSync } from "node:fs";
 writeFileSync(process.env.LAUNCH_LOG, JSON.stringify({args: process.argv.slice(2), env: process.env}));
 process.exit(Number(process.env.CODE_EXIT ?? 0));
 `,
-    { mode: 0o755 },
-  );
+      { mode: 0o755 },
+    );
+  }
   return {
     log,
+    emptyPath,
     env: {
       ...process.env,
-      PATH: `${path.join(directory, "bin")}:${process.env.PATH}`,
+      PATH: `${path.join(directory, "bin")}${path.delimiter}${process.env.PATH}`,
+      NODE_EXE: process.execPath,
       LAUNCH_LOG: log,
       APEX_NPM_REGISTRY_HOST_PATH: "original.example/npm/",
       APEX_PIP_INDEX_HOST_PATH: "original.example/python/",
@@ -42,7 +55,7 @@ process.exit(Number(process.env.CODE_EXIT ?? 0));
   };
 }
 
-for (const shell of ["bash", "pwsh"]) {
+for (const shell of process.platform === "win32" ? ["pwsh"] : ["bash", "pwsh"]) {
   for (const failure of [false, true]) {
     test(`${shell} Microsoft launcher ${failure ? "reports editor failure" : "passes all feed opt-ins to the editor"}`, (context) => {
       const setup = fixture(context);
@@ -63,20 +76,22 @@ for (const shell of ["bash", "pwsh"]) {
   }
 }
 
-test("WSL launcher preserves unrelated forwarding entries and replaces conflicting opt-in flags", (context) => {
-  const setup = fixture(context);
-  const result = spawnSync("bash", [path.join(root, ".devcontainer/open-microsoft.sh")], {
-    env: {
-      ...setup.env,
-      WSL_DISTRO_NAME: "Ubuntu",
-      WSLENV: "EXISTING/p:APEX_PIP_INDEX_HOST_PATH/u:OTHER/w",
-    },
-    encoding: "utf8",
+if (process.platform !== "win32") {
+  test("WSL launcher preserves unrelated forwarding entries and replaces conflicting opt-in flags", (context) => {
+    const setup = fixture(context);
+    const result = spawnSync("bash", [path.join(root, ".devcontainer/open-microsoft.sh")], {
+      env: {
+        ...setup.env,
+        WSL_DISTRO_NAME: "Ubuntu",
+        WSLENV: "EXISTING/p:APEX_PIP_INDEX_HOST_PATH/u:OTHER/w",
+      },
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const { env } = JSON.parse(readFileSync(setup.log, "utf8"));
+    assert.deepEqual(env.WSLENV.split(":"), ["EXISTING/p", "OTHER/w", ...Object.keys(sources)]);
   });
-  assert.equal(result.status, 0, result.stdout + result.stderr);
-  const { env } = JSON.parse(readFileSync(setup.log, "utf8"));
-  assert.deepEqual(env.WSLENV.split(":"), ["EXISTING/p", "OTHER/w", ...Object.keys(sources)]);
-});
+}
 
 test("PowerShell launcher restores the caller's existing package-source environment", (context) => {
   const setup = fixture(context);
@@ -93,18 +108,21 @@ test("PowerShell launcher restores the caller's existing package-source environm
   assert.match(result.stdout, /RESTORED:original\.example\/python\//);
 });
 
-test("Bash launcher fails explicitly when the host VS Code CLI is missing", (context) => {
-  const setup = fixture(context);
-  const result = spawnSync("/bin/bash", [path.join(root, ".devcontainer/open-microsoft.sh")], {
-    env: { ...setup.env, PATH: tmpdir() },
-    encoding: "utf8",
+if (process.platform !== "win32") {
+  test("Bash launcher fails explicitly when the host VS Code CLI is missing", (context) => {
+    const setup = fixture(context);
+    const result = spawnSync("/bin/bash", [path.join(root, ".devcontainer/open-microsoft.sh")], {
+      env: { ...setup.env, PATH: setup.emptyPath },
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 127, result.stdout + result.stderr);
+    assert.match(result.stderr, /VS Code CLI is required/);
+    assert.doesNotMatch(result.stdout, /Opening VS Code/);
   });
-  assert.equal(result.status, 127, result.stdout + result.stderr);
-  assert.match(result.stderr, /VS Code CLI is required/);
-  assert.doesNotMatch(result.stdout, /Opening VS Code/);
-});
+}
 
-test("PowerShell launcher fails explicitly when the host VS Code CLI is missing", () => {
+test("PowerShell launcher fails explicitly when the host VS Code CLI is missing", (context) => {
+  const setup = fixture(context);
   const resolved = spawnSync("pwsh", [...flags, "-Command", "(Get-Process -Id $PID).Path"], {
     encoding: "utf8",
   });
@@ -112,7 +130,7 @@ test("PowerShell launcher fails explicitly when the host VS Code CLI is missing"
   const result = spawnSync(
     resolved.stdout.trim(),
     [...flags, "-File", path.join(root, ".devcontainer/open-microsoft.ps1")],
-    { env: { ...process.env, PATH: "/usr/bin:/bin" }, encoding: "utf8" },
+    { env: { ...setup.env, PATH: setup.emptyPath }, encoding: "utf8" },
   );
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stderr, /Microsoft host launcher failed:.*code/);
@@ -146,10 +164,10 @@ for (const [name, feed, failure, expected] of [
   ["approved feed", sources.APEX_POWERSHELL_REPOSITORY_URL, "", 0],
   ["failed approved feed", sources.APEX_POWERSHELL_REPOSITORY_URL, "1", 1],
   ["non-HTTPS feed", "http://feed.example/v2", "", 1],
-  ["credential-bearing feed", "https://user:secret@feed.example/v2", "", 1],
+  ["credential-bearing feed", "https://user:test-only-credential@feed.example/v2", "", 1],
   ["relative feed", "feed.example/v2", "", 1],
-  ["query-bearing feed", "https://feed.example/v2?secret=private", "", 1],
-  ["malformed feed", "https://user:secret@[]", "", 1],
+  ["query-bearing feed", "https://feed.example/v2?private=example", "", 1],
+  ["malformed feed", "https://[", "", 1],
 ]) {
   test(`PowerShell analyzer provisioning handles ${name} without a public fallback`, () => {
     const result = spawnSync("pwsh", [...flags, "-Command", `${mocks}\n& ${quote(installer)}`], {
@@ -176,7 +194,7 @@ for (const [name, feed, failure, expected] of [
     } else {
       assert.match(result.stderr, /must be an HTTPS feed URL/);
       assert.doesNotMatch(result.stdout, /REGISTER:|INSTALL:|is ready/);
-      assert.doesNotMatch(result.stdout + result.stderr, /secret/);
+      assert.doesNotMatch(result.stdout + result.stderr, /private|test-only-credential/);
     }
   });
 }
