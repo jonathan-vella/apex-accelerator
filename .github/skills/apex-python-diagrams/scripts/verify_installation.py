@@ -71,15 +71,15 @@ def test_diagram_generation():
     try:
         from diagrams import Diagram
         from diagrams.azure.integration import LogicApps
-        
+
         import tempfile
         import os
-        
+
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = os.path.join(tmpdir, "test")
             with Diagram("Test", show=False, filename=output_path):
                 logic = LogicApps("Test")
-            
+
             # Check file was created
             if os.path.exists(f"{output_path}.png"):
                 print("✅ Successfully generated test diagram")
@@ -91,36 +91,63 @@ def test_diagram_generation():
         print(f"❌ Error: {e}")
         return False
 
+def check_dlib_svg_engine():
+    """Check dlib 1920x1080 SVG + 3840x2160 PNG engine and Azure v23 icons"""
+    print("Checking dlib SVG/PNG engine & Azure v23 icons...", end=" ")
+    try:
+        from pathlib import Path
+        import tempfile
+
+        scripts_dir = str(Path(__file__).resolve().parent)
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+        import dlib
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_base = Path(tmpdir) / "dlib-test"
+            dlib.reset()
+            dlib.add(dlib.card(50, 120, 280, 64, "app", [("App Service", 1)], dlib.TLF, dlib.TL))
+            written = dlib.finish(out_base, "Verification Test")
+            if all(p.exists() and p.stat().st_size > 0 for p in written):
+                print(f"✅ Rendered SVG+PNG ({len(dlib.P)} curated keys)")
+                return True
+            print("❌ Output files missing")
+            return False
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        return False
+
 def main():
     print("=" * 60)
     print("Azure Architecture Diagrams - Installation Verification")
     print("=" * 60)
     print()
-    
+
     results = []
-    
+
     results.append(("Python 3.9+", check_python_version()))
+    results.append(("dlib SVG/PNG engine", check_dlib_svg_engine()))
     results.append(("Graphviz", check_graphviz()))
     results.append(("Diagrams library", check_diagrams_library()))
-    
+
     # Only check these if diagrams is installed
     if results[-1][1]:
         results.append(("Azure providers", check_azure_providers()))
         results.append(("Diagram generation", test_diagram_generation()))
-    
+
     print()
     print("=" * 60)
     print("Summary")
     print("=" * 60)
-    
+
     all_passed = all(r[1] for r in results)
-    
+
     for name, passed in results:
         status = "✅ PASS" if passed else "❌ FAIL"
         print(f"  {name}: {status}")
-    
+
     print()
-    
+
     if all_passed:
         print("🎉 All checks passed! You're ready to create Azure diagrams.")
         print()
@@ -132,7 +159,7 @@ def main():
         print("Quick install commands:")
         print("  brew install graphviz     # macOS")
         print("  pip install diagrams      # Python library")
-    
+
     print()
     return 0 if all_passed else 1
 
