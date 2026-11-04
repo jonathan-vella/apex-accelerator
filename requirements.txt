@@ -14,6 +14,6 @@ matplotlib==3.11.2
 pillow==13.0.0
 
 # Repository test and lint tooling
-pytest==9.1.1
+pytest==9.2.0
 ruff==0.17.0
 yamllint==1.38.0
