@@ -91,6 +91,7 @@ env:
   SYNC_EXCEPTIONS: |
     infra/bicep/AGENTS.md
     infra/terraform/AGENTS.md
+    .github/data/alz-corp-policy-baseline.json.gz
     .github/data/governance-policy-baseline.fixture.json
   SEED_PATHS: |
     .github/data/avm-bicep-modules.csv
@@ -254,6 +255,16 @@ jobs:
           node --test tools/tests/scripts/test_stabilization.mjs tools/tests/scripts/test_publication_scope.mjs
           git diff --exit-code
           git diff --cached --check
+
+      - name: Validate shared ALZ Corp baseline
+        if: steps.sync.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          BASELINE=.github/data/alz-corp-policy-baseline.json.gz
+          # Before the upstream rollout there is no shared artifact to require.
+          if git cat-file -e "${UPSTREAM_SHA}:$BASELINE" 2>/dev/null; then
+            node --input-type=module -e 'import path from "node:path"; import { runValidator } from "./tools/scripts/validate-governance-baseline.mjs"; process.exit(runValidator({baselinePath: path.resolve(process.argv[1])}));' "$BASELINE"
+          fi
 
       - name: No-op path — report
         if: steps.sync.outputs.changed != 'true'
