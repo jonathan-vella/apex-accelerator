@@ -83,6 +83,31 @@ mismatch.
 
 ## End-of-discovery self-check
 
+### Private full-rule evidence
+
+`--retain-rule-evidence` embeds `rule_evidence` (`policy-rule-evidence-v1`) in the private snapshot.
+It preserves original assignments, definitions, initiatives and exemptions plus every effective member occurrence,
+its supplied/effective parameters and full resolved `policy_rule`, including Audit, AuditIfNotExists and Disabled.
+Policy-level parameter bindings are resolved; embedded ARM deployment templates retain their own parameter
+namespace and original expressions rather than being substituted with same-named policy parameters.
+Append effects retain their complete `then.details` arrays, including nested array values; only object-shaped
+details are inspected for embedded deployments. See the [Append effect definition](https://learn.microsoft.com/azure/governance/policy/concepts/effect-append#append-properties).
+Each entry must be an object with a nonempty string `field` and an explicit `value` key.
+Nested values and explicit false, zero or null values are preserved rather than rejected or coerced.
+`coverage` counts occurrences, not unique definitions or proven resource violations.
+`discovery_metadata.rule_evidence_sha256` covers the complete retained object; the existing opaque snapshot's
+whole-file SHA-256 binds both raw and normalized evidence for Python/Node review consumers.
+The normalized finding signature remains unchanged for legacy compatibility; it alone is not full-rule attestation.
+
+Offline `--validate-only --retain-rule-evidence` verifies scope, timestamp, digest, inventories, replayed parameter
+lineage and effect counts. Private collection/reuse requires owner-only external storage (`0700` directory,
+`0600` snapshot/preview), with no symlinks or repository output. Missing, stale, partial or changed evidence
+fails without an implicit live retry. An authorized bounded `--refresh` collects the missing evidence.
+The cached renderer with the same flag can preserve and verify this evidence, never reconstruct absent bodies.
+Legacy summaries remain inspectable without this flag but cannot establish full-rule semantic reconciliation.
+The shared Node private-Governance review preflight invokes that read-only canonical validator before
+accepting the private contract. Missing Python capability or summary-only evidence blocks review, not a bypass.
+
 Before writing the envelope, `discover.py` MUST:
 
 1. Re-fetch all pages of `policyAssignments` using the original scope/filter.

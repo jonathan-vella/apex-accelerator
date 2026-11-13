@@ -5,7 +5,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
@@ -17,6 +17,12 @@ import {
   STRUCTURED_REVIEWER,
   validateReview,
 } from "./validate-challenger-findings.mjs";
+import { reviewCompatibility } from "./_lib/review-compatibility.mjs";
+import {
+  isPrivatePolicyReference,
+  resolvePrivatePolicyReference,
+  requiredPrivateReviewInputs,
+} from "./_lib/project-paths.mjs";
 
 const nonempty = (value) => typeof value === "string" && value.trim().length > 0;
 const object = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
@@ -118,6 +124,12 @@ function normalizeReviewDoc(doc, input, root) {
     ) {
       entry.challenged_artifact = input.artifact_path;
     }
+    if (object(input?.cache_inputs) && !Object.hasOwn(entry, "cache_inputs")) {
+      entry.cache_inputs = structuredClone(input.cache_inputs);
+    }
+    if (Array.isArray(input?.supporting_inputs) && !Object.hasOwn(entry, "supporting_inputs")) {
+      entry.supporting_inputs = structuredClone(input.supporting_inputs);
+    }
     if (!Array.isArray(entry.findings)) continue;
     for (const finding of entry.findings) {
       if (!object(finding)) continue;
@@ -145,12 +157,96 @@ function normalizeReviewDoc(doc, input, root) {
     }
   }
 }
+function parseReviewEnvelopeHeader(prompt) {
+  if (typeof prompt !== "string") return null;
+  if (prompt.startsWith("APEX_REVIEW\n")) {
+    try {
+      const parsed = JSON.parse(prompt.slice("APEX_REVIEW\n".length));
+      return object(parsed) ? { kind: "inline", payload: parsed } : null;
+    } catch {
+      return null;
+    }
+  }
+  if (prompt.startsWith("APEX_REVIEW_FILE\n")) {
+    try {
+      const parsed = JSON.parse(prompt.slice("APEX_REVIEW_FILE\n".length));
+      return object(parsed) ? { kind: "file", payload: parsed } : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 function matchesRequest(prompt, requestId) {
-  return (
-    typeof prompt === "string" &&
-    prompt.startsWith("APEX_REVIEW\n") &&
-    JSON.parse(prompt.slice("APEX_REVIEW\n".length)).request_id === requestId
+  const header = parseReviewEnvelopeHeader(prompt);
+  return Boolean(header && header.payload.request_id === requestId);
+}
+
+function loadVerifiedReviewFileEnvelope(envelope, root) {
+  const allowedKeys = new Set([
+    "request_id",
+    "project_name",
+    "step",
+    "review_depth",
+    "request_path",
+    "request_sha256",
+    "private_inputs",
+  ]);
+  for (const key of Object.keys(envelope)) {
+    requireEvidence(allowedKeys.has(key), `Unsupported APEX_REVIEW_FILE field: ${key}`);
+  }
+  requireEvidence(
+    nonempty(envelope.request_id) &&
+      nonempty(envelope.project_name) &&
+      nonempty(envelope.step) &&
+      ["default", "deep"].includes(envelope.review_depth) &&
+      nonempty(envelope.request_path) &&
+      /^[a-f0-9]{64}$/.test(envelope.request_sha256 ?? ""),
+    "APEX_REVIEW_FILE requires request_id, project_name, step, review_depth, request_path, and 64-hex request_sha256",
   );
+  requireEvidence(
+    !path.isAbsolute(envelope.request_path) &&
+      !envelope.request_path.includes("\\") &&
+      !envelope.request_path.split("/").some((part) => ["", ".", ".."].includes(part)),
+    "APEX_REVIEW_FILE request_path must be a normalized workspace-relative path",
+  );
+  const realRoot = fs.realpathSync(root);
+  let cursor = realRoot;
+  for (const part of envelope.request_path.split("/")) {
+    cursor = path.join(cursor, part);
+    const stat = fs.lstatSync(cursor);
+    requireEvidence(!stat.isSymbolicLink(), "APEX_REVIEW_FILE request_path must not traverse symlinks");
+  }
+  requireEvidence(fs.statSync(cursor).isFile(), "APEX_REVIEW_FILE request_path must be a regular file");
+  const rawBytes = fs.readFileSync(cursor);
+  const actualSha = createHash("sha256").update(rawBytes).digest("hex");
+  requireEvidence(
+    actualSha === envelope.request_sha256,
+    "APEX_REVIEW_FILE request_sha256 does not match current request file bytes",
+  );
+  const input = JSON.parse(rawBytes.toString("utf8"));
+  requireEvidence(object(input), "Saved review request file must contain one JSON object");
+  requireEvidence(
+    nonempty(input.project_name) &&
+      cursor.startsWith(`${path.join(realRoot, "agent-output", input.project_name, "_meta")}${path.sep}`),
+    "APEX_REVIEW_FILE request_path must reside under agent-output/<project_name>/_meta/",
+  );
+  requireEvidence(
+    input.request_id === envelope.request_id &&
+      input.project_name === envelope.project_name &&
+      input.step === envelope.step &&
+      input.review_depth === envelope.review_depth,
+    "APEX_REVIEW_FILE header fields differ from the saved review request",
+  );
+  requireEvidence(
+    !Object.hasOwn(input, "private_inputs"),
+    "Saved review request must not persist literal private_inputs",
+  );
+  if (envelope.private_inputs !== undefined) {
+    input.private_inputs = structuredClone(envelope.private_inputs);
+  }
+  return input;
 }
 
 function resolveReviewer(events, requestId) {
@@ -192,24 +288,153 @@ function resolveReviewer(events, requestId) {
   return { workerId: starts[0].agentId, parentId: dispatch.agentId ?? "root" };
 }
 
-function parseEvents(eventsPath) {
+function parseEvents(eventsPath, { allowTrailingPartial = false } = {}) {
   requireEvidence(path.isAbsolute(eventsPath), "--events must be an absolute native events.jsonl path");
-  return fs
-    .readFileSync(eventsPath, "utf8")
-    .split(/\r?\n/)
-    .filter((line) => line.trim())
-    .map((line, index) => {
-      try {
-        const event = JSON.parse(line);
-        requireEvidence(object(event), "not an event object");
-        return event;
-      } catch (error) {
-        throw new Error(`Invalid event record ${index + 1}: ${error.message}`, { cause: error });
-      }
-    });
+  const rawLines = fs.readFileSync(eventsPath, "utf8").split(/\r?\n/);
+  const nonEmpty = rawLines.filter((line) => line.trim());
+  const events = [];
+  for (const [index, line] of nonEmpty.entries()) {
+    try {
+      const event = JSON.parse(line);
+      requireEvidence(object(event), "not an event object");
+      events.push(event);
+    } catch (error) {
+      if (allowTrailingPartial && index === nonEmpty.length - 1 && rawLines.at(-1)?.trim() === line.trim()) break;
+      throw new Error(`Invalid event record ${index + 1}: ${error.message}`, { cause: error });
+    }
+  }
+  return events;
 }
 
-export function extractReview(events, workerId, parentId) {
+function hasRequestCandidate(events, requestId) {
+  const hasDispatch = events.some((event) => {
+    if (event.type !== "tool.execution_start" || event.data?.toolName !== "task") return false;
+    const args = event.data.arguments;
+    return isRecordedReviewer(args?.agent_type) && matchesRequest(args.prompt, requestId);
+  });
+  if (hasDispatch) return true;
+  const requests = events.filter(
+    (event) => event.type === "user.message" && matchesRequest(event.data?.content, requestId),
+  );
+  return (
+    requests.length > 0 &&
+    events.some(
+      (event) =>
+        event.type === "subagent.started" &&
+        isRecordedReviewer(event.data?.agentName) &&
+        event.data?.executionMode === "sync" &&
+        event.data?.resumable === false &&
+        nonempty(event.agentId) &&
+        nonempty(event.data?.toolCallId) &&
+        requests.some((request) => request.agentId === event.agentId),
+    )
+  );
+}
+
+export function resolveEventsFromDir(eventsDir, requestId, { allowTrailingPartial = true } = {}) {
+  requireEvidence(
+    nonempty(eventsDir) && path.isAbsolute(eventsDir) && !eventsDir.split(/[\\/]/).includes(".."),
+    "--events-dir must be a normalized absolute directory path",
+  );
+  requireEvidence(nonempty(requestId), "--events-dir requires --request-id");
+  const dirStat = fs.lstatSync(eventsDir);
+  requireEvidence(!dirStat.isSymbolicLink() && dirStat.isDirectory(), "--events-dir must be a real directory");
+  const candidates = [];
+  const direct = path.join(eventsDir, "events.jsonl");
+  if (fs.existsSync(direct)) {
+    const stat = fs.lstatSync(direct);
+    requireEvidence(!stat.isSymbolicLink(), "Symlinked events.jsonl in --events-dir is forbidden");
+    if (stat.isFile()) candidates.push(direct);
+  }
+  const entries = fs.readdirSync(eventsDir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+  requireEvidence(entries.length <= 2000, "--events-dir exceeds bounded session scan limit");
+  for (const entry of entries) {
+    if (entry.name === "events.jsonl") continue;
+    const childPath = path.join(eventsDir, entry.name);
+    const childStat = fs.lstatSync(childPath);
+    if (childStat.isSymbolicLink()) continue;
+    if (!childStat.isDirectory()) continue;
+    const nested = path.join(childPath, "events.jsonl");
+    try {
+      const nestedStat = fs.lstatSync(nested);
+      requireEvidence(!nestedStat.isSymbolicLink(), "Symlinked nested events.jsonl in --events-dir is forbidden");
+      if (nestedStat.isFile()) candidates.push(nested);
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+  }
+  const matches = [];
+  for (const candidate of candidates) {
+    const parsed = parseEvents(candidate, { allowTrailingPartial });
+    if (hasRequestCandidate(parsed, requestId)) matches.push(candidate);
+  }
+  requireEvidence(
+    matches.length === 1,
+    matches.length > 1
+      ? `Ambiguous request ID ${requestId} matched multiple session logs in --events-dir`
+      : `Request ID ${requestId} was not found in --events-dir`,
+  );
+  return matches[0];
+}
+
+function resolveRootHookDispatch(events, call) {
+  const preStarts = events.filter(
+    (event) =>
+      event.type === "hook.start" &&
+      event.data?.hookType === "preToolUse" &&
+      (event.agentId ?? "root") === "root" &&
+      Array.isArray(event.data?.input?.toolCalls) &&
+      event.data.input.toolCalls.some((item) => item?.id === call),
+  );
+  const preStart = exactly(preStarts, "hook.start");
+  const toolCalls = preStart.data.input.toolCalls.filter((item) => item?.id === call);
+  requireEvidence(
+    toolCalls.length === 1 && nonempty(preStart.data?.hookInvocationId),
+    "Exactly one preToolUse toolCall record is required",
+  );
+  const preEnds = events.filter(
+    (event) =>
+      event.type === "hook.end" &&
+      event.data?.hookType === "preToolUse" &&
+      (event.agentId ?? "root") === "root" &&
+      event.data?.hookInvocationId === preStart.data.hookInvocationId,
+  );
+  const preEnd = exactly(preEnds, "hook.end");
+  const postStarts = events.filter(
+    (event) =>
+      event.type === "hook.start" &&
+      event.data?.hookType === "postToolUse" &&
+      (event.agentId ?? "root") === "root" &&
+      event.data?.input?.toolCallId === call,
+  );
+  const postStart = exactly(postStarts, "hook.start");
+  requireEvidence(nonempty(postStart.data?.hookInvocationId), "postToolUse hookInvocationId is required");
+  const postEnds = events.filter(
+    (event) =>
+      event.type === "hook.end" &&
+      event.data?.hookType === "postToolUse" &&
+      (event.agentId ?? "root") === "root" &&
+      event.data?.hookInvocationId === postStart.data.hookInvocationId,
+  );
+  const postEnd = exactly(postEnds, "hook.end");
+  const callSpec = toolCalls[0];
+  requireEvidence(
+    preEnd.data?.success === true &&
+      postEnd.data?.success === true &&
+      callSpec?.name === "task" &&
+      postStart.data?.input?.toolName === "task" &&
+      isDeepStrictEqual(postStart.data?.input?.toolArgs, callSpec.args) &&
+      postStart.data?.input?.toolResult?.resultType === "success",
+    "Root hook dispatch and completion must match one successful task invocation",
+  );
+  return {
+    args: callSpec.args,
+    dispatchEvents: [preStart, preEnd, postStart, postEnd],
+    orderedBounds: [preStart, preEnd, postStart, postEnd],
+  };
+}
+
+export function extractReview(events, workerId, parentId, { root = process.cwd() } = {}) {
   requireEvidence(
     nonempty(workerId) && nonempty(parentId) && workerId !== parentId && workerId !== "root",
     "Exact distinct worker and parent identities are required",
@@ -241,25 +466,55 @@ export function extractReview(events, workerId, parentId) {
     exactly(linked, "subagent.started") === start && exactly(linked, "subagent.completed") === completed,
     "Dispatch must identify exactly one worker and completion",
   );
-  const dispatch = exactly(linked, "tool.execution_start");
-  const finished = exactly(linked, "tool.execution_complete");
-  const args = dispatch.data.arguments;
-  requireEvidence(
-    dispatch.data.toolName === "task" &&
-      (dispatch.agentId ?? "root") === parentId &&
+  const hasNativeTaskEvents = linked.some(
+    (event) => event.type === "tool.execution_start" || event.type === "tool.execution_complete",
+  );
+  let args;
+  let dispatch;
+  let finished;
+  let rootHookBounds = null;
+  let parentBoundaryEvents;
+  if (hasNativeTaskEvents || parentId !== "root") {
+    dispatch = exactly(linked, "tool.execution_start");
+    finished = exactly(linked, "tool.execution_complete");
+    args = dispatch.data.arguments;
+    requireEvidence(
+      dispatch.data.toolName === "task" &&
+        (dispatch.agentId ?? "root") === parentId &&
+        object(args) &&
+        args.agent_type === reviewer &&
+        (!Object.hasOwn(args, "mode") || args.mode === "sync") &&
+        !["model", "reasoning_effort", "context_tier"].some((key) => Object.hasOwn(args, key)) &&
+        (finished.agentId ?? "root") === parentId &&
+        finished.data.success === true,
+      "Exactly one successful matching parent task dispatch without caller overrides is required",
+    );
+    parentBoundaryEvents = [finished];
+  } else {
+    requireEvidence(
+      start.data?.parentId === undefined && start.data?.resumable === false,
+      "Root buffered review dispatch requires one-shot root subagent telemetry",
+    );
+    const rootHook = resolveRootHookDispatch(events, call);
+    args = rootHook.args;
+    rootHookBounds = rootHook.orderedBounds;
+    parentBoundaryEvents = rootHook.dispatchEvents;
+    requireEvidence(
       object(args) &&
-      args.agent_type === reviewer &&
-      (!Object.hasOwn(args, "mode") || args.mode === "sync") &&
-      !["model", "reasoning_effort", "context_tier"].some((key) => Object.hasOwn(args, key)) &&
-      (finished.agentId ?? "root") === parentId &&
-      finished.data.success === true,
-    "Exactly one successful matching parent task dispatch without caller overrides is required",
-  );
+        args.agent_type === reviewer &&
+        (!Object.hasOwn(args, "mode") || args.mode === "sync") &&
+        !["model", "reasoning_effort", "context_tier"].some((key) => Object.hasOwn(args, key)),
+      "Exactly one successful matching parent task dispatch without caller overrides is required",
+    );
+  }
   requireEvidence(
-    typeof args.prompt === "string" && args.prompt.startsWith("APEX_REVIEW\n"),
-    "Task prompt must be APEX_REVIEW followed by one JSON object",
+    typeof args.prompt === "string" &&
+      (args.prompt.startsWith("APEX_REVIEW\n") || args.prompt.startsWith("APEX_REVIEW_FILE\n")),
+    "Task prompt must be APEX_REVIEW or APEX_REVIEW_FILE followed by one JSON object",
   );
-  const input = JSON.parse(args.prompt.slice("APEX_REVIEW\n".length));
+  const input = args.prompt.startsWith("APEX_REVIEW_FILE\n")
+    ? loadVerifiedReviewFileEnvelope(JSON.parse(args.prompt.slice("APEX_REVIEW_FILE\n".length)), root)
+    : JSON.parse(args.prompt.slice("APEX_REVIEW\n".length));
   requireEvidence(object(input), "Review input must be an object");
   requireEvidence(
     nonempty(input.request_id) && nonempty(input.step) && ["default", "deep"].includes(input.review_depth),
@@ -324,7 +579,7 @@ export function extractReview(events, workerId, parentId) {
       ),
     "Worker interaction lacks exact linked identity or final response",
   );
-  // Parent task records can be flushed after the complete worker stream.
+  // Parent task records can be flushed after the complete worker stream; root hook bounds wrap the worker stream live.
   const ordered = [
     start,
     configured,
@@ -332,9 +587,15 @@ export function extractReview(events, workerId, parentId) {
     ...turns.flatMap((turn) => [turn.start, ...turn.responses, turn.end]),
     completed,
   ];
+  const parentOrdered = rootHookBounds
+    ? events.indexOf(rootHookBounds[0]) < events.indexOf(rootHookBounds[1]) &&
+      events.indexOf(rootHookBounds[1]) < events.indexOf(start) &&
+      events.indexOf(completed) < events.indexOf(rootHookBounds[2]) &&
+      events.indexOf(rootHookBounds[2]) < events.indexOf(rootHookBounds[3])
+    : events.indexOf(dispatch) < events.indexOf(finished);
   requireEvidence(
     ordered.every((event, index) => index === 0 || events.indexOf(ordered[index - 1]) < events.indexOf(event)) &&
-      events.indexOf(dispatch) < events.indexOf(finished) &&
+      parentOrdered &&
       responses.at(-1) === response,
     "Dispatch, complete worker interaction, and completion must be ordered",
   );
@@ -351,7 +612,7 @@ export function extractReview(events, workerId, parentId) {
       ),
     "Nested delegation is not allowed",
   );
-  for (const event of [...worker, finished]) {
+  for (const event of [...worker, ...parentBoundaryEvents]) {
     if (event.type === "tool.execution_complete" && event !== finished) continue;
     requireEvidence(
       !/(?:^|[._])(?:error|failed|cancelled|aborted)$/.test(event.type) &&
@@ -369,6 +630,7 @@ export function extractReview(events, workerId, parentId) {
     ),
   );
   const recoveredReads = new Set();
+  let correctedPrivateRead;
   for (const event of toolEvents) {
     const turn = turns.find(
       (candidate) =>
@@ -392,15 +654,45 @@ export function extractReview(events, workerId, parentId) {
     if (!external && !successful(toolFinish)) {
       const readPath = toolStart.data?.arguments?.path;
       const message = toolFinish.data?.error?.message ?? toolFinish.data?.result?.message;
-      recovered =
+      const errorCode = toolFinish.data?.error?.code ?? toolFinish.data?.result?.code;
+      const privateInput =
+        nonempty(readPath) &&
+        path.isAbsolute(readPath) &&
+        Array.isArray(input.private_inputs) &&
+        input.private_inputs.find(
+          (entry) =>
+            object(entry) &&
+            isPrivatePolicyReference(entry.reference) &&
+            nonempty(entry.read_path) &&
+            path.isAbsolute(entry.read_path) &&
+            readPath === path.join(path.dirname(path.dirname(entry.read_path)), path.basename(entry.read_path)),
+        );
+      const privateCorrection =
+        privateInput &&
+        (errorCode === undefined || ["failure", "ENOENT"].includes(errorCode)) &&
+        [
+          "File not found",
+          `File not found: ${readPath}`,
+          `Path ${readPath} does not exist. Please provide a valid path.`,
+          `ENOENT: no such file or directory, open '${readPath}'`,
+        ].includes(message) &&
+        (correctedPrivateRead === undefined || correctedPrivateRead === toolFinish.data.toolCallId);
+      const retryPath = privateCorrection ? privateInput.read_path : readPath;
+      const isSearchTool = ["rg", "grep"].includes(toolStart.data?.toolName);
+      const searchScope = toolStart.data?.arguments?.paths ?? toolStart.data?.arguments?.path ?? null;
+      const validSearchScope =
+        searchScope === null ||
+        nonempty(searchScope) ||
+        (Array.isArray(searchScope) && searchScope.length > 0 && searchScope.every(nonempty));
+      const recoveredView =
         toolStart.data?.toolName === "view" &&
         nonempty(readPath) &&
-        message === "view_range out of bounds" &&
+        (message === "view_range out of bounds" || privateCorrection) &&
         worker.some(
           (retry) =>
             retry.type === "tool.execution_start" &&
             retry.data?.toolName === "view" &&
-            retry.data?.arguments?.path === readPath &&
+            retry.data?.arguments?.path === retryPath &&
             events.indexOf(retry) > events.indexOf(toolFinish) &&
             worker.some(
               (finish) =>
@@ -411,7 +703,31 @@ export function extractReview(events, workerId, parentId) {
                 events.indexOf(finish) < events.indexOf(response),
             ),
         );
-      if (recovered) recoveredReads.add(toolFinish.data.toolCallId);
+      const recoveredSearch =
+        isSearchTool &&
+        validSearchScope &&
+        typeof message === "string" &&
+        /^(?:rg:\s*)?regex parse error\b/i.test(message.trim()) &&
+        worker.some(
+          (retry) =>
+            retry.type === "tool.execution_start" &&
+            ["rg", "grep"].includes(retry.data?.toolName) &&
+            isDeepStrictEqual(retry.data?.arguments?.paths ?? retry.data?.arguments?.path ?? null, searchScope) &&
+            events.indexOf(retry) > events.indexOf(toolFinish) &&
+            worker.some(
+              (finish) =>
+                finish.type === "tool.execution_complete" &&
+                finish.data?.toolCallId === retry.data.toolCallId &&
+                successful(finish) &&
+                events.indexOf(finish) > events.indexOf(retry) &&
+                events.indexOf(finish) < events.indexOf(response),
+            ),
+        );
+      recovered = Boolean(recoveredView || recoveredSearch);
+      if (recovered) {
+        recoveredReads.add(toolFinish.data.toolCallId);
+        if (privateCorrection) correctedPrivateRead = toolFinish.data.toolCallId;
+      }
     }
     requireEvidence(
       nonempty(event.data?.toolCallId) &&
@@ -515,6 +831,10 @@ export function preflightReviewRequest(input, root = process.cwd()) {
     "Review lenses and pass numbers must be explicit and unambiguous",
   );
   const target = outputPath(root, input.project_name, input.output_path);
+  requireEvidence(
+    !isPrivatePolicyReference(input.artifact_path),
+    "Private policy evidence must be supporting input; the review primary remains the public summary",
+  );
   const artifact = path.resolve(root, input.artifact_path);
   requireEvidence(
     artifact.startsWith(`${path.resolve(root)}${path.sep}`) &&
@@ -524,11 +844,14 @@ export function preflightReviewRequest(input, root = process.cwd()) {
     "Review artifact must remain in the workspace and output cannot be a reviewed input",
   );
   requireEvidence(!fs.existsSync(target) || input.overwrite === true, "Output exists without explicit overwrite:true");
+  const expectedCache = cacheInputs(input.artifact_path, root, input.cache_inputs.reviewer);
+  const cacheCompat = reviewCompatibility(input.cache_inputs, expectedCache, root);
   requireEvidence(
     input.cache_inputs.reviewer === STRUCTURED_REVIEWER &&
-      isDeepStrictEqual(input.cache_inputs, cacheInputs(input.artifact_path, root, input.cache_inputs.reviewer)),
+      (cacheCompat === "exact" || cacheCompat === "editorial-compatible"),
     "Dispatched cache snapshot does not match current artifact or reviewer contract bytes",
   );
+  const privateInputs = [];
   if (input.supporting_inputs !== undefined) {
     requireEvidence(
       Array.isArray(input.supporting_inputs) && input.supporting_inputs.length > 0,
@@ -540,11 +863,14 @@ export function preflightReviewRequest(input, root = process.cwd()) {
         object(support) && nonempty(support.path) && /^[a-f0-9]{64}$/.test(support.sha256 ?? ""),
         "Invalid supporting input record",
       );
-      const resolved = path.resolve(root, support.path);
+      const privateInput = isPrivatePolicyReference(support.path);
+      const resolved = privateInput
+        ? resolvePrivatePolicyReference(root, support.path, input.project_name)
+        : path.resolve(root, support.path);
       const mutableProblem = mutableInputProblem(support.path);
       requireEvidence(!mutableProblem, mutableProblem);
       requireEvidence(
-        resolved.startsWith(`${path.resolve(root)}${path.sep}`) &&
+        (privateInput || resolved.startsWith(`${path.resolve(root)}${path.sep}`)) &&
           !support.path.split(/[\\/]/).includes("..") &&
           !seen.has(resolved) &&
           resolved !== target,
@@ -555,22 +881,43 @@ export function preflightReviewRequest(input, root = process.cwd()) {
         cacheInputs(support.path, root, input.cache_inputs.reviewer).artifact_sha === support.sha256,
         "supporting bytes changed",
       );
+      if (privateInput) privateInputs.push({ reference: support.path, read_path: resolved });
     }
+  }
+  for (const expected of requiredPrivateReviewInputs(
+    root,
+    input.project_name,
+    input.artifact_type,
+    input.artifact_path,
+  )) {
+    requireEvidence(
+      input.supporting_inputs?.some((support) => support.path === expected.path && support.sha256 === expected.sha256),
+      "Required private policy evidence must be frozen in supporting inputs",
+    );
+  }
+  if (input.private_inputs !== undefined) {
+    requireEvidence(
+      isDeepStrictEqual(input.private_inputs, privateInputs),
+      "Transient private read mapping must exactly match canonical preflight inputs",
+    );
   }
   return {
     lenses,
     batch,
     output: target,
     attempt_inputs: [input.artifact_path, ...(input.supporting_inputs ?? []).map((support) => support.path)],
+    ...(privateInputs.length ? { private_inputs: privateInputs } : {}),
   };
 }
 
 function checkReview(input, doc, root) {
   const { lenses, batch } = preflightReviewRequest(input, root);
+  const expectedCache = cacheInputs(input.artifact_path, root, input.cache_inputs.reviewer);
+  const cacheCompat = reviewCompatibility(input.cache_inputs, expectedCache, root);
   requireEvidence(
     isRecordedReviewer(input.cache_inputs.reviewer) &&
       input.cache_inputs.reviewer === doc.review_execution?.reviewer &&
-      isDeepStrictEqual(input.cache_inputs, cacheInputs(input.artifact_path, root, input.cache_inputs.reviewer)),
+      (cacheCompat === "exact" || cacheCompat === "editorial-compatible"),
     "Dispatched cache snapshot does not match current artifact or reviewer contract bytes",
   );
   const entries = batch ? doc.batch_results : [doc];
@@ -599,8 +946,37 @@ function checkReview(input, doc, root) {
   requireEvidence(errors.length === 0, errors.join("\n"));
 }
 
-function loadEventsWithFlushWait(eventsPath, workerId) {
-  let events = parseEvents(eventsPath);
+function hasFlushedParentCompletion(events, start) {
+  const call = start.data.toolCallId;
+  if (
+    ["tool.execution_start", "tool.execution_complete"].every((type) =>
+      events.some((event) => event.type === type && event.data?.toolCallId === call),
+    )
+  ) {
+    return true;
+  }
+  if (start.data?.parentId !== undefined) return false;
+  const postStart = events.find(
+    (event) =>
+      event.type === "hook.start" &&
+      event.data?.hookType === "postToolUse" &&
+      (event.agentId ?? "root") === "root" &&
+      event.data?.input?.toolCallId === call &&
+      nonempty(event.data?.hookInvocationId),
+  );
+  return Boolean(
+    postStart &&
+    events.some(
+      (event) =>
+        event.type === "hook.end" &&
+        event.data?.hookType === "postToolUse" &&
+        event.data?.hookInvocationId === postStart.data.hookInvocationId,
+    ),
+  );
+}
+
+function loadEventsWithFlushWait(eventsPath, workerId, { allowTrailingPartial = false } = {}) {
+  let events = parseEvents(eventsPath, { allowTrailingPartial });
   const start = events.find(
     (event) =>
       event.agentId === workerId &&
@@ -609,25 +985,32 @@ function loadEventsWithFlushWait(eventsPath, workerId) {
       event.data?.resumable === false &&
       nonempty(event.data?.toolCallId),
   );
-  if (!start) return events;
   const sleepBuf = new Int32Array(new SharedArrayBuffer(4));
   const deadline = Date.now() + 25_000;
-  while (
-    (!events.some((event) => event.agentId === workerId && event.type === "subagent.completed") ||
-      !["tool.execution_start", "tool.execution_complete"].every((type) =>
-        events.some((event) => event.type === type && event.data?.toolCallId === start.data.toolCallId),
-      )) &&
-    Date.now() < deadline
-  ) {
-    Atomics.wait(sleepBuf, 0, 0, 500);
-    events = parseEvents(eventsPath);
+  if (start) {
+    while (
+      (!events.some((event) => event.agentId === workerId && event.type === "subagent.completed") ||
+        !hasFlushedParentCompletion(events, start)) &&
+      Date.now() < deadline
+    ) {
+      Atomics.wait(sleepBuf, 0, 0, 500);
+      events = parseEvents(eventsPath, { allowTrailingPartial: true });
+    }
   }
-  return events;
+  while (allowTrailingPartial && Date.now() < deadline) {
+    try {
+      return parseEvents(eventsPath, { allowTrailingPartial: false });
+    } catch {
+      Atomics.wait(sleepBuf, 0, 0, 200);
+    }
+  }
+  return parseEvents(eventsPath, { allowTrailingPartial: false });
 }
 
 /** Extract and atomically publish actual worker evidence; failures leave existing output untouched. */
 export function recordReview({
   events: eventsPath,
+  eventsDir,
   workerId,
   parentId,
   requestId,
@@ -636,9 +1019,13 @@ export function recordReview({
   refreshContractCache = false,
 }) {
   requireEvidence(!refreshContractCache, "Review metadata cannot be refreshed after dispatch");
+  requireEvidence(!(nonempty(eventsPath) && nonempty(eventsDir)), "Supply either --events or --events-dir, not both");
+  if (nonempty(eventsDir)) {
+    eventsPath = resolveEventsFromDir(eventsDir, requestId, { allowTrailingPartial: true });
+  }
   requireEvidence(nonempty(eventsPath), "Explicit --events is required; newest-session discovery is not supported");
   root = fs.realpathSync(root);
-  const events = parseEvents(eventsPath);
+  const events = parseEvents(eventsPath, { allowTrailingPartial: nonempty(eventsDir) });
   if (requestId !== undefined) {
     requireEvidence(nonempty(requestId), "Request ID must be nonempty");
     const resolved = resolveReviewer(events, requestId);
@@ -648,7 +1035,13 @@ export function recordReview({
     parentId = resolved.parentId;
   }
   requireEvidence(nonempty(workerId) && nonempty(parentId), "Supply --request-id or both --worker-id and --parent-id");
-  const ready = loadEventsWithFlushWait(eventsPath, workerId);
+  const ready = loadEventsWithFlushWait(eventsPath, workerId, { allowTrailingPartial: nonempty(eventsDir) });
+  if (nonempty(eventsDir)) {
+    requireEvidence(
+      resolveEventsFromDir(eventsDir, requestId, { allowTrailingPartial: false }) === eventsPath,
+      "Session log identity changed or became ambiguous while waiting for native records",
+    );
+  }
   if (requestId !== undefined) {
     const resolved = resolveReviewer(ready, requestId);
     requireEvidence(
@@ -656,7 +1049,7 @@ export function recordReview({
       "Review identity changed while waiting for native records",
     );
   }
-  const { input, doc, execution } = extractReview(ready, workerId, parentId);
+  const { input, doc, execution } = extractReview(ready, workerId, parentId, { root });
   requireEvidence(
     execution.reviewer === STRUCTURED_REVIEWER,
     "New recordings require challenger-review-subagent; historical rubber-duck receipts are read-only compatibility",
@@ -701,6 +1094,7 @@ export function runRecorder(argv = process.argv.slice(2)) {
       args: argv,
       options: {
         events: { type: "string" },
+        "events-dir": { type: "string" },
         "worker-id": { type: "string" },
         "parent-id": { type: "string" },
         "request-id": { type: "string" },
@@ -712,8 +1106,8 @@ export function runRecorder(argv = process.argv.slice(2)) {
     });
     if (values.help) {
       console.log(
-        "Usage: record-review.mjs --events /absolute/events.jsonl --output PATH " +
-          "(--request-id ID | --worker-id ID --parent-id root|ID)\n" +
+        "Usage: record-review.mjs (--events /absolute/events.jsonl | --events-dir /absolute/session-state) " +
+          "--output PATH (--request-id ID | --worker-id ID --parent-id root|ID)\n" +
           "Read-only preflight: record-review.mjs --preflight --request request.json",
       );
       return 0;
@@ -721,27 +1115,53 @@ export function runRecorder(argv = process.argv.slice(2)) {
     if (values.preflight) {
       requireEvidence(
         nonempty(values.request) &&
-          !["events", "output", "worker-id", "parent-id", "request-id"].some((key) => values[key]),
+          !["events", "events-dir", "output", "worker-id", "parent-id", "request-id"].some((key) => values[key]),
         "Preflight requires only --preflight --request",
       );
-      const input = JSON.parse(fs.readFileSync(values.request, "utf8"));
+      const rawBytes = fs.readFileSync(values.request);
+      const input = JSON.parse(rawBytes.toString("utf8"));
       const result = preflightReviewRequest(input);
+      let fileEnvelope;
+      if (!Object.hasOwn(input, "private_inputs")) {
+        try {
+          const realCwd = fs.realpathSync(process.cwd());
+          const relRequest = path.relative(realCwd, path.resolve(realCwd, values.request)).replaceAll(path.sep, "/");
+          const candidate = {
+            request_id: input.request_id,
+            project_name: input.project_name,
+            step: input.step,
+            review_depth: input.review_depth,
+            request_path: relRequest,
+            request_sha256: createHash("sha256").update(rawBytes).digest("hex"),
+          };
+          loadVerifiedReviewFileEnvelope(candidate, realCwd);
+          fileEnvelope = candidate;
+        } catch {
+          fileEnvelope = undefined;
+        }
+      }
       console.log(
         JSON.stringify({
           request_id: input.request_id,
           status: "preflight_passed",
           attempt_inputs: result.attempt_inputs,
+          ...(fileEnvelope ? { review_file_envelope: fileEnvelope } : {}),
           permission_granted: false,
         }),
       );
       return 0;
     }
     requireEvidence(values.request === undefined, "--request requires --preflight");
-    for (const key of ["events", "output"]) requireEvidence(nonempty(values[key]), `Missing --${key}`);
+    requireEvidence(nonempty(values.output), "Missing --output");
+    requireEvidence(
+      nonempty(values.events) || nonempty(values["events-dir"]),
+      "Missing --events (or --events-dir with --request-id)",
+    );
     console.log(
       JSON.stringify(
         recordReview({
           events: values.events,
+          eventsDir: values["events-dir"],
           workerId: values["worker-id"],
           parentId: values["parent-id"],
           requestId: values["request-id"],

@@ -114,6 +114,11 @@ existing stage approvals and independent lenses remain, with an initial and opti
 per required artifact/lens inside actual granted scope. Legacy projects adopt explicitly; histories
 and exhausted allowances are never reset. Preliminary policy feasibility precedes final Architecture
 approval when read scope is available; it does not complete formal Governance.
+New delivery projects also use `corp-policy-v1`: explicit hash-bound shared Corp assumptions may support
+Architecture approval without target identifiers, but planning completion, CodeGen and deployment require
+current target-verified policy evidence. Existing projects adopt only through an actual source choice.
+Follow [source selection and private native capture](.github/skills/apex-azure-governance-discovery/references/policy-source.md);
+do not require user-prepared scope JSON or publish identifying private evidence.
 
 | Step | Phase        | Output                                                   | Review                                                    |
 | ---- | ------------ | -------------------------------------------------------- | --------------------------------------------------------- |
@@ -181,6 +186,11 @@ detection. Authoring rules:
 [`.github/instructions/sku-manifest.instructions.md`](.github/instructions/sku-manifest.instructions.md).
 
 ## Conventions Detail
+
+Third-party research belongs in source/date references and short original conclusions, not automatic whole-page copies.
+Keep necessary full-text captures private outside Git unless redistribution rights and attribution are established.
+Pricing's exact-byte retail API evidence requirement does not extend to commercial documentation pages; follow the
+[documentation evidence contract](.github/skills/apex-azure-defaults/references/cost-estimate-parent-contract.md#product-documentation-and-publication).
 
 For deeper guidance, agents read these on demand:
 

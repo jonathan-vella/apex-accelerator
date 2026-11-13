@@ -25,15 +25,26 @@
  * Exit codes:
  *   0  all review-mandated artifacts have their sidecar (or audited skip)
  *   1  one or more missing sidecars detected
+ *
+ * --publication-checkpoint is reserved for the Git publication snapshot:
+ * an explicitly unapproved, never-started Governance draft can be saved
+ * without granting handoff/completion approval. Default checks stay strict.
+ * Standalone assessments use their own phase gates, not delivery numbering;
+ * publishing an in-progress draft never accepts its unfinished review bundle.
  */
 
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { createAjv } from "./_lib/ajv-validator.mjs";
+import { readJson, sha256File } from "./_lib/json.mjs";
 import { Reporter } from "./_lib/reporter.mjs";
 import { LAYOUT_SUBDIRS, resolveReviewPath, resolveSessionStatePath } from "./_lib/project-paths.mjs";
 import { validateProject } from "./validate-risk-authorizations.mjs";
 
 const ROOT = "agent-output";
+const cliArgs = process.argv.slice(2);
+const publicationCheckpoint = cliArgs.includes("--publication-checkpoint");
 
 // step key -> { gatingArtifact, requiredSidecar, label }
 const GATES = {
@@ -63,6 +74,9 @@ const GATES = {
 
 const r = new Reporter("Challenger Presence Validator");
 r.header();
+for (const argument of cliArgs.filter((argument) => argument !== "--publication-checkpoint")) {
+  r.error("CLI", `Unsupported argument: ${argument}; optional flag: --publication-checkpoint`);
+}
 
 function listProjects(rootDir) {
   if (!fs.existsSync(rootDir)) return [];
@@ -129,6 +143,112 @@ function step2Residue(projectDir) {
 
 const STEP_ORDER = ["1", "2", "3", "3_5", "4", "5", "6", "7"];
 
+let validateAssessmentSchema = null;
+function getAssessmentSchemaValidator() {
+  if (!validateAssessmentSchema) {
+    const schema = readJson(fileURLToPath(new URL("../schemas/session-state.schema.json", import.meta.url)));
+    validateAssessmentSchema = createAjv().compile({ ...schema.$defs.assessmentRun, $defs: schema.$defs });
+  }
+  return validateAssessmentSchema;
+}
+
+function resolveContainedProjectFile(projectDir, relPath) {
+  if (
+    typeof relPath !== "string" ||
+    !relPath.trim() ||
+    relPath.includes("\\") ||
+    relPath.includes("\0") ||
+    /[*?[\]]/.test(relPath) ||
+    relPath.split("/")[0].includes(":") ||
+    path.isAbsolute(relPath) ||
+    relPath
+      .split("/")
+      .some((part) => part === "" || part === "." || part === ".." || part.startsWith("assessment-step-")) ||
+    relPath === "00-session-state.json" ||
+    relPath === "_meta/00-session-state.json"
+  ) {
+    return null;
+  }
+  const rootAbs = path.resolve(projectDir);
+  try {
+    if (fs.lstatSync(rootAbs).isSymbolicLink()) return null;
+    let cursor = rootAbs;
+    for (const part of relPath.split("/")) {
+      cursor = path.join(cursor, part);
+      if (fs.lstatSync(cursor).isSymbolicLink()) return null;
+    }
+    const realRoot = fs.realpathSync(rootAbs);
+    const realTarget = fs.realpathSync(cursor);
+    const rel = path.relative(realRoot, realTarget);
+    if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return null;
+    return cursor;
+  } catch {
+    return null;
+  }
+}
+
+function validateAssessmentPresence(project, projectDir, state) {
+  const label = `${project}/Standalone assessment`;
+  if (state.decisions?.workflow_mode !== "assessment") {
+    r.error(label, "assessment_run requires explicit workflow_mode=assessment");
+    return;
+  }
+  const validate = getAssessmentSchemaValidator();
+  const run = state.assessment_run;
+  if (!validate(run)) {
+    r.error(label, `Invalid assessment_run: ${JSON.stringify(validate.errors)}`);
+    return;
+  }
+  if (
+    STEP_ORDER.slice(STEP_ORDER.indexOf("3_5")).some(
+      (key) => state.steps?.[key] && !["pending", "not_started"].includes(state.steps[key].status),
+    ) ||
+    ["04-governance-constraints.md", "04-implementation-plan.md", "06-deployment-summary.md"].some((name) =>
+      fs.existsSync(path.join(projectDir, name)),
+    )
+  ) {
+    r.error(label, "Standalone assessment cannot waive downstream delivery history or delivery artifacts");
+    return;
+  }
+  r.tick();
+  if (run.status === "in_progress" && !["acceptance", "terminal"].includes(run.phase)) {
+    r.info(label, `${run.phase} draft; independent WAF and cost reviews remain required before final acceptance`);
+    return;
+  }
+  const requiresRecordedReceipt = run.phase === "terminal" || run.status === "accepted";
+  for (const lens of ["comprehensive", "cost-feasibility"]) {
+    const recorded = run.reviews?.find((review) => review.lens === lens);
+    if (requiresRecordedReceipt && !recorded) {
+      r.error(label, `Missing recorded ${lens} review receipt at ${run.phase}`);
+      continue;
+    }
+    const cycleId = run.review_links?.[lens]?.cycle_id;
+    const artifact = lens === "comprehensive" ? "02-architecture-assessment.md" : "03-cost-management-report.md";
+    const cycles = Object.entries(state.decisions.review_cycles ?? {}).filter(([id, cycle]) =>
+      cycleId
+        ? id === cycleId
+        : cycle.step === "2" && cycle.lens === lens && cycle.artifact === `agent-output/${project}/${artifact}`,
+    );
+    const matchedCycle = cycles.length === 1 ? cycles[0][1] : null;
+    const selected =
+      matchedCycle?.current_path ||
+      (cycleId && typeof matchedCycle?.canonical_path === "string"
+        ? path.posix.basename(matchedCycle.canonical_path)
+        : null);
+    let sidecar = null;
+    if (recorded) {
+      sidecar = resolveContainedProjectFile(projectDir, recorded.path);
+    } else if (selected) {
+      const candidate = resolveReviewPath(projectDir, selected);
+      const rel = path.relative(path.resolve(projectDir), path.resolve(candidate)).split(path.sep).join("/");
+      sidecar = resolveContainedProjectFile(projectDir, rel);
+    }
+    if (!sidecar || !sidecarOk(sidecar) || (recorded && sha256File(sidecar) !== recorded.sha256)) {
+      r.error(label, `Missing, unreadable or changed ${lens} review at ${run.phase}`);
+    }
+  }
+}
+
 function isStepInProgressBeforeHandoff(sessionStatePath, stepKey) {
   if (!fs.existsSync(sessionStatePath)) return false;
   try {
@@ -143,6 +263,41 @@ function isStepInProgressBeforeHandoff(sessionStatePath, stepKey) {
   } catch {
     return false;
   }
+}
+
+function isPendingGovernanceCheckpoint(state, projectDir, stepKey, artifact) {
+  if (!publicationCheckpoint || stepKey !== "3_5" || state?.steps?.[stepKey]?.status !== "pending") return false;
+  const legacyPasses = state.review_audit?.step_3_5?.passes_executed;
+  if (
+    (legacyPasses !== undefined && legacyPasses !== 0) ||
+    state.steps[stepKey].completed ||
+    state.review_selections?.[stepKey] ||
+    !Array.isArray(state.review_attempts ?? []) ||
+    (state.review_attempts ?? []).some((attempt) => String(attempt?.step).replace(".", "_") === stepKey) ||
+    Object.values(state.decisions?.review_cycles ?? {}).some(
+      (cycle) => String(cycle?.step).replace(".", "_") === stepKey,
+    ) ||
+    STEP_ORDER.slice(STEP_ORDER.indexOf(stepKey) + 1).some(
+      (key) => ![undefined, "pending", "not_started"].includes(state.steps[key]?.status),
+    ) ||
+    [projectDir, path.join(projectDir, "reviews")].some(
+      (directory) =>
+        fs.existsSync(directory) &&
+        fs
+          .readdirSync(directory)
+          .some((name) => /^challenge-findings-governance-constraints(?:-.*)?\.json$/.test(name)),
+    )
+  ) {
+    return false;
+  }
+  const header = fs
+    .readFileSync(path.join(projectDir, artifact), "utf8")
+    .replace(/<!--[\s\S]*?(?:-->|$)/g, "")
+    .split(/^## /m)[0];
+  return (
+    !/^\s*(?:```|~~~)/m.test(header) &&
+    /^!\[Status\]\(https:\/\/img\.shields\.io\/badge\/Status-Owner_prepared_not_approved-[^\s)]+\)\s*$/m.test(header)
+  );
 }
 
 function step2Complete(sessionStatePath) {
@@ -191,6 +346,10 @@ for (const project of projects) {
       }
     }
   }
+  if (stateObj?.decisions?.workflow_mode === "assessment" || stateObj?.assessment_run) {
+    validateAssessmentPresence(project, projectDir, stateObj);
+    continue;
+  }
   for (const [stepKey, gate] of Object.entries(GATES)) {
     r.tick();
     const gatingArtifact = [gate.gatingArtifact, gate.alternativeArtifact].find(
@@ -216,6 +375,14 @@ for (const project of projects) {
       continue;
     }
 
+    if (isPendingGovernanceCheckpoint(stateObj, projectDir, stepKey, gatingArtifact)) {
+      r.info(
+        `${project}/${gate.label}`,
+        "unapproved pending owner draft: checkpoint publication only; independent review remains required for handoff/completion",
+      );
+      continue;
+    }
+
     r.error(
       `${project}/${gate.label}`,
       `gating artifact ${gatingArtifact} exists but required findings ` +
@@ -235,6 +402,8 @@ for (const project of projects) {
 
 r.summary();
 r.exitOnError(
-  "All review-mandated artifacts have a present challenger findings sidecar (or audited skip)",
+  publicationCheckpoint
+    ? "Checkpoint publication validated; unapproved pending drafts grant no workflow approval"
+    : "Review presence validated; in-progress assessment drafts grant no final acceptance",
   "Missing challenger findings sidecar(s) detected — review is mandatory before handoff",
 );

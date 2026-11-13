@@ -45,7 +45,14 @@ import { fileURLToPath } from "node:url";
 import { reviewCompatibility, supportingInputCompatible } from "./_lib/review-compatibility.mjs";
 import { Reporter } from "./_lib/reporter.mjs";
 import { parseFrontmatter } from "./_lib/parse-frontmatter.mjs";
-import { isLayoutV2, projectDirFromPath, resolveProjectFile } from "./_lib/project-paths.mjs";
+import {
+  isLayoutV2,
+  isPrivatePolicyReference,
+  projectDirFromPath,
+  resolveProjectFile,
+  resolvePrivatePolicyReference,
+  requiredPrivateReviewInputs,
+} from "./_lib/project-paths.mjs";
 
 const ROOT = "agent-output";
 const REQUIRED_TOP_LEVEL = [
@@ -86,18 +93,26 @@ function reviewerMode(reviewer) {
   throw new Error(`Unknown reviewer: ${JSON.stringify(reviewer)}`);
 }
 const VALID_SEVERITY = new Set(["must_fix", "should_fix", "suggestion"]);
-const MUTABLE_INPUT_NAMES = new Set([
-  "sku-manifest.json",
-  "sku-manifest.md",
-  "00-handoff.md",
-  "00-session-state.json",
-  "README.md",
-]);
+const ALWAYS_MUTABLE_INPUT_NAMES = new Set(["sku-manifest.json", "sku-manifest.md", "00-session-state.json"]);
+const ROOT_ONLY_MUTABLE_INPUT_NAMES = new Set(["00-handoff.md", "README.md"]);
+
+function isProjectRootArtifactPath(inputPath) {
+  const normalized = String(inputPath)
+    .replaceAll("\\", "/")
+    .replace(/^\.\/+/, "");
+  const parts = normalized.split("/").filter(Boolean);
+  if (parts.length <= 1) return true;
+  if (parts[0] === "agent-output" && parts.length === 3) return true;
+  const agentOutputIdx = parts.lastIndexOf("agent-output");
+  if (agentOutputIdx >= 0 && parts.length - agentOutputIdx === 3) return true;
+  return !parts.includes("_meta");
+}
 
 // A later step must edit these files, so freezing one as review input guarantees a stale review.
 export function mutableInputProblem(inputPath) {
   const name = path.basename(String(inputPath));
-  if (!MUTABLE_INPUT_NAMES.has(name) && !name.endsWith("-decisions.json")) return null;
+  const isRootOnlyMutable = ROOT_ONLY_MUTABLE_INPUT_NAMES.has(name) && isProjectRootArtifactPath(inputPath);
+  if (!ALWAYS_MUTABLE_INPUT_NAMES.has(name) && !isRootOnlyMutable && !name.endsWith("-decisions.json")) return null;
   return (
     `${name} is a mutable parent-owned file that a later step must change, so a review that freezes it ` +
     "fails strict freshness. Remove it from supporting inputs and quote what you read from it in the review " +
@@ -123,7 +138,9 @@ export function cacheInputs(artifactPath, root = process.cwd(), reviewer) {
   const mode = reviewerMode(reviewer);
   const read = (relative) => fs.readFileSync(path.resolve(root, relative));
   const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
-  let artifact = path.resolve(root, artifactPath);
+  let artifact = isPrivatePolicyReference(artifactPath)
+    ? resolvePrivatePolicyReference(root, artifactPath)
+    : path.resolve(root, artifactPath);
   if (!fs.existsSync(artifact)) {
     const pdir = projectDirFromPath(artifact);
     if (isLayoutV2(pdir)) {
@@ -183,6 +200,17 @@ function verifyCache(file, doc, root = process.cwd(), execution = doc.review_exe
     r.error(`${file}: cache_inputs.model must be present only for an explicitly pinned legacy reviewer`);
   }
   const reviewer = doc.cache_inputs?.reviewer;
+  const project =
+    execution?.project_name ?? path.basename(projectDirFromPath(path.resolve(root, doc.challenged_artifact)));
+  for (const expectedInput of requiredPrivateReviewInputs(root, project, doc.artifact_type, doc.challenged_artifact)) {
+    if (
+      !doc.supporting_inputs?.some(
+        (input) => input.path === expectedInput.path && input.sha256 === expectedInput.sha256,
+      )
+    ) {
+      r.error(`${file}: required private policy evidence is not frozen in supporting inputs`);
+    }
+  }
   if (isRecordedReviewer(reviewer)) {
     if (Object.hasOwn(doc.cache_inputs, "subagent_sha")) {
       r.error(`${file}: ${reviewer} recorded cache must not claim a legacy subagent_sha`);
@@ -209,7 +237,9 @@ function verifyCache(file, doc, root = process.cwd(), execution = doc.review_exe
           if (!input || typeof input.path !== "string" || !/^[a-f0-9]{64}$/.test(input.sha256 || "")) {
             throw new Error("invalid supporting input record");
           }
-          const resolved = path.resolve(root, input.path);
+          const resolved = isPrivatePolicyReference(input.path)
+            ? resolvePrivatePolicyReference(root, input.path, project)
+            : path.resolve(root, input.path);
           if (seen.has(resolved)) throw new Error("duplicate supporting input");
           seen.add(resolved);
           const mutable = mutableInputProblem(input.path);

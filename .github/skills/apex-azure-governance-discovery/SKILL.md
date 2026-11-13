@@ -31,6 +31,9 @@ pulling raw Azure REST responses into LLM context.
 
 ## Rules
 
+- **Choose the source early** — follow [policy-source capture](references/policy-source.md).
+  The shared ALZ Corp baseline supports explicitly assumed Architecture, never target verification.
+  Native target/read inputs use managed private capture when artifacts must remain anonymous; no user-prepared JSON.
 - **Stay deterministic** — the discovery script is a single batched REST traversal; no LLM calls, no retries that hide errors, no inferred policy effects
 - **Use compact status for routing**, then targeted envelope reads for decisions; recover all required evidence and diagnostics
 - **Schema compliance is mandatory** — envelope MUST conform to `tools/schemas/governance-constraints.schema.json` (`schema_version: governance-constraints-v1`)
@@ -63,6 +66,7 @@ Flags:
 | `--include-defender-auto`      | Include Defender auto-assignments (the default; retained for compatibility). |
 | `--exclude-defender-auto`      | Explicit legacy filtered coverage; cannot satisfy full-coverage feasibility. |
 | `--validate-only`              | Validate a saved full-coverage snapshot offline; requires explicit subscription. |
+| `--retain-rule-evidence`       | Retain/validate full rule objects and effective lineage inside an owner-only private snapshot outside Git. |
 | `--verbose`                    | Emit informational progress diagnostics to stderr.                 |
 
 Exit codes:
@@ -91,6 +95,15 @@ human-readable preview after:
 ```
 
 ## Output Contract
+
+Private target-backed reconciliation uses `--retain-rule-evidence` for collection and offline validation.
+It retains raw assignments, definitions, initiatives and exemptions plus every effective member rule,
+including Audit and Disabled occurrences, with parameter lineage and a content digest inside the same snapshot.
+Existing opaque private references and whole-file hashes cover this evidence; no new public raw artifact is created.
+The directory must already be owner-only (`0700`) outside repositories without symlinks; snapshots/previews use `0600`.
+Summary-only caches fail this requirement without issuing a new Azure call. A bounded, authorized `--refresh` is needed;
+cached rendering cannot reconstruct discarded rules. Legacy summary output remains available without this flag.
+Collection COMPLETE, retained bodies and offline tests do not establish reconciliation, review or approval.
 
 The script writes a JSON envelope conforming to
 [`tools/schemas/governance-constraints.schema.json`](../../../tools/schemas/governance-constraints.schema.json)

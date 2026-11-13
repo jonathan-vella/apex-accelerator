@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import test from "node:test";
+import test, { after } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   allowedPaginationPath,
@@ -18,6 +18,7 @@ import {
   validateAssessmentCost,
   validateScopes,
 } from "../../scripts/assessment-cost.mjs";
+import { evidenceBackedFixture } from "./test_cost_estimate_fixture.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const SCRIPT = path.join(ROOT, "tools/scripts/assessment-cost.mjs");
@@ -27,6 +28,11 @@ const RG = `${SUB}/resourceGroups/synthetic`;
 const RESOURCE = `${RG}/providers/Microsoft.Compute/virtualMachines/synthetic`;
 const OTHER = `${RG}/providers/Microsoft.Compute/virtualMachines/other`;
 const WINDOWS = deriveReportingWindows(AS_OF);
+const PRICING_DIRECTORY = fs.mkdtempSync(path.join(ROOT, ".assessment-retail-test-"));
+const PRICING_SOURCES = new Map();
+const PRICING_REQUESTS = new WeakMap();
+let pricingSequence = 0;
+after(() => fs.rmSync(PRICING_DIRECTORY, { recursive: true, force: true }));
 
 function request(overrides = {}) {
   return {
@@ -109,10 +115,11 @@ function report(evidence = [], overrides = {}) {
 
 function validate(value, sources = new Map(), overrides = {}) {
   return validateAssessmentCost(value, {
+    root: PRICING_DIRECTORY,
     asOf: AS_OF,
     readEvidence: (name) => {
-      assert.ok(sources.has(name), `Missing synthetic evidence ${name}`);
-      return sources.get(name);
+      assert.ok(sources.has(name) || PRICING_SOURCES.has(name), `Missing synthetic evidence ${name}`);
+      return sources.get(name) ?? PRICING_SOURCES.get(name);
     },
     ...overrides,
   });
@@ -467,7 +474,8 @@ test("currency and actual/amortized views remain separate; expected currency nev
     [actual.provenance.path, actual.bytes],
     [amortized.provenance.path, amortized.bytes],
   ]);
-  assert.equal(validate(value, sources).valid, true);
+  const result = validate(value, sources);
+  assert.equal(result.valid, true, result.errors.join("; "));
   assert.equal(compareCostEvidence(actual.evidence, amortized.evidence, "USD").comparable, false);
 });
 
@@ -728,7 +736,7 @@ test("report validation rejects duplicate evidence, overlaps, unsupported proper
 });
 
 function retailOutput(overrides = {}) {
-  return {
+  const source = {
     status: "COMPLETE",
     project_name: "synthetic",
     region: "swedencentral",
@@ -736,11 +744,15 @@ function retailOutput(overrides = {}) {
     resources: [
       {
         name: "synthetic",
-        service_name: "Synthetic fixture",
+        service_name: "Azure App Service",
         sku: "Fixture",
         region: "swedencentral",
         quantity: 1,
         monthly_cost: 12,
+        unit_of_measure: "1 GB",
+        retail_price: 12,
+        usage_amount: 1,
+        usage: { amount: 1, unit: "GB", scope: "per-instance" },
         notes: "Synthetic fixture, not a quoted Azure rate",
       },
     ],
@@ -758,10 +770,39 @@ function retailOutput(overrides = {}) {
     budget_exceeded: false,
     ...overrides,
   };
+  const directory = path.join(PRICING_DIRECTORY, `case-${++pricingSequence}`);
+  fs.mkdirSync(directory);
+  const linked = evidenceBackedFixture(source, directory, {
+    queriedAt: source.queried_at,
+    cwd: PRICING_DIRECTORY,
+  });
+  const result = { ...linked, ...overrides };
+  const retainTree = (folder) => {
+    for (const entry of fs.readdirSync(folder, { withFileTypes: true })) {
+      const filename = path.join(folder, entry.name);
+      if (entry.isDirectory()) retainTree(filename);
+      else
+        PRICING_SOURCES.set(
+          path.relative(PRICING_DIRECTORY, filename).split(path.sep).join("/"),
+          fs.readFileSync(filename),
+        );
+    }
+  };
+  retainTree(directory);
+  const request = path
+    .relative(PRICING_DIRECTORY, path.join(directory, "pricing-request.json"))
+    .split(path.sep)
+    .join("/");
+  PRICING_REQUESTS.set(result, {
+    path: request,
+    sha256: createHash("sha256").update(PRICING_SOURCES.get(request)).digest("hex"),
+  });
+  return result;
 }
 
 function estimateFixture(source = retailOutput()) {
   const saved = retained(source, "_meta/cost/retail-output.json", "cost-estimate-subagent", source.queried_at);
+  saved.provenance.pricing_request = PRICING_REQUESTS.get(source);
   const estimate = {
     id: "iac-estimate",
     source_kind: "estimate",
@@ -779,7 +820,8 @@ test("IaC retail estimates retain verified leaf provenance, exact amount and ass
   const saved = estimateFixture();
   const value = report([], { status: "complete", estimates: [saved.estimate] });
   const sources = new Map([[saved.provenance.path, saved.bytes]]);
-  assert.equal(validate(value, sources).valid, true);
+  const result = validate(value, sources);
+  assert.equal(result.valid, true, result.errors.join("; "));
   for (const change of [
     { source_kind: "actual" },
     { currency: "EUR" },
@@ -806,6 +848,8 @@ test("IaC retail estimates retain verified leaf provenance, exact amount and ass
   const failed = estimateFixture(
     retailOutput({
       status: "FAILED",
+      monthly_total: null,
+      yearly_total: null,
       unresolved_items: ["External module unpriced"],
       resources: [{ ...retailOutput().resources[0], monthly_cost: null }],
     }),
@@ -816,13 +860,11 @@ test("IaC retail estimates retain verified leaf provenance, exact amount and ass
     monthly_total: null,
     gaps: ["External module unpriced"],
   };
-  assert.equal(
-    validate(
-      report([], { status: "not_assessed", estimates: [unknown] }),
-      new Map([[failed.provenance.path, failed.bytes]]),
-    ).valid,
-    true,
+  const unavailable = validate(
+    report([], { status: "not_assessed", estimates: [unknown] }),
+    new Map([[failed.provenance.path, failed.bytes]]),
   );
+  assert.equal(unavailable.valid, true, unavailable.errors.join("; "));
   assert.equal(
     validate(
       report([], { status: "complete", estimates: [failed.estimate] }),
@@ -830,6 +872,36 @@ test("IaC retail estimates retain verified leaf provenance, exact amount and ass
     ).valid,
     false,
   );
+});
+
+test("root-produced retail evidence imports through independently retained project-relative requests", () => {
+  const workspace = path.join(PRICING_DIRECTORY, "separate-workspace");
+  const root = path.join(workspace, "agent-output", "synthetic");
+  const directory = path.join(root, "evidence", "pricing");
+  fs.mkdirSync(directory, { recursive: true });
+  const source = retailOutput();
+  Object.assign(source.resources[0], {
+    unit_of_measure: "1 GB",
+    retail_price: 12,
+    usage_amount: 1,
+    usage: { amount: 1, unit: "GB", scope: "per-instance" },
+  });
+  const linked = evidenceBackedFixture(source, directory, { queriedAt: AS_OF, cwd: workspace });
+  const saved = estimateFixture(linked);
+  fs.mkdirSync(path.join(root, "_meta", "cost"), { recursive: true });
+  fs.writeFileSync(path.join(root, saved.provenance.path), saved.bytes);
+  saved.provenance.pricing_request = {
+    path: "evidence/pricing/pricing-request.json",
+    sha256: createHash("sha256")
+      .update(fs.readFileSync(path.join(directory, "pricing-request.json")))
+      .digest("hex"),
+  };
+  const result = validateAssessmentCost(report([], { status: "complete", estimates: [saved.estimate] }), {
+    root,
+    asOf: AS_OF,
+    readEvidence: (reference) => fs.readFileSync(path.join(root, reference)),
+  });
+  assert.equal(result.valid, true, result.errors.join("; "));
 });
 
 test("a complete retail estimate never fills a denied actual-cost record", () => {
@@ -862,6 +934,7 @@ test("documented minimal plan, saved actual, estimate and not-assessed envelopes
   const saved = estimateFixture();
   assert.match(estimate.provenance.sha256, /^<replace/);
   estimate.provenance.sha256 = saved.provenance.sha256;
+  estimate.provenance.pricing_request = saved.provenance.pricing_request;
   assert.equal(
     validate(report([], { status: "complete", estimates: [estimate] }), new Map([[saved.provenance.path, saved.bytes]]))
       .valid,
@@ -1081,4 +1154,453 @@ test("CLI emits bounded JSON errors, accepts --input, validates persisted fixtur
   const escaped = run(...args);
   assert.equal(escaped.code, 1);
   assert.match(escaped.result.errors.join(" "), /escapes project root/);
+});
+
+test("physical collector consolidates 16 logical requests into 8 physical calls, handles 429 Retry-After, and verifies same-scope empty currency", async (t) => {
+  const { executePhysicalCostPlan, parseRetryAfterMs, planPhysicalCostCalls } =
+    await import("../../scripts/collect-assessment-cost.mjs");
+  const scopes = [
+    "/subscriptions/11111111-1111-1111-1111-111111111111",
+    "/subscriptions/22222222-2222-2222-2222-222222222222",
+    "/subscriptions/33333333-3333-3333-3333-333333333333",
+    "/subscriptions/44444444-4444-4444-4444-444444444444",
+  ];
+  const planConfig = { as_of: AS_OF, scopes };
+  const planned = planCostQueries(planConfig);
+  assert.equal(planned.requests.length, 16);
+  const physical = planPhysicalCostCalls(planned);
+  assert.equal(physical.length, 8);
+
+  assert.equal(parseRetryAfterMs({ "x-ms-ratelimit-microsoft.costmanagement-entity-retry-after": "3" }, 1), 3000);
+  assert.equal(parseRetryAfterMs({ "retry-after": "2" }, 2), 2000);
+
+  const projectRoot = path.join(ROOT, `.collect-cost-${randomUUID()}`);
+  fs.mkdirSync(projectRoot, { recursive: true });
+  t.after(() => fs.rmSync(projectRoot, { recursive: true, force: true }));
+
+  const sleeps = [];
+  let throttledOnce = false;
+  const executor = (url, _body) => {
+    if (!throttledOnce && url.includes("44444444") && url.includes("/query")) {
+      throttledOnce = true;
+      return { status_code: 429, headers: { "retry-after": "1" }, body: { error: { code: "TooManyRequests" } } };
+    }
+    const scope = scopes.find((s) => url.toLowerCase().includes(s.toLowerCase()));
+    if (url.includes("/forecast")) {
+      return {
+        status_code: 200,
+        headers: {},
+        body: {
+          properties: {
+            columns: [
+              { name: "PreTaxCost", type: "Number" },
+              { name: "Currency", type: "String" },
+              { name: "UsageDate", type: "Number" },
+              { name: "CostStatus", type: "String" },
+            ],
+            rows: [
+              [10, "USD", 20260310, "Actual"],
+              [25, "USD", 20260320, "Forecast"],
+            ],
+            nextLink: null,
+          },
+        },
+      };
+    }
+    // Scope 4 has 0 rows in preceding_month (Jan 2026), positive rows in Feb & Mar MTD.
+    const rows =
+      scope === scopes[3]
+        ? [
+            [
+              31.44,
+              "USD",
+              "Virtual Machines",
+              `${scope}/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm1`,
+              20260215,
+            ],
+            [
+              0.43,
+              "USD",
+              "Storage",
+              `${scope}/resourceGroups/rg/providers/Microsoft.Storage/storageAccounts/st1`,
+              20260305,
+            ],
+          ]
+        : [
+            [
+              50,
+              "USD",
+              "Compute",
+              `${scope}/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm`,
+              20260110,
+            ],
+            [
+              60,
+              "USD",
+              "Compute",
+              `${scope}/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm`,
+              20260210,
+            ],
+            [
+              15,
+              "USD",
+              "Compute",
+              `${scope}/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm`,
+              20260305,
+            ],
+          ];
+    return {
+      status_code: 200,
+      headers: {},
+      body: {
+        properties: {
+          columns: [
+            { name: "PreTaxCost", type: "Number" },
+            { name: "Currency", type: "String" },
+            { name: "ServiceName", type: "String" },
+            { name: "ResourceId", type: "String" },
+            { name: "UsageDate", type: "Number" },
+          ],
+          rows,
+          nextLink: null,
+        },
+      },
+    };
+  };
+
+  const out = executePhysicalCostPlan(planConfig, {
+    projectRoot,
+    collectedAt: AS_OF,
+    executor,
+    sleep: (ms) => sleeps.push(ms),
+    minIntervalMs: 1500,
+  });
+  assert.equal(out.physical_call_count, 8);
+  assert.equal(out.report.status, "complete");
+  assert.ok(sleeps.includes(1000)); // 429 Retry-After backoff
+  const scope4Preceding = out.report.evidence.find((e) => e.id === "scope4-preceding_month");
+  assert.equal(scope4Preceding.status, "complete");
+  assert.equal(scope4Preceding.series[0].currency, "USD");
+  assert.equal(scope4Preceding.series[0].amount, "0");
+
+  const validation = validateAssessmentCost(out.report, {
+    root: projectRoot,
+    asOf: AS_OF,
+    readEvidence: (rel) => fs.readFileSync(path.join(projectRoot, rel)),
+    approvedScopes: scopes,
+    approvedPlan: planConfig,
+  });
+  assert.deepEqual(validation, { valid: true, errors: [] });
+
+  // Conflicting sibling currency invalidates same-scope currency inference.
+  const badReport = structuredClone(out.report);
+  const donor = badReport.evidence.find((e) => e.id === "scope4-previous_month");
+  donor.series[0].currency = "EUR";
+  const badCheck = validateAssessmentCost(badReport, {
+    root: projectRoot,
+    asOf: AS_OF,
+    readEvidence: (rel) => fs.readFileSync(path.join(projectRoot, rel)),
+    approvedScopes: scopes,
+    approvedPlan: planConfig,
+  });
+  assert.equal(badCheck.valid, false);
+});
+
+test("physical cost collector rejects gapped consolidation, preserves body+pacing across pagination, and captures 429 headers/ENOBUFS", async (t) => {
+  const { defaultHttpExecutor, executePhysicalCostPlan, parseAzRestResult, planPhysicalCostCalls } =
+    await import("../../scripts/collect-assessment-cost.mjs");
+  const sub = "/subscriptions/11111111-1111-1111-1111-111111111111";
+
+  // 1. Disjoint custom periods must NOT consolidate into one spanning query.
+  const disjointPlan = planCostQueries({
+    as_of: "2026-03-15T12:00:00.000Z",
+    scopes: [sub],
+    periods: [
+      { id: "jan_slice", kind: "custom", from: "2026-01-01T00:00:00.000Z", to: "2026-01-05T23:59:59.999Z" },
+      { id: "mar_slice", kind: "custom", from: "2026-03-01T00:00:00.000Z", to: "2026-03-05T23:59:59.999Z" },
+    ],
+  });
+  const disjointCalls = planPhysicalCostCalls(disjointPlan);
+  assert.equal(disjointCalls.length, 2);
+  assert.ok(disjointCalls.every((c) => c.kind === "single_query"));
+
+  // 2. ENOBUFS, token-clean --only-show-errors (never --debug), and rate-limit parsing in defaultHttpExecutor / parseAzRestResult.
+  const enobufs = parseAzRestResult({ error: { code: "ENOBUFS" }, status: null, stdout: "", stderr: "" });
+  assert.equal(enobufs.status_code, 502);
+  assert.equal(enobufs.body.error.code, "ResponseBufferExceeded");
+
+  const exec429 = defaultHttpExecutor(
+    "https://management.azure.com/test",
+    { type: "ActualCost" },
+    (_bin, args, opts) => {
+      assert.equal(opts.maxBuffer, 64 * 1024 * 1024);
+      assert.equal(args.includes("--debug"), false, "defaultHttpExecutor must never pass --debug");
+      assert.ok(args.includes("--only-show-errors"));
+      assert.ok(args.includes("--body"));
+      return {
+        status: 1,
+        stdout: "",
+        stderr: '{"error":{"code":"429","message":"Too many requests. Please retry after 17 seconds."}}',
+      };
+    },
+  );
+  assert.equal(exec429.status_code, 429);
+  assert.equal(exec429.headers["retry-after"], "17");
+
+  // Legacy header-style stderr lines remain supported by parseAzRestResult.
+  const legacy429 = parseAzRestResult({
+    status: 1,
+    stdout: "",
+    stderr: "Response status: 429\n" + "'x-ms-ratelimit-microsoft.costmanagement-entity-retry-after': '12'\n",
+  });
+  assert.equal(legacy429.status_code, 429);
+  assert.equal(legacy429.headers["x-ms-ratelimit-microsoft.costmanagement-entity-retry-after"], "12");
+
+  // 3. Continuation pages keep POST body and apply minIntervalMs pacing before every page.
+  const pageRoot = path.join(ROOT, `.collect-paged-${randomUUID()}`);
+  fs.mkdirSync(pageRoot, { recursive: true });
+  t.after(() => fs.rmSync(pageRoot, { recursive: true, force: true }));
+  const singlePeriodCfg = {
+    as_of: AS_OF,
+    scopes: [sub],
+    expected_currency: "USD",
+    periods: [WINDOWS[0]],
+  };
+  const seenBodies = [];
+  const intervals = [];
+  let callNum = 0;
+  const pagedOut = executePhysicalCostPlan(singlePeriodCfg, {
+    projectRoot: pageRoot,
+    collectedAt: AS_OF,
+    minIntervalMs: 1500,
+    sleep: (ms) => intervals.push(ms),
+    executor: (url, body) => {
+      seenBodies.push(body);
+      callNum++;
+      return {
+        status_code: 200,
+        headers: {},
+        body: {
+          properties: {
+            columns: [
+              { name: "PreTaxCost", type: "Number" },
+              { name: "Currency", type: "String" },
+              { name: "ServiceName", type: "String" },
+              { name: "ResourceId", type: "String" },
+              { name: "UsageDate", type: "Number" },
+            ],
+            rows: [
+              [
+                10 * callNum,
+                "USD",
+                "Compute",
+                `${sub}/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm${callNum}`,
+                20260210 + callNum,
+              ],
+            ],
+            nextLink:
+              callNum === 1
+                ? `https://management.azure.com${sub}/providers/Microsoft.CostManagement/query?api-version=2023-11-01&$skiptoken=page2`
+                : null,
+          },
+        },
+      };
+    },
+  });
+  assert.equal(seenBodies.length, 2);
+  assert.ok(seenBodies[0] !== null);
+  assert.deepEqual(seenBodies[0], seenBodies[1]);
+  assert.deepEqual(intervals, [1500]);
+  assert.equal(pagedOut.report.evidence[0].status, "complete");
+  assert.equal(pagedOut.report.evidence[0].page_count, 2);
+
+  // 4. --include-amortized and --include-rg-breakdown write isolated companion contracts without clobbering primary.
+  const { runCollectCostCli } = await import("../../scripts/collect-assessment-cost.mjs");
+  const { validateCostRequest } = await import("../../scripts/cost-estimate.mjs");
+  const multiRoot = path.join(ROOT, `.collect-multi-${randomUUID()}`);
+  fs.mkdirSync(path.join(multiRoot, "_meta"), { recursive: true });
+  t.after(() => fs.rmSync(multiRoot, { recursive: true, force: true }));
+  const multiPlanPath = path.join(multiRoot, "_meta/cost-plan.json");
+  const multiPlan = {
+    as_of: AS_OF,
+    scopes: [sub],
+    expected_currency: "USD",
+    // Intentionally omit periods so --include-rg-breakdown exercises planCostQueries() default windows.
+  };
+  fs.writeFileSync(multiPlanPath, `${JSON.stringify(multiPlan, null, 2)}\n`);
+  const cliCode = runCollectCostCli(
+    [
+      "--plan",
+      multiPlanPath,
+      "--root",
+      multiRoot,
+      "--collected-at",
+      AS_OF,
+      "--include-amortized",
+      "--include-rg-breakdown",
+    ],
+    {
+      sleep: () => {},
+      executor: (url, body) => {
+        const isForecast = url.includes("/forecast?");
+        if (isForecast) {
+          return {
+            status_code: 200,
+            headers: {},
+            body: {
+              properties: {
+                columns: [
+                  { name: "PreTaxCost", type: "Number" },
+                  { name: "UsageDate", type: "Number" },
+                  { name: "CostStatus", type: "String" },
+                  { name: "Currency", type: "String" },
+                ],
+                rows: [
+                  [50, 20260301, "Actual", "USD"],
+                  [90, 20260320, "Forecast", "USD"],
+                ],
+                nextLink: null,
+              },
+            },
+          };
+        }
+        const firstGroupDim = body?.dataset?.grouping?.[0]?.name ?? "ServiceName";
+        const firstGroupVal = firstGroupDim === "ResourceGroupName" ? "rg-spoke" : "SQL Managed Instance";
+        return {
+          status_code: 200,
+          headers: {},
+          body: {
+            properties: {
+              columns: [
+                { name: "PreTaxCost", type: "Number" },
+                { name: "Currency", type: "String" },
+                { name: firstGroupDim, type: "String" },
+                { name: "ResourceId", type: "String" },
+                { name: "UsageDate", type: "Number" },
+              ],
+              rows: [
+                [
+                  body?.type === "AmortizedCost" ? 80 : 100,
+                  "USD",
+                  firstGroupVal,
+                  `${sub}/resourceGroups/rg-spoke/providers/Microsoft.Sql/managedInstances/sqlmi1`,
+                  20260215,
+                ],
+              ],
+              nextLink: null,
+            },
+          },
+        };
+      },
+    },
+  );
+  assert.equal(cliCode, 0);
+  const primaryDoc = JSON.parse(fs.readFileSync(path.join(multiRoot, "contracts/03-cost-management.json"), "utf8"));
+  const amortizedDoc = JSON.parse(
+    fs.readFileSync(path.join(multiRoot, "_meta/amortized-cost/contracts/03-cost-management.json"), "utf8"),
+  );
+  const rgDoc = JSON.parse(
+    fs.readFileSync(path.join(multiRoot, "_meta/resource-group-cost/contracts/03-cost-management.json"), "utf8"),
+  );
+  assert.equal(primaryDoc.evidence[0].request.cost_type, "ActualCost");
+  assert.equal(amortizedDoc.evidence[0].request.cost_type, "AmortizedCost");
+  assert.deepEqual(rgDoc.evidence[0].request.group_by, ["ResourceGroupName", "ResourceId"]);
+  assert.equal(
+    rgDoc.periods.some((p) => p.kind === "forecast"),
+    false,
+  );
+
+  // 5. PaaS recipes enforce service/SKU-specific variable dimensions and reject missing variable usage.
+  const paasCheck = validateCostRequest({
+    project_name: "paas-recipe-test",
+    region: "swedencentral",
+    output_path: path.join(multiRoot, "_meta/paas.json"),
+    resource_list: [
+      {
+        name: "sqlmi-gp-gen5",
+        service_name: "Azure SQL Managed Instance",
+        sku: "GP_Gen5_4",
+        region: "swedencentral",
+        quantity: 1,
+      },
+      { name: "sb-prem", service_name: "Azure Service Bus", sku: "Premium", region: "swedencentral", quantity: 1 },
+      {
+        name: "afw-std",
+        service_name: "Azure Firewall",
+        sku: "Standard",
+        region: "swedencentral",
+        quantity: 1,
+        usage: [
+          { dimension: "hours", amount: 730, unit: "Hour", scope: "per-instance" },
+          { dimension: "processed_gb", amount: 500, unit: "GB", scope: "aggregate" },
+        ],
+      },
+      {
+        name: "ca-cons",
+        service_name: "Azure Container Apps",
+        sku: "Consumption",
+        region: "swedencentral",
+        quantity: 1,
+        usage: [
+          { dimension: "vcpu_seconds", amount: 100000, unit: "vCPU-s", scope: "aggregate" },
+          { dimension: "gib_seconds", amount: 200000, unit: "GiB-s", scope: "aggregate" },
+          { dimension: "requests", amount: 500000, unit: "1M", scope: "aggregate" },
+        ],
+      },
+    ],
+  });
+  assert.equal(paasCheck.ok, true, paasCheck.unresolved_items.join("; "));
+  assert.equal(paasCheck.normalized.lines.length, 4);
+
+  // Firewall without processed_gb, Service Bus Standard without operations, and Container Apps Consumption without CPU/memory/requests fail preflight!
+  const missingFirewall = validateCostRequest({
+    project_name: "paas-missing-dim",
+    region: "swedencentral",
+    output_path: path.join(multiRoot, "_meta/paas-bad1.json"),
+    resource_list: [
+      {
+        name: "afw-hourly-only",
+        service_name: "Azure Firewall",
+        sku: "Standard",
+        region: "swedencentral",
+        quantity: 1,
+      },
+    ],
+  });
+  assert.equal(missingFirewall.ok, false);
+  assert.match(missingFirewall.unresolved_items.join("\n"), /requires known billable dimension 'processed_gb'/);
+
+  const missingSbStd = validateCostRequest({
+    project_name: "sb-std-missing",
+    region: "swedencentral",
+    output_path: path.join(multiRoot, "_meta/paas-bad2.json"),
+    resource_list: [
+      {
+        name: "sb-std",
+        service_name: "Azure Service Bus",
+        sku: "Standard",
+        region: "swedencentral",
+        quantity: 1,
+      },
+    ],
+  });
+  assert.equal(missingSbStd.ok, false);
+  assert.match(missingSbStd.unresolved_items.join("\n"), /requires known billable dimension 'operations'/);
+
+  const missingCa = validateCostRequest({
+    project_name: "ca-missing-dim",
+    region: "swedencentral",
+    output_path: path.join(multiRoot, "_meta/paas-bad3.json"),
+    resource_list: [
+      {
+        name: "ca-no-usage",
+        service_name: "Azure Container Apps",
+        sku: "Consumption",
+        region: "swedencentral",
+        quantity: 1,
+      },
+    ],
+  });
+  assert.equal(missingCa.ok, false);
+  assert.match(missingCa.unresolved_items.join("\n"), /requires known billable dimension 'vcpu_seconds'/);
 });

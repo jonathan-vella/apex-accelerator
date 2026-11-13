@@ -26,15 +26,22 @@ Callers: Architect (planned estimates) | As-Built (deployed estimates).
   temporary sibling, plus the supplied manifest's price/timestamp fields (and the companion
   `sku-manifest.md` rendered by `cost-estimate.mjs publish`) only when
   COMPLETE and `manifest_writeback: true`, using its temporary sibling for atomic writeback.
-  For the constrained fallback, request/evidence files may be created exclusively under
-  `{output_path}.retail-evidence/`; preserve existing files and use new names for each distinct query.
+  Query ledgers, captured MCP responses and constrained-fallback request/evidence files may be created exclusively under
+  `{dirname(output_path)}/pricing-evidence/` (as managed by `cost-estimate.mjs` and `fetch-retail-price-evidence.mjs`)
+  or `{output_path}.retail-evidence/`; preserve existing files and use new names for each distinct query.
+  Exact-byte capture applies to native retail API responses, not whole product-documentation pages.
+  Consume parent-supplied source/date/conclusion/applicability references for billing semantics; do not require or
+  create full-page documentation archives. Missing applicability remains unresolved, not an assumed exemption.
   Preserve all SKU choices, pins, revisions
   and unrelated user edits. No other artifact, recall or Azure writes.
 - Use editing tools for JSON and #tool:execute only for arithmetic, validation, atomic rename,
   and the documented `cost-estimate.mjs` and `fetch-retail-price-evidence.mjs` helpers. Never run inline
   double-quoted `node -e "... !..."` commands. Never call the pricing tool with `learn: true`;
-  invoke `command: "pricing_get"` (`learn: false`) directly. The evidence helper alone may write its validated
-  direct-API evidence output; it never writes the estimate. Terminal access is not inherently read-only.
+  invoke `command: "pricing_get"` (`learn: false`) directly. The documented evidence-capture helper may
+  preserve actual native response/offload bytes and ledger records in the authorized evidence directory.
+  It does not authorize arbitrary shell copying, reconstructing responses, or reading unrelated files.
+  The retail helper alone may write its validated direct-API evidence; it never writes the estimate.
+  Terminal access is not inherently read-only.
 - No questions, todos, delegation or automatic model fallback. Missing essential
   tools/model/inputs return FAILED with `unresolved_items[]`; if persistence is
   impossible, name that in the compact summary and do not claim the file was written.
@@ -73,10 +80,26 @@ Exactly one input mode must be supplied:
 Common inputs: `project_name`, `region`, `output_path`, and `overwrite` (default
 `false`). Optional: `compare_regions` and `include_ri_savings`. Multiple input modes
 or a missing required field must produce `FAILED` with a specific `unresolved_items[]` entry.
+The parent also supplies `request_path` to its exact persisted original request.
+Treat it as read-only; run preflight on that file before collection. Do not construct original-request
+authority from a draft's self-reported snapshot or rewrite the parent's request to make validation pass.
+Optional `purpose` is `monthly-estimate` by default, or explicit `rate-quote`.
+Rate quotes retain verified native rates, unit/tier applicability and source evidence without an assumed
+monthly quantity. They emit `retail-rate-quote-v1`, never monthly/yearly totals or manifest writeback.
+A COMPLETE quote is not a COMPLETE workload estimate, SKU approval or Architecture-gate evidence.
 
 Preserve each normalized line's effective `subscription` (logical string or null) in the
 published `resources[]` entry, including manifest/stamp expansion and supplemental resources.
 Never drop subscription attribution when grouping identical pricing queries.
+
+For assessment `resource_list` pricing, the parent supplies `assessment_basis`
+(`period`, `normalization`, `cost_view: "Retail"`, `tax`, `licensing`), nonempty `assumptions`,
+and stable `resource_id`/`charge_id` on each line. Preflight preserves this optional context.
+Copy it unchanged into the result, together with structured consumption inputs, units,
+hours/days, component usage and each line/component's effective region.
+Keep SKU/rate changes separate from consumption; missing material usage fails the line.
+Do not invent attribution, basis or assumptions to satisfy the register; return the missing inputs.
+Ordinary estimates without this assessment context retain their existing contract.
 
 Optional `recovery` supplies `draft_path`, `evidence_paths`, `remaining_requests` and `prior_attempt` context
 for a parent-authorized interrupted attempt, while retaining exactly one original pricing input mode.
@@ -97,9 +120,11 @@ Markdown report templates (`03-des-cost-estimate.template.md`) — this worker e
 
 ## Workflow
 
-1. Validate the input mode (using `node tools/scripts/cost-estimate.mjs preflight` when a request JSON is present)
+1. Validate the input mode using `node tools/scripts/cost-estimate.mjs preflight --request <request_path>`
    and refuse an existing `output_path` unless `overwrite: true`. Reuse an existing COMPLETE result without writing only
    when the guidance's freshness and equivalence checks pass; otherwise report that a refresh requires overwrite authorization.
+   Missing monthly billing dimensions fail before queries; never substitute zero or infer usage from unrelated traffic.
+   When the actual request is for indicative rates, use the explicit quote purpose, not a fictional monthly scenario.
 2. Normalize each line using the canonical guidance. Do not guess aliases that
   are not documented there. Deployment tiers are not automatically catalog `armSkuName` values;
   use service/region discovery for tier/operation meters and share results across candidate tiers.
@@ -109,7 +134,12 @@ Markdown report templates (`03-des-cost-estimate.template.md`) — this worker e
    Use exact kebab-case parameter names in `parameters` (`"price-type"`, `"service-family"`,
    `"include-savings-plan"` — never snake_case `price_type` or `price`, which the MCP server rejects).
   Express meter filters through its OData `filter`; it has no `meterName` input and a bare `service` can be rejected.
-  Keep a query ledger including empty/error results; do not repeat successful or empty identical requests.
+  Reserve the canonical query in the durable ledger before dispatch and capture its actual raw response immediately,
+  including empty/error results. Preserve original bytes, call identity, timestamps and hashes through the helper;
+  never manually recreate a large response or parse a rendered console transcript as plain JSON.
+  Keep deduplication; do not repeat successful or empty identical requests.
+  Unknown reservations remain visible on interruption;
+  do not call them zero issued requests or create a fresh allowance.
   After documented empty-result discovery, an exhausted transient retry, a status-200 multi-band response that
   omits `tierMinimumUnits` (`missing_tier_metadata`), or a status-400 `ArgumentOutOfRangeException`
   (`Unknown ServiceFamily value`, `service_family_unsupported`), use the
@@ -126,7 +156,9 @@ Markdown report templates (`03-des-cost-estimate.template.md`) — this worker e
    Region comparison means repeating the same retail query for the requested regions;
    do not recommend a region that violates requirements.
 8. Write the JSON draft to `{output_path}.tmp` using editing tools, then run
-   `node tools/scripts/cost-estimate.mjs publish --draft <output_path>.tmp --output <output_path> [--manifest <manifest_path>]`
+   `node tools/scripts/cost-estimate.mjs publish` with
+   `--draft <output_path>.tmp --output <output_path> --request <request_path>`
+   and optional `--manifest <manifest_path>`
    to normalize totals, validate JSON syntax and schema/evidence rules, atomically rename to `output_path`,
    and print the compact summary. If an existing temporary sibling is not owned
    by this invocation, return FAILED rather than overwrite it or unrelated user work.
@@ -187,6 +219,9 @@ Confidence is deterministic:
 | Complete and every line uses one direct, unambiguous retail meter | High |
 
 `COMPLETE` must never have Low confidence.
+New monthly publications use `cost-estimate-v2` with verified request coverage, source-linked calculation
+bases and fresh exact meter evidence. Schema validity alone does not establish evidence-backed completion.
+Use explicit legacy audit only to inspect historical outputs; it never repairs provenance or makes them current.
 
 ## Output format
 
@@ -194,6 +229,7 @@ Write this shape to `output_path`:
 
 ```json
 {
+  "schema_version": "cost-estimate-v2",
   "status": "COMPLETE | FAILED",
   "project_name": "project",
   "region": "primary-region",
@@ -225,6 +261,13 @@ Write this shape to `output_path`:
 }
 ```
 
+The shape above is the monthly summary, not the complete meter-evidence contract.
+Retain the helper's structured query ledger and exact evidence references for every calculated component;
+publication validates native units, rate/tier selections and recomputed totals before any manifest mutation.
+For `purpose: "rate-quote"`, use the documented `retail-rate-quote-v1` structure and quote publication/validation
+commands in the pricing guidance. Return `RATE QUOTE COMPLETE|FAILED` with its exact path, currency,
+quote count and actual request counts; do not put a quote in a monthly estimate path.
+
 `manifest_path` mode adds `manifest_writeback: [{ id, cost_estimate_monthly_usd,
 cost_estimated_at }]`; persist it to the supplied manifest only on COMPLETE with
 `manifest_writeback: true`. `candidate_sets` mode adds
@@ -232,6 +275,9 @@ cost_estimated_at }]`; persist it to the supplied manifest only on COMPLETE with
 choose the lowest complete estimate and break ties alphabetically. The winner is
 comparison advice only; it is not SKU approval and never changes the manifest.
 `resource_list` mode emits the base shape without either mode-specific field.
+When assessment context was supplied, also emit its exact `assessment_basis`, `assumptions`
+and per-line `resource_id`, `charge_id`, `usage` and applicable calculation/component fields.
+These are supported by the canonical cost-estimate schema and consumed without rewriting the retained result.
 
 When fallback is used, also emit `direct_api_calls_used` and `retail_api_evidence[]` entries with
 `evidence_path`, `resource_names`, `selected_meters` (meter ID, SKU, billing region and tier), and `calculation`.
