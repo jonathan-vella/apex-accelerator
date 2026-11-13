@@ -128,12 +128,18 @@ def review_verdict(document: dict) -> str | None:
 
 
 def _challenger_findings_invalid(
-    project: str, step: str, governance_review: Path | None = None, allow_unresolved: bool = False
+    project: str,
+    step: str,
+    governance_review: Path | None = None,
+    allow_unresolved: bool = False,
+    *,
+    review_paths: list[tuple[Path, Path]] | None = None,
 ) -> str | None:
     """Validate present reviews before mutation; missing-review bypass cannot waive these checks."""
     root = workspace_root_for()
     validator = root / "tools/scripts/validate-challenger-findings.mjs"
-    for artifact, sidecar in _review_paths(project, step, governance_review):
+    paths = _review_paths(project, step, governance_review) if review_paths is None else review_paths
+    for artifact, sidecar in paths:
         if not sidecar.is_file():
             continue
         try:
@@ -350,11 +356,19 @@ def watch_review_inputs(data, project: str, step: str, selected: Path | None) ->
         if sidecar.is_file():
             try:
                 document = json.loads(sidecar.read_text(encoding="utf-8"))
-                for supporting in document.get("supporting_inputs", []):
-                    supporting_path = root / supporting["path"]
-                    paths.append(supporting_path)
+                supporting_paths = [supporting["path"] for supporting in document.get("supporting_inputs", [])]
             except ValueError, TypeError, KeyError, AttributeError:
-                pass
+                continue
+            for supporting in supporting_paths:
+                if not isinstance(supporting, str):
+                    raise ValueError("Review supporting input path must be a string")
+                if supporting.startswith("apex-private-policy:"):
+                    from ..policy_source import resolve_private_reference
+
+                    supporting_path = resolve_private_reference(supporting, root, project=project, data=data)
+                else:
+                    supporting_path = root / supporting
+                paths.append(supporting_path)
     if step in _CHALLENGER_GATE:
         gating_name, sidecar_name = _CHALLENGER_GATE[step]
         paths += [pdir / gating_name, resolve_review_path(pdir, sidecar_name)]

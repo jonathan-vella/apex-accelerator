@@ -40,24 +40,31 @@ with independent architecture and cost-feasibility reviews before human approval
 
 For explicit `decisions.workflow_mode=assessment`, load
 [standalone assessment](../skills/apex-workflow-engine/references/standalone-assessment.md) and use its
-authorized brief/evidence and optional business context instead of the numeric delivery workflow below.
-No formal Governance, SKU/VNet confirmation, budget cap or intermediate Architecture approval is required.
-Load `.github/skills/apex-azure-cost-optimization/SKILL.md` for scoped actual billing Query/Forecast
-operations in this main's execution context; `cost-estimate-subagent` remains retail-estimate-only.
-Return finalized analysis to the parent for mandatory Design and both independent bundle reviews.
-Do not invoke Design as a child or complete numeric Step 2 in this profile.
+authorized brief/evidence and optional business context instead of numeric delivery steps (no formal
+Governance, SKU/VNet confirmation, budget cap or intermediate Architecture approval). Use
+`collect-assessment-evidence.py` and `collect-assessment-cost.mjs` (plus `.github/skills/apex-azure-cost-optimization/SKILL.md`)
+for scoped evidence/billing; `cost-estimate-subagent` remains retail-only. For `assessment-bundle-v3`, write
+`_meta/waf-scores.json` and run `render-assessment-charts.py` in `analysis`. For register-capable runs, load
+[register rules](../skills/apex-azure-artifacts/references/assessment-action-register.md) and generate source,
+Excel and Markdown with `disposition` (`remediate_now`, `production_readiness_gap`, `intentional_lab_tradeoff`,
+`orphan_or_drift_cleanup`, `verification_followup`) without duplicating cost benefits. Return finalized analysis
+to the parent for mandatory Design and both independent bundle reviews (never invoke Design as a child).
 
 For `decisions.workflow_contract=practical-v1`, use the
 [practical workflow](../skills/apex-workflow-engine/references/practical-workflow.md).
 Keep stage approval and both independent architecture/cost lenses. Handle granted mechanical
 repairs without per-finding administrative questions; use one initial and optional closure per lens.
-For implementation continuation, require current preliminary policy feasibility for an authorized target;
-missing evidence returns to the interactive parent/Governance owner, not a fabricated snapshot. For an
+For new-contract implementation continuation, follow the
+[policy-source contract](../skills/apex-azure-governance-discovery/references/policy-source.md):
+reuse current tenant evidence or explicit hash-bound Corp-assumption acceptance. Assumed Architecture needs
+no real target or hand-prepared scope file; label it tenant-unverified through review and Gate 2.
+Missing source returns to the interactive parent; Governance alone collects tenant evidence.
+Tenant verification remains mandatory before planning completion, CodeGen and deployment. For an
 assessment-only exit, collect policy evidence when authorized but report unavailable policy scope as a gap
 instead of blocking the WAF assessment.
 Before assessment-only completion or pause, persist the owner's explicit
 `assessment_exit=assessment_only`; implementation continuation uses `assessment_exit=implementation`
-and retains the current policy-feasibility requirement. Missing choice does not waive that requirement.
+and retains the applicable policy-source requirement. Missing choice does not waive that requirement.
 When evidence-equivalent, use deterministic pricing scenarios instead of new pricing-worker calls.
 
 Before direct display or delegated return, apply the
@@ -146,11 +153,16 @@ Start with one broad lookup per service; use bounded targeted fallbacks for miss
 Unverified claims remain gaps, not remembered facts.
 
 - Score Security, Reliability, Performance Efficiency, Cost Optimization and Operational Excellence
-  from 1–10, each with High/Medium/Low confidence and source-backed strengths/gaps.
+  from 0–10 whenever `>= 2` pillar-relevant workload-control checks are observed (excluding unknowns
+  from numerator/denominator, paired with `High (>=70%) | Medium (35-69%) | Low (<35%)` coverage);
+  reserve `Not assessed` strictly for `< 2` observed workload controls, and never count assessment
+  data-collection availability (CPU/metric queries, policy-header listing, or billing/forecast views) as
+  passing/failing controls in any pillar (collection belongs in Coverage). For standalone Azure
+  assessments, run `collect-assessment-evidence.py` and `collect-assessment-cost.mjs` (`--include-amortized`
+  `--include-rg-breakdown` as needed) directly rather than writing custom `_meta/scratch/` collectors.
 - Include service maturity, trade-offs, an overview Mermaid diagram and meaningful traffic-light
-  statuses; do not manufacture warnings/failures merely to populate symbols.
-- Verify zonal features rather than inferring them from a tier name. Respect single-region residency,
-  reserve service overhead in capacity sizing and distinguish average RPS from concentrated peaks.
+  statuses without manufacturing filler warnings. Verify zonal features rather than inferring them from
+  tier names; respect single-region residency, reserve service overhead and separate average vs. peak RPS.
 - For Terraform include Azure Storage remote state/locking, provider pins, unique-name strategy and
   AVM-TF gaps. Do not plan HCP/cloud backends.
 - Reconcile required operator/app data paths and dependencies; mark unverified or deferred capabilities
@@ -211,6 +223,10 @@ priced recommendation explicitly nonbinding, and do not imply that estimate appr
    price only the evidence-supported scope and report unknown usage/unpriced resources outside the subtotal;
    do not present a partial subtotal as total workload cost.
    Run `node tools/scripts/cost-estimate.mjs preflight --request <request.json>`.
+   If the user instead requests indicative unit rates with unknown monthly usage, dispatch the pricing owner
+   with `purpose: "rate-quote"` to a distinct quote path. A verified quote can inform the discussion, but never
+   becomes a monthly subtotal, manifest writeback or full-scope Architecture approval. Resume the original
+   monthly estimate only when its missing inputs and remaining allowance are actually resolved.
 4. If no resource has evidence-supported SKU/quantity/usage sufficient for pricing, do not invoke pricing.
    For an assessment-only exit, record `assessment_cost_status=not_assessed` and write
    `contracts/02-assessment-cost-status.json` using the
@@ -219,7 +235,8 @@ priced recommendation explicitly nonbinding, and do not imply that estimate appr
    Failed pricing is a failure, not this no-priceable-evidence path; retain failed attempts in `_meta/`.
    Otherwise invoke `cost-estimate-subagent` for `02-cost-estimate.json`. Require COMPLETE, current
    source evidence and input equivalence for the requested priceable scope; preserve actual versioned success paths.
-   Read persisted JSON, check line sums/annual totals and copy figures verbatim.
+   Read persisted JSON and run current estimate validation for request coverage, source-linked meter selection,
+   freshness and recomputed totals; reject rate-quote artifacts at the monthly gate. Copy verified figures verbatim.
    Only the worker's authorized `manifest_writeback[]` updates price/timestamp fields.
 5. For implementation planning, resolve a missing budget cap or overage through the budget gate, never by
    silent SKU substitution. Preserve owner choices; show their priced alternative and ask when incompatible
@@ -228,6 +245,8 @@ priced recommendation explicitly nonbinding, and do not imply that estimate appr
 
 All user-facing dollar amounts come from verified worker output, never direct parent pricing or memory.
 Qualitative WAF strengths/gaps contain no dollar figures.
+For billing documentation retain source URL/date, a short original conclusion, applicability and limitations;
+follow the pricing parent contract's publication rules, not whole-page repository captures.
 On interrupted pricing, inspect exact persisted evidence before retry; preserve budgets and failed
 attempts under the pricing contract. A saved draft is not COMPLETE and a new task resets no allowance.
 Checkpoint `phase_3_cost`.
@@ -259,6 +278,11 @@ Record significant choices and checkpoint `phase_5_artifact`.
 Load [one-shot review](../skills/apex-azure-defaults/references/one-shot-review.md) and the
 [review lifecycle](../skills/apex-azure-defaults/references/adversarial-review-protocol.md).
 Finalize both documents and immutable supporting inputs before metadata capture.
+When target/read scope is available, consume complete current policy evidence before final policy-sensitive reviews.
+For explicitly assumed Corp Architecture, retain that qualification and use only an actually granted later
+target-policy follow-up under the [managed stage contract](../skills/apex-workflow-engine/references/practical-workflow.md#complete-stage-work-package).
+Freeze exact consumed files, not mutable research or retail-evidence directories; unchanged current evidence and
+reviews are reused rather than regenerated merely for a new handoff.
 Include actual COMPLETE pricing JSON and its consumed evidence via `--supporting-input`;
 for the unpriced assessment-only path include the NOT_ASSESSED cost-status contract and source
 evidence instead. Both architecture and cost-feasibility reviews remain mandatory, including

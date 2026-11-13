@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { randomUUID, createHash } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
@@ -15,6 +16,9 @@ import {
   STRUCTURED_REVIEWER_DEFINITION,
   validateReview,
 } from "../../scripts/validate-challenger-findings.mjs";
+import { requiredPrivateReviewInputs } from "../../scripts/_lib/project-paths.mjs";
+import { supportingInputCompatible } from "../../scripts/_lib/review-compatibility.mjs";
+import { canonicalJson } from "../../scripts/_lib/json.mjs";
 
 const validator = fileURLToPath(new URL("../../scripts/validate-challenger-findings.mjs", import.meta.url));
 const recorder = fileURLToPath(new URL("../../scripts/record-review.mjs", import.meta.url));
@@ -140,6 +144,254 @@ function fixture(t, { batch = false, supporting = false, parent = "root", review
   };
   return state;
 }
+
+function privatePolicyFixture(t) {
+  const f = fixture(t);
+  const repo = path.resolve(fileURLToPath(new URL("../../../", import.meta.url)));
+  const stateHome = fs.mkdtempSync(path.join(os.tmpdir(), "private-review-test-"));
+  t.after(() => fs.rmSync(stateHome, { recursive: true, force: true }));
+  const previousHome = process.env.XDG_STATE_HOME;
+  process.env.XDG_STATE_HOME = stateHome;
+  t.after(() => {
+    if (previousHome === undefined) delete process.env.XDG_STATE_HOME;
+    else process.env.XDG_STATE_HOME = previousHome;
+  });
+  fs.symlinkSync(path.join(repo, "tools"), path.join(f.root, "tools"));
+  const recall = (...args) => {
+    const result = spawnSync("python3", ["-m", "apex_recall", ...args], {
+      cwd: f.root,
+      encoding: "utf8",
+      env: { ...process.env, APEX_ROOT: f.root, PYTHONPATH: path.join(repo, "tools/apex-recall/src") },
+    });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    return JSON.parse(result.stdout);
+  };
+  recall("init", "example", "--json");
+  const scope = recall(
+    "policy-source",
+    "example",
+    "--tenant",
+    "11111111-1111-1111-1111-111111111111",
+    "--subscription",
+    "22222222-2222-2222-2222-222222222222",
+    "--authorize-policy-read",
+    "--owner",
+    "synthetic-owner",
+    "--request-id",
+    "private-scope-request",
+    "--environment",
+    "dev",
+    "--json",
+  );
+  const scripts = ".github/skills/apex-azure-governance-discovery/scripts";
+  for (const filename of ["discover.py", "render_governance.py"]) {
+    f.write(`${scripts}/${filename}`, fs.readFileSync(path.join(repo, scripts, filename)));
+  }
+  const snapshot = path.join(scope.directory, "subscription-1.json");
+  const policy = {
+    schema_version: "governance-constraints-v1",
+    project: "example",
+    subscription_id: "22222222-2222-2222-2222-222222222222",
+    discovery_status: "COMPLETE",
+    source: "live",
+    findings: [],
+    discovery_options: { include_defender_auto: true },
+    discovery_metadata: {
+      discovery_status: "COMPLETE",
+      discovered_at: new Date().toISOString(),
+      ttl_days: 7,
+      scope: { subscription_id: "22222222-2222-2222-2222-222222222222" },
+      completeness_signature: `sha256:${hash("")}`,
+    },
+  };
+  policy.discovered_at = policy.discovery_metadata.discovered_at;
+  policy.discovery_metadata.page_counts = {
+    policyAssignments: 0,
+    policyDefinitions: 0,
+    policySetDefinitions: 0,
+    policyExemptions: 0,
+  };
+  policy.discovery_summary = { assignment_total: 0, assignment_kept: 0, audit_count: 0, disabled_count: 0 };
+  policy.rule_evidence = {
+    schema_version: "policy-rule-evidence-v1",
+    project: policy.project,
+    subscription_id: policy.subscription_id,
+    discovered_at: policy.discovered_at,
+    assignments: [],
+    definitions: [],
+    initiatives: [],
+    exemptions: [],
+    effective_records: [],
+    coverage: { assignment_count: 0, effective_record_count: 0, effects: {} },
+  };
+  policy.discovery_metadata.rule_evidence_sha256 = hash(canonicalJson(policy.rule_evidence));
+  fs.writeFileSync(snapshot, JSON.stringify(policy), { mode: 0o600 });
+  const canonical = path.join(scope.directory, "04-governance-constraints.json");
+  fs.writeFileSync(canonical, JSON.stringify(policy), { mode: 0o600 });
+  recall("checkpoint", "example", "1", "policy-evidence", "--policy-feasibility", scope.evidence_path, "--json");
+  const primary = "agent-output/example/04-governance-constraints.md";
+  f.write(primary, "# Governance\nAnonymized policy summary\n");
+  f.write(
+    "phase.json",
+    JSON.stringify({
+      input_ids: ["policy_source", "azure_read_scope"],
+      environments: ["dev"],
+      request_id: "governance-phase",
+    }),
+  );
+  recall("decide", "example", "--phase-scope", path.join(f.root, "phase.json"), "--step", "3_5", "--json");
+  recall("checkpoint", "example", "3_5", "review-ready", "--sync-assessment", "--json");
+  const projection = "agent-output/example/_meta/assessment-step-3_5.json";
+  const findings = "agent-output/example/reviews/challenge-findings-governance-constraints.json";
+  Object.assign(f.input, {
+    step: "3_5",
+    artifact_path: primary,
+    artifact_type: "governance-constraints",
+    review_focus: "governance-reconciliation",
+    output_path: findings,
+    cache_inputs: cacheInputs(primary, f.root, STRUCTURED_REVIEWER),
+    supporting_inputs: [
+      { path: projection, sha256: hash(fs.readFileSync(path.join(f.root, projection))) },
+      ...requiredPrivateReviewInputs(f.root, "example", "governance-constraints"),
+    ],
+  });
+  Object.assign(f.doc, {
+    challenged_artifact: primary,
+    artifact_type: f.input.artifact_type,
+    review_focus: f.input.review_focus,
+    cache_inputs: structuredClone(f.input.cache_inputs),
+    supporting_inputs: structuredClone(f.input.supporting_inputs),
+  });
+  f.options.output = findings;
+  f.write("request.json", JSON.stringify(f.input));
+  return { ...f, recall, snapshot, canonical, findings };
+}
+
+test("private rule-body evidence is included in existing Node review hashes", (t) => {
+  const f = privatePolicyFixture(t);
+  assert.ok(preflightReviewRequest(f.input, f.root).private_inputs.length);
+  const policy = JSON.parse(fs.readFileSync(f.canonical, "utf8"));
+  policy.rule_evidence.exemptions.push({ id: "synthetic-changed-rule-evidence" });
+  fs.writeFileSync(f.canonical, JSON.stringify(policy), { mode: 0o600 });
+  assert.throws(() => preflightReviewRequest(f.input, f.root), /changed|supporting/i);
+});
+
+test("private Governance review rejects a summary-only canonical snapshot", (t) => {
+  const f = privatePolicyFixture(t);
+  const policy = JSON.parse(fs.readFileSync(f.canonical, "utf8"));
+  delete policy.rule_evidence;
+  delete policy.discovery_metadata.rule_evidence_sha256;
+  fs.writeFileSync(f.canonical, JSON.stringify(policy), { mode: 0o600 });
+  assert.throws(
+    () => requiredPrivateReviewInputs(f.root, "example", "governance-constraints"),
+    /Private governance rule evidence/,
+  );
+});
+
+test("private policy evidence is required, attributed, hash-bound and invalidated after drift", (t) => {
+  const f = privatePolicyFixture(t);
+  const preflight = preflightReviewRequest(f.input, f.root);
+  assert.equal(preflight.private_inputs.length, 3);
+  assert.equal(
+    preflight.private_inputs.some((input) => input.read_path === f.canonical),
+    true,
+  );
+  const request = path.join(f.root, "request.json");
+  f.recall(
+    "review-audit",
+    "example",
+    "3_5",
+    "--attempt-kind",
+    "invocation",
+    "--review-request",
+    request,
+    "--attempt-outcome",
+    "started",
+    "--json",
+  );
+  f.record();
+  f.recall(
+    "review-audit",
+    "example",
+    "3_5",
+    "--attempt-kind",
+    "invocation",
+    "--review-request",
+    request,
+    "--attempt-outcome",
+    "completed",
+    "--review-output",
+    "nonempty",
+    "--review-result",
+    path.join(f.root, f.findings),
+    "--json",
+  );
+  const document = f.persisted();
+  assert.deepEqual(validateReview(document, { root: f.root, verifyCurrent: true }), []);
+  const original = fs.readFileSync(path.join(f.root, f.findings), "utf8");
+  assert.equal(original.includes("22222222-2222-2222-2222-222222222222"), false);
+  fs.appendFileSync(f.snapshot, "\n");
+  assert.match(validateReview(document, { root: f.root, verifyCurrent: true }).join("\n"), /evidence changed/);
+  f.recall(
+    "checkpoint",
+    "example",
+    "3_5",
+    "refresh",
+    "--policy-feasibility",
+    path.join(path.dirname(f.snapshot), "04-policy-feasibility.json"),
+    "--json",
+  );
+  const changed = document.supporting_inputs.find((support) => support.path.endsWith("/subscription-1.json"));
+  const registryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "private-compatibility-test-"));
+  t.after(() => fs.rmSync(registryRoot, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(registryRoot, "tools/registry"), { recursive: true });
+  fs.writeFileSync(
+    path.join(registryRoot, "tools/registry/review-contract.json"),
+    JSON.stringify({
+      contract: "review-v1",
+      editorial_compatibility: [],
+      supporting_input_compatibility: [
+        {
+          path: changed.path,
+          from_sha256: changed.sha256,
+          to_sha256: hash(fs.readFileSync(f.snapshot)),
+          rationale: "A registry mapping cannot waive private policy drift",
+        },
+      ],
+    }),
+  );
+  assert.equal(
+    supportingInputCompatible(changed.path, changed.sha256, hash(fs.readFileSync(f.snapshot)), registryRoot),
+    false,
+  );
+  assert.match(validateReview(document, { root: f.root, verifyCurrent: true }).join("\n"), /supporting bytes changed/);
+  const wrongProject = structuredClone(document);
+  wrongProject.review_execution.project_name = "other";
+  delete wrongProject.supporting_inputs;
+  assert.match(
+    validateReview(wrongProject, { root: f.root, verifyCurrent: true }).join("\n"),
+    /primary artifact scope/,
+  );
+  assert.equal(fs.readFileSync(path.join(f.root, f.findings), "utf8"), original);
+});
+
+test("private review references cannot omit evidence, escape scope or use public copies", (t) => {
+  const f = privatePolicyFixture(t);
+  const withoutPrivate = structuredClone(f.input);
+  withoutPrivate.supporting_inputs = withoutPrivate.supporting_inputs.filter(
+    (support) => !support.path.startsWith("apex-private-policy:"),
+  );
+  assert.throws(() => preflightReviewRequest(withoutPrivate, f.root), /Required private policy evidence/);
+  const outside = structuredClone(f.input);
+  outside.supporting_inputs[1].path = f.snapshot;
+  assert.throws(() => preflightReviewRequest(outside, f.root), /within the workspace/);
+  const wrongScope = structuredClone(f.input);
+  wrongScope.supporting_inputs[1].path = wrongScope.supporting_inputs[1].path.replace("/example/", "/other/");
+  assert.throws(() => preflightReviewRequest(wrongScope, f.root), /differently scoped/);
+  const privatePrimary = structuredClone(f.input);
+  privatePrimary.artifact_path = privatePrimary.supporting_inputs[1].path;
+  assert.throws(() => preflightReviewRequest(privatePrimary, f.root), /primary remains the public summary/);
+});
 
 test("request preflight rejects malformed revisions before any worker or publication", (t) => {
   const f = fixture(t, { supporting: true });
@@ -422,14 +674,50 @@ test("practical initial and closure evidence complete a scoped stage without a t
   f.write("agent-output/example/03-des-cost-estimate.md", "# Cost\nUnpriced draft; no verified estimate\n");
   f.write("agent-output/example/sku-manifest.json", JSON.stringify({ services: [] }));
   const statePath = path.join(f.root, "agent-output/example/_meta/00-session-state.json");
+  const completeDraft = () =>
+    spawnSync("python3", ["-m", "apex_recall", "complete-step", "example", "2", "--json"], {
+      cwd: f.root,
+      encoding: "utf8",
+      env: { ...process.env, APEX_ROOT: f.root, PYTHONPATH: path.join(repo, "tools/apex-recall/src") },
+    });
+  const beforeSourceSelection = fs.readFileSync(statePath, "utf8");
+  const missingSource = completeDraft();
+  assert.equal(missingSource.status, 2, missingSource.stdout + missingSource.stderr);
+  assert.match(JSON.parse(missingSource.stdout).reason, /explicitly accept Corp assumptions before Architecture/);
+  assert.equal(fs.readFileSync(statePath, "utf8"), beforeSourceSelection);
+
+  const baseline = ".github/data/alz-corp-policy-baseline.json.gz";
+  f.write(baseline, fs.readFileSync(path.join(repo, baseline)));
+  recall(
+    "policy-source",
+    "example",
+    "--assumed-corp",
+    "--owner",
+    "synthetic-owner",
+    "--request-id",
+    "synthetic-policy-source-acceptance",
+    "--environment",
+    "dev",
+    "--json",
+  );
+  f.write(
+    "architecture-scope.json",
+    JSON.stringify({
+      input_ids: ["scope", "policy_source"],
+      environments: ["dev"],
+      request_id: "synthetic-architecture-policy-scope-approval",
+    }),
+  );
+  recall("decide", "example", "--phase-scope", path.join(f.root, "architecture-scope.json"), "--step", "2", "--json");
+  recall("checkpoint", "example", "2", "draft", "--sync-assessment", "--json");
+  assert.equal(
+    recall("show", "example", "--json").session.policy_feasibility.status,
+    "assumed_corp_not_tenant_verified",
+  );
   const beforeDraftCompletion = fs.readFileSync(statePath, "utf8");
-  const blocked = spawnSync("python3", ["-m", "apex_recall", "complete-step", "example", "2", "--json"], {
-    cwd: f.root,
-    encoding: "utf8",
-    env: { ...process.env, APEX_ROOT: f.root, PYTHONPATH: path.join(repo, "tools/apex-recall/src") },
-  });
+  const blocked = completeDraft();
   assert.equal(blocked.status, 2, blocked.stdout + blocked.stderr);
-  assert.equal(JSON.parse(blocked.stdout).error, "challenger_findings_missing");
+  assert.equal(JSON.parse(blocked.stdout).error, "challenger_findings_missing", blocked.stdout + blocked.stderr);
   assert.equal(fs.readFileSync(statePath, "utf8"), beforeDraftCompletion);
   assert.equal(fs.existsSync(path.join(f.root, "agent-output/example/02-cost-estimate.json")), false);
   assert.equal(recall("show", "example", "--json").session.steps["2"].status, "in_progress");
@@ -1097,6 +1385,110 @@ for (const [label, mutate] of [
   });
 }
 
+function privateReadRecoveryFixture(t, count = 2) {
+  const f = privatePolicyFixture(t);
+  f.input.private_inputs = preflightReviewRequest(f.input, f.root).private_inputs;
+  addReadTurns(f, count);
+  const reads = f.events.filter((event) => event.type === "tool.execution_start" && event.data.toolName === "view");
+  const shortened = path.join(path.dirname(path.dirname(f.canonical)), path.basename(f.canonical));
+  reads[0].data.arguments = { path: shortened };
+  reads[1].data.arguments = { path: f.canonical };
+  const failed = f.events.find(
+    (event) => event.type === "tool.execution_complete" && event.data.toolCallId === "read-0",
+  );
+  failed.data.success = false;
+  failed.data.error = {
+    code: "failure",
+    message: `Path ${shortened} does not exist. Please provide a valid path.`,
+  };
+  return { ...f, reads, failed, shortened };
+}
+
+for (const format of ["native-path", "file-not-found", "enoent"]) {
+  test(`one literal private-path correction is recorded in the same invocation: ${format}`, (t) => {
+    const f = privateReadRecoveryFixture(t);
+    if (format === "file-not-found") f.failed.data.error.message = `File not found: ${f.shortened}`;
+    if (format === "enoent") {
+      f.failed.data.error = {
+        code: "ENOENT",
+        message: `ENOENT: no such file or directory, open '${f.shortened}'`,
+      };
+    }
+    f.record();
+    const saved = f.persisted();
+    assert.deepEqual(saved.review_execution.recovered_read_calls, ["read-0"]);
+    assert.equal(saved.review_execution.worker_id, "worker-1");
+    assert.equal(saved.overall_assessment, "APPROVED");
+    assert.equal(f.failed.data.success, false);
+    assert.deepEqual(saved.supporting_inputs, f.input.supporting_inputs);
+    assert.equal(JSON.stringify(saved).includes(f.canonical), false);
+    assert.equal(JSON.stringify(saved).includes(f.shortened), false);
+  });
+}
+
+for (const [label, mutate] of [
+  ["no supplied mapping", (f) => delete f.input.private_inputs],
+  ["different corrected file", (f) => (f.reads[1].data.arguments.path = f.snapshot)],
+  ["unrelated missing path", (f) => (f.reads[0].data.arguments.path = "/unrelated/missing.json")],
+  ["access denied", (f) => (f.failed.data.error = { code: "EACCES", message: "Permission denied" })],
+  [
+    "content exclusion",
+    (f) => (f.failed.data.error = { code: "CONTENT_EXCLUDED", message: "Blocked by content exclusion policy" }),
+  ],
+  ["unknown error code", (f) => (f.failed.data.error.code = "unknown")],
+  [
+    "failed corrected read",
+    (f) =>
+      (f.events.find(
+        (event) => event.type === "tool.execution_complete" && event.data.toolCallId === "read-1",
+      ).data.success = false),
+  ],
+]) {
+  test(`private-path correction remains blocked: ${label}`, (t) => {
+    const f = privateReadRecoveryFixture(t);
+    mutate(f);
+    assert.throws(() => f.record(), /Worker tool calls must complete successfully/);
+    assert.equal(fs.existsSync(path.join(f.root, f.findings)), false);
+  });
+}
+
+test("a second private-path correction in one invocation remains blocked", (t) => {
+  const f = privateReadRecoveryFixture(t, 4);
+  const shortened = path.join(path.dirname(path.dirname(f.snapshot)), path.basename(f.snapshot));
+  f.reads[2].data.arguments = { path: shortened };
+  f.reads[3].data.arguments = { path: f.snapshot };
+  const failed = f.events.find(
+    (event) => event.type === "tool.execution_complete" && event.data.toolCallId === "read-2",
+  );
+  failed.data.success = false;
+  failed.data.error = { code: "failure", message: `File not found: ${shortened}` };
+  assert.throws(() => f.record(), /Worker tool calls must complete successfully/);
+});
+
+test("supplied private mappings cannot substitute an unauthorized target", (t) => {
+  const f = privateReadRecoveryFixture(t);
+  const entry = f.input.private_inputs.find((item) => item.read_path === f.canonical);
+  entry.read_path = path.join(f.root, "other-scope", path.basename(f.canonical));
+  f.reads[0].data.arguments.path = path.join(f.root, path.basename(f.canonical));
+  f.reads[1].data.arguments.path = entry.read_path;
+  f.failed.data.error.message = `File not found: ${f.reads[0].data.arguments.path}`;
+  assert.throws(() => preflightReviewRequest(f.input, f.root), /mapping must exactly match canonical/);
+  assert.throws(() => f.record(), /mapping must exactly match canonical/);
+  assert.equal(fs.existsSync(path.join(f.root, f.findings)), false);
+});
+
+test("a corrected read cannot turn a returned execution failure into findings", (t) => {
+  const f = privateReadRecoveryFixture(t);
+  for (const key of Object.keys(f.doc)) delete f.doc[key];
+  Object.assign(f.doc, {
+    status: "FAILED",
+    stage: "private-evidence-read",
+    error: "No substantive verdict was produced",
+  });
+  assert.throws(() => f.record(), /Reviewer execution failed at private-evidence-read/);
+  assert.equal(fs.existsSync(path.join(f.root, f.findings)), false);
+});
+
 test("request ID resolves an exact worker in an explicit session without UUID scraping", (t) => {
   const f = fixture(t);
   f.flush();
@@ -1290,4 +1682,333 @@ test("CLI requires absolute, parseable native events and refuses unknown overrid
   f.flush();
   const result = run();
   assert.equal(result.status, 0, result.stderr);
+});
+
+test("recorder stamps omitted cache_inputs and supporting_inputs across single and batch results while rejecting null or conflicts", (t) => {
+  const single = fixture(t, { supporting: true });
+  delete single.doc.cache_inputs;
+  delete single.doc.supporting_inputs;
+  single.record();
+  assert.deepEqual(single.persisted().cache_inputs, single.input.cache_inputs);
+  assert.deepEqual(single.persisted().supporting_inputs, single.input.supporting_inputs);
+
+  const withoutSupport = fixture(t, { supporting: false });
+  delete withoutSupport.doc.cache_inputs;
+  withoutSupport.record();
+  assert.deepEqual(withoutSupport.persisted().cache_inputs, withoutSupport.input.cache_inputs);
+  assert.equal(Object.hasOwn(withoutSupport.persisted(), "supporting_inputs"), false);
+
+  const batch = fixture(t, { batch: true, supporting: true });
+  for (const item of batch.doc.batch_results) {
+    delete item.cache_inputs;
+    delete item.supporting_inputs;
+  }
+  batch.record();
+  for (const item of batch.persisted().batch_results) {
+    assert.deepEqual(item.cache_inputs, batch.input.cache_inputs);
+    assert.deepEqual(item.supporting_inputs, batch.input.supporting_inputs);
+  }
+
+  for (const bad of [(f) => (f.entry.cache_inputs = null), (f) => (f.entry.supporting_inputs = null)]) {
+    const invalid = fixture(t, { supporting: true });
+    bad(invalid);
+    assert.throws(() => invalid.record(), /differ from dispatch/);
+  }
+});
+
+test("--events-dir resolves unique session log by request_id, tolerates worker-first flush, and rejects symlinks/duplicates", async (t) => {
+  const f = fixture(t, { supporting: true });
+  delete f.doc.cache_inputs;
+  delete f.doc.supporting_inputs;
+  f.flush();
+  const sessions = path.join(f.root, "session-state");
+  const s1 = path.join(sessions, "session-a");
+  const s2 = path.join(sessions, "session-b");
+  fs.mkdirSync(s1, { recursive: true });
+  fs.mkdirSync(s2, { recursive: true });
+  fs.writeFileSync(path.join(s1, "events.jsonl"), `${JSON.stringify({ type: "session.start", data: {} })}\n`);
+  const raw = fs.readFileSync(f.options.events, "utf8");
+  fs.writeFileSync(path.join(s2, "events.jsonl"), raw);
+  const res = recordReview({
+    root: f.root,
+    eventsDir: sessions,
+    requestId: "request-1",
+    output,
+  });
+  assert.equal(res.review_execution.request_id, "request-1");
+
+  // Duplicate request_id across two session logs fails closed.
+  fs.writeFileSync(path.join(s1, "events.jsonl"), raw);
+  f.input.overwrite = true;
+  assert.throws(
+    () => recordReview({ root: f.root, eventsDir: sessions, requestId: "request-1", output }),
+    /Ambiguous request ID/,
+  );
+
+  // Symlinked events.jsonl in --events-dir is rejected.
+  fs.unlinkSync(path.join(s1, "events.jsonl"));
+  fs.symlinkSync(path.join(s2, "events.jsonl"), path.join(s1, "events.jsonl"));
+  assert.throws(
+    () => recordReview({ root: f.root, eventsDir: sessions, requestId: "request-1", output }),
+    /Symlinked nested events\.jsonl/,
+  );
+
+  // Trailing partial JSON line during --events-dir flush wait is tolerated until flushed.
+  fs.unlinkSync(path.join(s1, "events.jsonl"));
+  f.input.overwrite = true;
+  f.flush();
+  const rawOverwrite = fs.readFileSync(f.options.events, "utf8");
+  const logPath = path.join(s2, "events.jsonl");
+  fs.writeFileSync(logPath, `${rawOverwrite}\n{"type":"partial_flush`);
+  const child = spawn(
+    process.execPath,
+    [recorder, "--events-dir", sessions, "--request-id", "request-1", "--output", output],
+    { cwd: f.root, stdio: ["ignore", "pipe", "pipe"] },
+  );
+  setTimeout(() => {
+    fs.writeFileSync(logPath, `${rawOverwrite}\n`);
+  }, 150);
+  const [exitCode] = await once(child, "exit");
+  assert.equal(exitCode, 0);
+});
+
+test("root-session mid-turn buffered dispatch records via preToolUse/postToolUse hooks and rejects overrides", (t) => {
+  const f = fixture(t, { supporting: true });
+  delete f.doc.cache_inputs;
+  delete f.doc.supporting_inputs;
+  f.flush();
+
+  const dispatchEvent = f.events.find(
+    (event) => event.type === "tool.execution_start" && event.data?.toolName === "task",
+  );
+  const args = structuredClone(dispatchEvent.data.arguments);
+  const startEvent = f.events.find((event) => event.type === "subagent.started");
+  delete startEvent.data.parentId;
+  startEvent.data.resumable = false;
+  startEvent.data.taskModelSource = "unset";
+
+  // Remove root tool.execution_start / tool.execution_complete to simulate mid-turn SDK RAM buffering.
+  const workerStream = f.events.filter(
+    (event) =>
+      !(
+        (event.type === "tool.execution_start" || event.type === "tool.execution_complete") &&
+        event.data?.toolCallId === "call-1"
+      ),
+  );
+  const preHookStart = {
+    type: "hook.start",
+    data: {
+      hookInvocationId: "hook-pre-1",
+      hookType: "preToolUse",
+      input: {
+        sessionId: "session-root",
+        cwd: f.root,
+        toolCalls: [{ id: "call-1", name: "task", args }],
+      },
+    },
+  };
+  const preHookEnd = {
+    type: "hook.end",
+    data: { hookInvocationId: "hook-pre-1", hookType: "preToolUse", success: true },
+  };
+  const postHookStart = {
+    type: "hook.start",
+    data: {
+      hookInvocationId: "hook-post-1",
+      hookType: "postToolUse",
+      input: {
+        sessionId: "session-root",
+        cwd: f.root,
+        toolCallId: "call-1",
+        toolName: "task",
+        toolArgs: structuredClone(args),
+        toolResult: { resultType: "success" },
+      },
+    },
+  };
+  const postHookEnd = {
+    type: "hook.end",
+    data: { hookInvocationId: "hook-post-1", hookType: "postToolUse", success: true },
+  };
+
+  const bufferedEvents = [preHookStart, preHookEnd, ...workerStream, postHookStart, postHookEnd];
+  const sessions = path.join(f.root, "buffered-sessions");
+  const sessionDir = path.join(sessions, "root-session");
+  fs.mkdirSync(sessionDir, { recursive: true });
+  fs.writeFileSync(path.join(sessionDir, "events.jsonl"), bufferedEvents.map((e) => JSON.stringify(e)).join("\n"));
+
+  const t0 = Date.now();
+  const recorded = recordReview({
+    root: f.root,
+    eventsDir: sessions,
+    requestId: "request-1",
+    output,
+  });
+  assert.ok(Date.now() - t0 < 5_000, "Root hook completion must not block on 25s flush timeout");
+  assert.equal(recorded.review_execution.parent_id, "root");
+  assert.equal(recorded.review_execution.request_id, "request-1");
+
+  // Missing or runtime-managed taskModelSource labels must remain nonblocking when task args have no overrides.
+  for (const labelVal of [undefined, "runtime_default", "session_inheritance"]) {
+    const variant = structuredClone(bufferedEvents);
+    const sEv = variant.find((e) => e.type === "subagent.started");
+    if (labelVal === undefined) delete sEv.data.taskModelSource;
+    else sEv.data.taskModelSource = labelVal;
+    assert.equal(extractReview(variant, "worker-1", "root").execution.request_id, "request-1");
+  }
+
+  // Caller model override inside preToolUse args must still fail closed.
+  const badOverride = structuredClone(bufferedEvents);
+  badOverride[0].data.input.toolCalls[0].args.model = "gpt-override";
+  badOverride.at(-2).data.input.toolArgs.model = "gpt-override";
+  assert.throws(() => extractReview(badOverride, "worker-1", "root"), /without caller overrides/);
+
+  // Failed postToolUse resultType must fail closed.
+  const badResult = structuredClone(bufferedEvents);
+  badResult.at(-2).data.input.toolResult.resultType = "failure";
+  assert.throws(() => extractReview(badResult, "worker-1", "root"), /successful task invocation/);
+
+  // Non-root parentId cannot use the root hook fallback.
+  assert.throws(() => extractReview(bufferedEvents, "worker-1", "subagent-parent"), /Attributed one-shot/);
+});
+
+test("APEX_REVIEW_FILE hash-bound request pointer records cleanly and rejects tampered, symlinked, or non-_meta paths", (t) => {
+  const f = fixture(t, { supporting: true });
+  delete f.doc.cache_inputs;
+  delete f.doc.supporting_inputs;
+  const reqRel = "agent-output/example/_meta/review-request.json";
+  const reqRaw = `${JSON.stringify(f.input, null, 2)}\n`;
+  f.write(reqRel, reqRaw);
+
+  const preflight = spawnSync(process.execPath, [recorder, "--preflight", "--request", reqRel], {
+    cwd: f.root,
+    encoding: "utf8",
+  });
+  assert.equal(preflight.status, 0, preflight.stderr);
+  const preflightOut = JSON.parse(preflight.stdout);
+  assert.equal(preflightOut.review_file_envelope.request_path, reqRel);
+  assert.equal(preflightOut.review_file_envelope.request_sha256, hash(reqRaw));
+
+  const filePrompt = `APEX_REVIEW_FILE\n${JSON.stringify(preflightOut.review_file_envelope)}`;
+  f.flush();
+  f.events[0].data.arguments.prompt = filePrompt;
+  f.events.find((e) => e.type === "user.message").data.content = filePrompt;
+  f.write("events.jsonl", f.events.map((e) => JSON.stringify(e)).join("\n"));
+
+  const sessions = path.join(f.root, "file-envelope-sessions");
+  const sessionDir = path.join(sessions, "s1");
+  fs.mkdirSync(sessionDir, { recursive: true });
+  fs.writeFileSync(path.join(sessionDir, "events.jsonl"), fs.readFileSync(f.options.events, "utf8"));
+
+  const recorded = recordReview({
+    root: f.root,
+    eventsDir: sessions,
+    requestId: "request-1",
+    output,
+  });
+  assert.equal(recorded.review_execution.request_id, "request-1");
+  assert.deepEqual(f.persisted().supporting_inputs, f.input.supporting_inputs);
+
+  // Tampering with saved request file bytes after dispatch fails closed on request_sha256 mismatch.
+  f.write(reqRel, `${reqRaw} `);
+  assert.throws(() => extractReview(f.events, "worker-1", "root", { root: f.root }), /request_sha256 does not match/);
+  f.write(reqRel, reqRaw);
+
+  // Path outside agent-output/<project>/_meta/ omits review_file_envelope on --preflight and fails closed on extractReview.
+  const outsideRel = "agent-output/example/review-request.json";
+  const overwriteRaw = `${JSON.stringify({ ...f.input, overwrite: true }, null, 2)}\n`;
+  f.write(outsideRel, overwriteRaw);
+  const outsidePreflight = spawnSync(process.execPath, [recorder, "--preflight", "--request", outsideRel], {
+    cwd: f.root,
+    encoding: "utf8",
+  });
+  assert.equal(outsidePreflight.status, 0, outsidePreflight.stderr);
+  assert.equal(Object.hasOwn(JSON.parse(outsidePreflight.stdout), "review_file_envelope"), false);
+
+  const badOutside = structuredClone(f.events);
+  const outsidePrompt = `APEX_REVIEW_FILE\n${JSON.stringify({
+    ...preflightOut.review_file_envelope,
+    request_path: outsideRel,
+    request_sha256: hash(overwriteRaw),
+  })}`;
+  badOutside[0].data.arguments.prompt = outsidePrompt;
+  badOutside.find((e) => e.type === "user.message").data.content = outsidePrompt;
+  assert.throws(
+    () => extractReview(badOutside, "worker-1", "root", { root: f.root }),
+    /must reside under agent-output/,
+  );
+
+  // Omitting project_name / step / review_depth on APEX_REVIEW_FILE fails closed.
+  const missingHeader = structuredClone(f.events);
+  const incompleteEnv = { ...preflightOut.review_file_envelope };
+  delete incompleteEnv.project_name;
+  const incompletePrompt = `APEX_REVIEW_FILE\n${JSON.stringify(incompleteEnv)}`;
+  missingHeader[0].data.arguments.prompt = incompletePrompt;
+  missingHeader.find((e) => e.type === "user.message").data.content = incompletePrompt;
+  assert.throws(
+    () => extractReview(missingHeader, "worker-1", "root", { root: f.root }),
+    /requires request_id, project_name, step, review_depth/,
+  );
+
+  // Symlinked request_path fails closed.
+  const linkRel = "agent-output/example/_meta/linked-request.json";
+  fs.symlinkSync(path.join(f.root, reqRel), path.join(f.root, linkRel));
+  const badLink = structuredClone(f.events);
+  const linkPrompt = `APEX_REVIEW_FILE\n${JSON.stringify({
+    ...preflightOut.review_file_envelope,
+    request_path: linkRel,
+  })}`;
+  badLink[0].data.arguments.prompt = linkPrompt;
+  badLink.find((e) => e.type === "user.message").data.content = linkPrompt;
+  assert.throws(() => extractReview(badLink, "worker-1", "root", { root: f.root }), /must not traverse symlinks/);
+
+  // Persisted private_inputs inside saved request JSON is rejected even when envelope omits private_inputs.
+  const privRel = "agent-output/example/_meta/persisted-private.request.json";
+  const privRaw = `${JSON.stringify({ ...f.input, private_inputs: [{ reference: "ref", read_path: "/tmp/p" }] }, null, 2)}\n`;
+  f.write(privRel, privRaw);
+  const badPriv = structuredClone(f.events);
+  const privPrompt = `APEX_REVIEW_FILE\n${JSON.stringify({
+    ...preflightOut.review_file_envelope,
+    request_path: privRel,
+    request_sha256: hash(privRaw),
+  })}`;
+  badPriv[0].data.arguments.prompt = privPrompt;
+  badPriv.find((e) => e.type === "user.message").data.content = privPrompt;
+  assert.throws(
+    () => extractReview(badPriv, "worker-1", "root", { root: f.root }),
+    /must not persist literal private_inputs/,
+  );
+});
+
+test("rg/grep regex parse error is recovered when retried on exact same paths, but unrecovered or different-path retries fail closed", (t) => {
+  const f = fixture(t);
+  addReadTurns(f, 2);
+  const targetPaths = [path.join(f.root, artifact), path.join(f.root, "other.md")];
+  const toolStarts = f.events.filter((e) => e.type === "tool.execution_start" && e.agentId === "worker-1");
+  const toolCompletes = f.events.filter((e) => e.type === "tool.execution_complete" && e.agentId === "worker-1");
+
+  toolStarts[0].data.toolName = "rg";
+  toolStarts[0].data.arguments = { pattern: '"sheet_state": "(?!visible)', paths: targetPaths };
+  toolCompletes[0].data.success = false;
+  toolCompletes[0].data.error = {
+    message: 'rg: regex parse error:\n    "sheet_state": "(?!visible)\nerror: look-around is not supported',
+  };
+
+  toolStarts[1].data.toolName = "rg";
+  toolStarts[1].data.arguments = { pattern: '"sheet_state":', paths: structuredClone(targetPaths) };
+
+  f.record();
+  const saved = f.persisted();
+  assert.deepEqual(saved.review_execution.recovered_read_calls, ["read-0"]);
+
+  // Retrying on different paths must still fail closed.
+  toolStarts[1].data.arguments = { pattern: '"sheet_state":', paths: [targetPaths[0]] };
+  f.flush();
+  assert.throws(() => extractReview(f.events, "worker-1", "root", { root: f.root }), /must complete successfully/);
+
+  // Non-regex-parse errors on rg/grep (e.g. permission denied / execution failure) must still fail closed.
+  toolStarts[1].data.arguments = { pattern: '"sheet_state":', paths: structuredClone(targetPaths) };
+  toolCompletes[0].data.error = { message: "Permission denied" };
+  f.flush();
+  assert.throws(() => extractReview(f.events, "worker-1", "root", { root: f.root }), /must complete successfully/);
 });

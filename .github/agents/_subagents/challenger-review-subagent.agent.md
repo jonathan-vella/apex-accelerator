@@ -18,7 +18,14 @@ Do not adopt the built-in critic's prose format or require an interactive Challe
 
 ## Inputs
 
-The native task prompt is `APEX_REVIEW`, a newline, then one JSON object.
+The native task prompt is either:
+
+- `APEX_REVIEW`, a newline, then one inline request JSON object; or
+- `APEX_REVIEW_FILE`, a newline, then a compact file-pointer JSON object
+  (`request_id`, `project_name`, `step`, `review_depth`, `request_path`, `request_sha256`, and optional
+  transient `private_inputs`) — in which case read the saved request JSON at `request_path` first via `view`
+  and treat that JSON object (plus any transient `private_inputs` on the envelope) as your authoritative request.
+
 Required: `request_id`, `step`, `review_depth`, `artifact_path`, `project_name`, `artifact_type`,
 `output_path`, `overwrite`, `prior_findings` and the parent's captured `cache_inputs`.
 `output_path` is the recorder's destination, not permission for this leaf to write.
@@ -67,10 +74,24 @@ Preserve exact scope, pass, prior findings and metadata. Never invent paths, has
    NOT a failed tool call — immediately read the file in bounded `view_range` slices or with `grep`
    rather than returning `status: "FAILED"`.
    Never call `view` on guessed or unverified paths (for example, there is no
-   `tools/schemas/challenger-findings.schema.json`); any failed tool call invalidates recording.
-2. Preserve supplied `cache_inputs`/`supporting_inputs` unchanged. The parent captures them before dispatch.
-   They identify `challenger-review-subagent`, its definition and the shared one-shot contract.
-   Do not compute, refresh or restamp hashes; missing metadata is an execution failure.
+   `tools/schemas/challenger-findings.schema.json`); unresolved failed tool calls invalidate recording.
+   Never call `view` on binary `.xlsx` or `.png` supporting inputs (file-view tools return compressed binary
+   bytes on `.xlsx` workbooks, and `record-review.mjs` already verifies their exact SHA-256 hashes); inspect
+   their paired Markdown, `.svg`, `_meta/action-register-export.json` and
+   `_meta/action-register-workbook-readback.json` artifacts instead, and never fail with `status: "FAILED"`
+   solely because a frozen `.xlsx` workbook is binary. When `04-assessment-action-register.md` and
+   `_meta/action-register-export.json` are verified, check workbook structural invariants (`formula_cell_count == 0`,
+   `hyperlink_count == 0`, sheet states/row counts) and `Action Register` / `Financial Summary` rows in the
+   read-back rather than paging line-by-line through duplicate `Basis & Evidence` sheet dumps.
+   When using `grep`/`rg`, use Rust regex syntax only: never use PCRE look-ahead/look-behind (`(?!...)`, `(?<=...)`)
+   or backreferences, and escape literal `{}` braces.
+   For private evidence, copy the supplied `private_inputs[].read_path` literally; never reconstruct or shorten it.
+   If one file-not-found read omitted the immediate scope directory, correct it once using that supplied literal
+   path in this same invocation. Continue only after a successful read; retain the failed call for recorder audit.
+   Do not search alternative locations or retry access/content-exclusion denials. Missing evidence still blocks.
+2. Preserve supplied `cache_inputs`/`supporting_inputs` unchanged if echoed, or omit them from your JSON
+   output so `record-review.mjs` stamps the exact verified dispatch hashes. The parent captures them before dispatch.
+   Do not compute, refresh or restamp hashes; missing dispatch metadata is an execution failure.
 3. Read the target completely and relevant supporting artifacts. Actual COMPLETE cost evidence must use
    the caller's authoritative path, not a guessed alias or an old FAILED draft.
    Return missing required rationale to the parent instead of reading unrelated state or running commands.
@@ -99,7 +120,9 @@ Return one raw JSON object, beginning with `{` and ending with `}`.
 No Markdown fences, introduction, prose-only report or closing summary.
 Single-lens substantive fields:
 `schema_version:"1.0"`, `challenged_artifact`, `artifact_type`, `review_focus`, `pass_number`,
-`overall_assessment`, `risk_level`, `findings`, `cache_inputs`; copy exact `supporting_inputs` when supplied.
+`overall_assessment`, `risk_level`, `findings`. Omit `cache_inputs` and `supporting_inputs` so the
+recorder stamps the exact verified dispatch hashes without transcription typos (exact echoed copies
+remain accepted for compatibility).
 Assessment is `APPROVED`, `NEEDS_REVISION` or `BLOCKED`; do not infer it from counts alone.
 Each finding has `severity`, `category`, `claim`, `evidence`, `impact`, `artifact_section`,
 `traces_to` (default empty array).
@@ -110,8 +133,8 @@ Risk is `high`, `medium` or `low`. Omit finding IDs and severity counts; the rec
 from your exact returned identity fields and severities. Do not include `review_execution`;
 the recorder derives actual worker/parent identity and completion from native events.
 
-Batch JSON is one object with `batch_results`: an ordered array of complete single-lens payloads,
-including each schema/cache block. It is not separate automatic per-pass files or an abbreviated schema.
+Batch JSON is one object with `batch_results`: an ordered array of complete single-lens payloads.
+It is not separate automatic per-pass files or an abbreviated schema.
 Per-finding decisions belong only to the parent's separate decisions sidecar.
 
 Batch results use this same JSON contract; there is no file-path-only return channel.
@@ -121,7 +144,8 @@ Historical file-output receipts remain history, not this invocation's output mod
 
 Missing/invalid input or unreadable required evidence: return a JSON execution failure with
 `status:"FAILED"`, the actual `stage` and `error`, not a fabricated review or empty clean findings.
-The parent owns any permitted retry within existing accounting. Do not retry/delegate independently.
+The parent owns any new invocation within existing accounting. Do not retry the task or delegate independently;
+the bounded in-invocation path correction above and same-file range correction do not start a new review.
 A readable empty/frontmatter-only artifact produces a normal validated payload with one substantive
 empty-artifact must-fix per requested lens, not an invented clean review.
 After the one substantive JSON result or explicit execution failure, stop.
