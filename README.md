@@ -8,8 +8,8 @@
    alt="APEX banner" />
 </div>
 
-> **Modernize your Azure Infrastructure with AI.** A production-ready template for building Well-Architected
-> environments using custom Copilot agents, Dev Containers, and the Model Context Protocol (MCP).
+> **GitHub template repository for Azure infrastructure delivery and standalone Well-Architected assessments.**
+> Includes custom GitHub Copilot agents, domain skills, validators, a configured dev container, MCP server configuration, and optional upstream sync.
 
 [![Azure](https://img.shields.io/badge/Azure-0078D4?logo=microsoft-azure&logoColor=white)](https://azure.microsoft.com)
 [![Bicep](https://img.shields.io/badge/Bicep-0078D4?logo=azure-pipelines&logoColor=white)](https://github.com/Azure/bicep)
@@ -19,24 +19,27 @@
 
 ## Overview
 
-This accelerator provides the scaffolding and governance to move from requirements to deployed infrastructure
-using an orchestrated multi-agent workflow. It leverages domain-specific AI agents to ensure every deployment
-is Well-Architected, governed, and documented.
+APEX Accelerator packages the agents, skills, instructions, validators, `.mcp.json` configuration, and dev container from the [upstream APEX project](https://github.com/jonathan-vella/apex) into a ready-to-clone GitHub template. Use it for two workflows:
 
-**What you get**: Specialized agents, skills, validation scripts, a full dev container with all
-tools pre-installed, and an optional weekly sync workflow that keeps your agents and skills up to date with
-the [upstream APEX project](https://github.com/jonathan-vella/apex).
+- **Infrastructure delivery**: Coordinate a multi-step workflow through `01-Orchestrator` from requirements, architecture, retail pricing, and Azure Policy governance to Azure Verified Modules (AVM) in Bicep or Terraform, deployment, and as-built documentation, with independent `challenger-review-subagent` gates.
+- **Standalone WAF assessment**: Run `/waf-assess-existing` in `01-Orchestrator` against local IaC, read-only Azure subscriptions, or both to generate a five-pillar Well-Architected review, existing-state architecture diagram, Cost Management report with visual charts, and prioritized action register without entering deployment steps.
 
 ---
 
 ## Prerequisites
 
-| Requirement            | Details                                              |
-| ---------------------- | ---------------------------------------------------- |
-| **VS Code**            | Latest stable release                                |
-| **GitHub Copilot**     | Active license (Individual, Business, or Enterprise) |
-| **Docker Desktop**     | Validated on x86-64 and ARM64, including Windows with WSL 2; Linux hosts are supported (GitHub Codespaces is not separately validated) |
-| **Azure subscription** | Required (Owner or Contributor on the target subscription) |
+| Requirement            | Details                                                                                                                                  |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| **VS Code**            | Latest stable release                                                                                                                    |
+| **GitHub Copilot**     | Active license (Individual, Business, or Enterprise)                                                                                     |
+| **Docker Desktop**     | Validated on x86-64 and ARM64, including Windows with WSL 2; Linux hosts are supported (GitHub Codespaces is not separately validated)   |
+| **Azure access**       | Depends on workflow mode (see modes below)                                                                                               |
+
+**Azure access by mode:**
+
+- **Offline IaC assessment (`Source: iac`) or early Architecture using shared ALZ Corp policy assumptions**: Requires no Azure subscription to start. Target-verified policy evidence and Azure access apply before completing IaC planning, generating code, or deploying.
+- **Live standalone WAF assessment (`Source: azure` or `combined`)**: Requires read-only `az login` access (`Reader` and `Cost Management Reader` on target scopes), without running `npm run setup`.
+- **Full Step 6 deployment and GitHub Actions OIDC automation**: Requires `Owner` or `Contributor` on the target subscription, plus Management Group `Reader` when enabling automated `Governance Policy Baseline` collection via `npm run setup`.
 
 ---
 
@@ -44,15 +47,15 @@ the [upstream APEX project](https://github.com/jonathan-vella/apex).
 
 ### 1. Create Your Repository
 
-This repository is a **GitHub Template** — not a fork.
+This repository is a **GitHub Template**, not a fork.
 
-1. Click **"Use this template"** → **"Create a new repository"** at the top of this page
-2. Choose an owner and name (e.g., `my-infraops-project`)
+1. Select **Use this template** -> **Create a new repository** at the top of this page
+2. Choose an owner and name (for example, `my-infraops-project`)
 3. Select **Private** (do not use Public)
-4. Click **Create repository**
+4. Select **Create repository**
 
-> Your new repo has the same directory structure and files but a **clean commit history**
-> and no fork relationship. It is entirely yours.
+> Your new repository starts with the same directory structure, a clean commit history,
+> and no fork relationship.
 
 ### 2. Clone and Configure Your Host
 
@@ -128,18 +131,18 @@ npm run init
 npm run sync:workflows
 ```
 
-**What these do:**
+**What each command does:**
 
-| Command                  | Purpose                                                                                                                                                                                       |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm install`            | Install Node.js dependencies (validation scripts, linting)                                                                                                                                    |
-| `npm run init`           | **One-time setup** — replaces all references to the accelerator template repo with your repo's URL (auto-detected from git remote). Run `npm run init -- --dry-run` first to preview changes. |
-| `npm run sync:workflows` | Fetches the latest GitHub Actions workflows from the [upstream APEX project](https://github.com/jonathan-vella/apex) into your `.github/workflows/` directory                |
+| Command                  | Purpose                                                                                                                                                                                               |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm install`            | Installs Node.js dependencies for validation scripts and linting.                                                                                                                                     |
+| `npm run init`           | One-time setup that replaces template repository references with your repository URL from the git remote. Run `npm run init -- --dry-run` first to preview changes.                                   |
+| `npm run sync:workflows` | Previews consumer workflow updates from the [upstream APEX project](https://github.com/jonathan-vella/apex) (`--dry-run` by default). Run `npm run sync:workflows -- --apply --ref <commit-sha>` to write updates from a reviewed commit into `.github/workflows/`. |
 
-> **Note:** Python dependencies (diagrams and apex-recall) are installed
-> automatically by the dev container's `post-create.sh` script. No manual `pip install` is needed.
+> **Note:** The dev container `post-create.sh` script installs Python dependencies (`diagrams` and `apex-recall`)
+> automatically, so manual `pip install` commands are unnecessary.
 
-After running, review and commit:
+Review and commit the initialized files:
 
 ```bash
 git --no-pager diff
@@ -148,141 +151,173 @@ git push
 ```
 
 > **Expected diff:** You will see changes to `AGENTS.md`, `CONTRIBUTING.md`, and one or more
-> `.github/workflows/` files. You may also see formatting-only changes to `.mcp.json`
-> (the dev container normalizes its JSON arrays to multi-line format on first start) — this is
-> expected and safe to commit.
+> `.github/workflows/` files if you applied workflow updates. You may also see formatting-only changes to `.mcp.json`
+> because the dev container normalizes JSON arrays to multi-line format on first start. Commit those changes safely.
 >
 > **Tip:** Use `git --no-pager diff` instead of plain `git diff` to avoid the `less` pager.
-> If you do use `git diff` and see a `:` prompt, press `q` to exit or `Space` to scroll.
+> If `git diff` opens a `:` prompt, press `q` to exit or `Space` to scroll.
 
 ### 4. Set Up Azure
 
-Run the setup wizard to configure Azure OIDC authentication, RBAC roles, and GitHub
-secrets/variables — all in one command:
+Choose the setup level that matches your workflow:
+
+- **Offline IaC assessment (`Source: iac`) or early Architecture with shared ALZ Corp policy assumptions**: Skip Azure sign-in and `npm run setup`. You only need Azure access before completing target-verified IaC planning, generating deployment code, or deploying.
+- **Live standalone WAF assessment (`Source: azure` or `combined`)**: Sign in with read-only access (`Reader` and `Cost Management Reader` on target subscriptions) and skip `npm run setup`:
+
+```bash
+az login --tenant <TENANT_ID>
+az account list --query "[].{name:name, id:id, tenantId:tenantId}" --output table
+```
+
+- **Full Step 6 deployment and GitHub Actions OIDC automation**: Run `az login` with `Owner` or `Contributor` on the target subscription (plus Management Group `Reader` if enabling automated `Governance Policy Baseline` collection), then run the idempotent setup script:
 
 ```bash
 az login
 npm run setup
 ```
 
-The wizard creates an Entra ID app registration, OIDC federated credentials (for
-main branch + dev/staging/prod environments), assigns Reader at your Management Group
-and Contributor at your subscription, and configures all GitHub secrets and variables.
-It is idempotent — safe to re-run.
+`npm run setup` creates a Microsoft Entra ID app registration, configures OIDC federated credentials for `main` and `dev`, `staging`, and `prod` environments, assigns subscription and optional Management Group RBAC roles, and writes GitHub Actions secrets and variables.
 
 See the [Azure Setup documentation](https://apexops.pro/getting-started/azure-setup/)
-for headless mode, manual setup steps, and troubleshooting.
+for headless mode, manual configuration, and troubleshooting.
 
 ### 5. Allow GitHub Actions to Create Pull Requests
 
-The maintenance workflows (step 6) open pull requests automatically when they
-detect drift. This requires one permission change in your repository settings.
+Scheduled maintenance and sync workflows open pull requests when they detect updates. Enable pull request creation once in repository settings:
 
-1. Go to your repository on GitHub
-2. Click **Settings → Actions → General**
+1. Open your repository on GitHub
+2. Select **Settings -> Actions -> General**
 3. Scroll to **Workflow permissions**
 4. Check **Allow GitHub Actions to create and approve pull requests**
-5. Click **Save**
+5. Select **Save**
 
-> **Why:** GitHub disables this by default on all new repositories.
-> Without it, any workflow that opens a PR will fail with:
+> **Why:** GitHub disables this permission by default on new repositories.
+> Without it, PR-creating workflows fail with:
 > `GitHub Actions is not permitted to create or approve pull requests`
 
 ### 6. Run the Maintenance Workflows
 
-After Azure setup completes, trigger the two scheduled maintenance workflows once
-so your repository has a fresh baseline before you start working. Both run weekly
-on Mondays after this initial seed.
+Repositories created from this template include consumer workflows from APEX's `.github/consumer-workflows/` templates. Job guards keep these workflows inactive inside `jonathan-vella/apex`, this accelerator, and GitHub template repositories, while consumer repositories run them automatically when GitHub Actions runs.
+
+| Workflow                       | Purpose                                                                                                                                                                                                                                 | Trigger / Schedule  |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| **Weekly Maintenance**         | Runs `azure-mcp-release` (checks the pinned Azure MCP stable release), `refresh-avm-module-index` (refreshes AVM Bicep and Terraform module indexes and version cache), and `track-deprecations` (updates `.github/data/azure-deprecations.json`). | Mondays 06:00 UTC   |
+| **Governance Policy Baseline** | Collects effective Azure Policy assignments at Management Group scope into `.github/data/governance-policy-baseline.json.gz`. Runs only when repository variables `GOVERNANCE_BASELINE_ENABLED=true` and `GOVERNANCE_MG_ID` exist alongside Azure OIDC secrets. | Mondays 05:00 UTC   |
+| **IaC Checks**                 | Validates Bicep and Terraform configurations on infrastructure changes.                                                                                                                                                                 | PRs and pushes      |
+
+Seed `Weekly Maintenance` (and `Governance Policy Baseline` if configured) with a manual run:
 
 ```bash
 gh workflow run "Weekly Maintenance"
-gh workflow run "Governance Policy Baseline"
-```
-
-| Workflow                       | Purpose                                                                                                                                              | Schedule                |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
-| **Weekly Maintenance**         | Refreshes the AVM module index, tracks Azure service deprecations, runs the quarterly docs/orphan audit, and link-checks docs. | Mondays 06:00 UTC       |
-| **Governance Policy Baseline** | Collects effective Azure Policy assignments (including management-group inheritance) from your subscription into `agent-output/_baseline/` so the IaC planner consumes real governance constraints. Requires step 4 to be complete. | Mondays 05:00 UTC       |
-
-Verify both runs succeeded before continuing:
-
-```bash
 gh run list --workflow "Weekly Maintenance" --limit 1
+
+# Run only after setting GOVERNANCE_BASELINE_ENABLED=true, GOVERNANCE_MG_ID, and Azure OIDC secrets:
+gh workflow run "Governance Policy Baseline"
 gh run list --workflow "Governance Policy Baseline" --limit 1
 ```
 
-Each run may open a pull request when it detects drift (new AVM module versions,
-policy changes, deprecated services). Review and merge those PRs as they appear —
-they are never auto-merged.
+Each refresh workflow opens a pull request for human review when data changes and never enables auto-merge.
+
+---
+
+## Start Your First Workflow
+
+In VS Code Chat, confirm the session target is **Copilot** (local workspace session) and select **`01-Orchestrator`** from the agent picker.
+
+### Option A: Infrastructure Delivery
+
+Use this path to take a workload through the [multi-step delivery workflow](https://apexops.pro/concepts/workflow/): Requirements -> Architecture -> Governance -> IaC Plan -> Bicep or Terraform -> Deploy -> As-Built documentation.
+
+```text
+Start a new Azure project named {{PROJECT_NAME}}.
+Preferred IaC track: {{BICEP_OR_TERRAFORM}}
+Target region: swedencentral
+Workload summary: {{WORKLOAD_SUMMARY}}
+```
+
+`01-Orchestrator` delegates to `02-Requirements` to collect missing business, resilience, compliance, SKU, and policy-source inputs before advancing to Architecture and independent `challenger-review-subagent` checks.
+
+### Option B: Standalone WAF Assessment
+
+Use `/waf-assess-existing` in `01-Orchestrator` to evaluate an existing workload without entering Governance, IaC planning, or deployment. See the [Standalone WAF Assessment guide](https://apexops.pro/guides/waf-assessment/) and the [standalone assessment contract](.github/skills/apex-workflow-engine/references/standalone-assessment.md).
+
+```text
+/waf-assess-existing
+Project: {{PROJECT_NAME}}
+Scenario: {{SCENARIO}}
+Source: {{SOURCE}}
+Visual charts: true
+Action register: true
+
+Azure read scope:
+- Tenant ID: {{TENANT_ID}}
+- Subscriptions: {{SUBSCRIPTION_IDS}}
+- Resource groups: {{RESOURCE_GROUPS}}
+- Allowed read categories: configuration, topology, utilization, operations, recovery, billing, policy
+- Guardrails: Read-only access only. Do not read secrets, keys, connection strings, or certificates, and do not modify Azure resources.
+
+IaC and diagrams:
+- Paths: {{IAC_AND_DIAGRAM_PATHS}}
+```
+
+- **`Scenario`**: Set `evidence_only` to audit available evidence directly without a business interview, or `requirements_led` to capture business targets through `02-Requirements` (every field includes an `Unknown` option).
+- **`Source`**: Set `iac` for offline Bicep, Terraform, `azure.yaml`, and diagrams (delete the `Azure read scope` block), `azure` for live read-only subscriptions via `az login` (delete the `IaC and diagrams` block), or `combined` to compare declared IaC against live Azure state.
 
 ---
 
 ## Project Structure
 
-Once you are working in your repo, here is what lives where:
+Key directories in your repository:
 
 ```text
 .github/
   agents/              # Agent definitions (*.agent.md)
     _subagents/        # Subagent definitions (non-user-invocable)
+  prompts/             # Slash-command entry prompts (e.g., waf-assess-existing.prompt.md)
   skills/              # Reusable domain knowledge (SKILL.md per skill)
   instructions/        # File-type rules with glob-based auto-application
-  copilot-instructions.md  # VS Code Copilot-specific orchestration instructions
-  workflows/           # GitHub Actions (sync, CI, validation)
+  data/                # Policy baselines, AVM module indexes, deprecation data
+  copilot-instructions.md  # VS Code Copilot orchestration instructions
+  workflows/           # GitHub Actions (sync, CI, maintenance)
 agent-output/          # Generated artifacts organized by project
-  {project}/           # 01-requirements.md through 07-*.md
+  {project}/           # Delivery (01-requirements.md .. 07-*.md) or assessment bundle
 infra/
   bicep/{project}/     # Bicep templates (main.bicep + modules/)
   terraform/{project}/ # Terraform configurations (main.tf + modules/)
 tools/
-  apex-recall/         # Progressive session recall CLI
+  apex-recall/         # Session state and handoff CLI
   scripts/             # Validation and maintenance scripts
 ```
 
-### What's Yours vs. What's Upstream
+### What Is Yours vs. What Is Upstream
 
-| Your files (safe to edit, never overwritten by sync) | Upstream-managed files (overwritten by sync) |
-| ---------------------------------------------------- | -------------------------------------------- |
-| `agent-output/` — generated project artifacts        | `.github/agents/` — agent definitions        |
-| `infra/bicep/` — your Bicep templates                | `.github/skills/` — agent skills             |
-| `.github/workflows/` — your CI/CD workflows          | `.github/instructions/` — coding rules       |
-| `README.md` — your documentation                     | `.github/copilot-instructions.md`            |
-|                                                      | `tools/`, `package.json`            |
-|                                                      | `AGENTS.md`, `.devcontainer/`, `.vscode/`    |
+| Consumer-owned files (preserved across sync)                              | Upstream-managed files (overwritten by sync)                                                        |
+| ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `agent-output/` (generated project artifacts)                             | `.github/agents/`, `.github/skills/`, `.github/instructions/`, `.github/plugins/`                   |
+| `infra/bicep/` and `infra/terraform/` (project Bicep and Terraform code)  | `.github/copilot-instructions.md` and `.github/prompts/`                                            |
+| `.github/workflows/` and `.github/consumer-workflows-state.json`          | `infra/bicep/AGENTS.md` and `infra/terraform/AGENTS.md` (`SYNC_EXCEPTIONS`)                         |
+| `.github/data/` (private governance baselines and refreshed module data)  | `.github/data/alz-corp-policy-baseline.json.gz` (`SYNC_EXCEPTIONS`)                                 |
+| `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`                            | `tools/`, `assets/`, `package.json`, `AGENTS.md`, `.devcontainer/`, `.vscode/`                      |
 
-> **Note**: If you disable the sync workflow, everything becomes yours to edit freely.
-> See [Customization](#customization) below.
+> **Note**: Upstream Sync preserves `infra/bicep/{project}/`, `infra/terraform/{project}/`, and private files in `.github/data/`, while updating shared `infra/bicep/AGENTS.md`, `infra/terraform/AGENTS.md`, and `.github/data/alz-corp-policy-baseline.json.gz` through `SYNC_EXCEPTIONS`. Disabling Upstream Sync makes every file consumer-managed; see [Customization](#customization).
 
 ---
 
 ## Customization
 
-### Changing defaults (regions, tags, naming)
+### Changing Defaults (Regions, Tags, Naming)
 
-When you create from this template, **every file is yours**. The question is which
-approach gives you the best experience over time.
+Choose between direct edits and layered overrides depending on whether you keep Upstream Sync active.
 
-**Strategy A: Edit directly** (simplest)
+**Strategy A: Edit directly** (solo users or teams managing updates manually)
 
-Edit the file you need — for example, change `swedencentral` to `westeurope` in
-`.github/skills/apex-azure-defaults/SKILL.md`. If you don't plan to pull upstream
-improvements, disable the sync workflow entirely (repo Settings → Actions → disable
-**Upstream Sync**) and manage the repo as your own.
+Edit the target file directly, such as changing `swedencentral` to `westeurope` in `.github/skills/apex-azure-defaults/SKILL.md`, and disable **Upstream Sync** in repository **Settings -> Actions**. Re-enabling Upstream Sync later replaces upstream-managed files on the sync PR branch, so record local edits if you plan to re-apply them.
 
-If you want upstream updates later, re-enable the workflow. The sync PR will overwrite
-your edited files with the upstream version (it is not a merge), so you'll need to
-re-apply your changes after merging. Keep a record of what you changed.
+**Strategy B: Keep sync enabled and layer overrides** (recommended for teams tracking upstream updates)
 
-**Strategy B: Keep sync enabled, layer your overrides** (recommended for teams that
-want continuous upstream improvements)
+Upstream Sync overwrites upstream-managed files and never touches preserved paths in `EXCLUDE_PATHS`. Store durable overrides in one of three places:
 
-The sync workflow overwrites all upstream-managed files but never touches the four
-excluded paths. To safely store overrides that survive sync:
-
-1. **Edit the sync exclusion list** — the sync workflow file itself is user-owned
-   (`.github/workflows/` is excluded from sync). Open
-  `.github/workflows/weekly-upstream-sync.yml` and add paths to `EXCLUDE_PATHS`.
-  The mirror and preservation check both consume this list:
+1. **Extend `EXCLUDE_PATHS` in `.github/workflows/weekly-upstream-sync.yml`** (`EXCLUDE_PATHS` already preserves `.github/workflows/`):
 
    ```yaml
    EXCLUDE_PATHS: |
@@ -294,74 +329,26 @@ excluded paths. To safely store overrides that survive sync:
      AGENTS.md
    ```
 
-   Then add your overrides to root `AGENTS.md` — it will survive all future syncs.
+   Both the sync step and the preservation check read `EXCLUDE_PATHS`, so root `AGENTS.md` then survives future sync PRs.
 
-2. **Use project-local guidance** — place organization defaults in
-  `infra/bicep/{project}/AGENTS.md` or `infra/terraform/{project}/AGENTS.md`.
-  Project folders are preserved. The shared track-level `AGENTS.md` files are
-  upstream-owned exceptions so security and workflow corrections reach both tracks.
-  To own a shared file instead, remove its entry from `SYNC_EXCEPTIONS`.
+2. **Add project-local guidance** in `infra/bicep/{project}/AGENTS.md` or `infra/terraform/{project}/AGENTS.md`. Upstream Sync preserves project subfolders while updating shared `infra/bicep/AGENTS.md` and `infra/terraform/AGENTS.md` via `SYNC_EXCEPTIONS`. Remove an entry from `SYNC_EXCEPTIONS` only if you want to maintain that shared file yourself.
 
-3. **VS Code user-profile instructions** — place a `.instructions.md` file in your
-   VS Code profile's `prompts/` folder. This lives outside the repo entirely and
-   applies to all your workspaces.
+3. **Use VS Code user-profile instructions** by placing a `.instructions.md` file in your local VS Code profile `prompts/` folder outside the repository.
 
-**Which strategy to pick?**
+### Adding Custom Agents or Skills
 
-| Approach                          | Best for                                        |
-| --------------------------------- | ----------------------------------------------- |
-| **A: Edit directly, skip sync**   | Solo users, teams that self-manage updates      |
-| **B: Layer overrides, keep sync** | Teams that want automatic upstream improvements |
-
-### Adding new agents or skills
-
-Agents are defined in `.github/agents/*.agent.md` and skills in
-`.github/skills/*/SKILL.md`. You can add new ones alongside the existing set.
-If you keep sync enabled, add your custom paths to `EXCLUDE_PATHS`.
-Distinctive names alone do not protect files: the mirror removes upstream-absent paths.
-
-### Previewing upstream updates
-
-Manual **Upstream Sync** runs default to `dry_run=true`: they mirror into the runner,
-validate contracts, and summarize changes without pushing or changing pull requests.
-Set `upstream_ref` to an existing upstream feature branch to preview unmerged changes.
-Non-`main` branches cannot publish.
-
-Scheduled runs use upstream `main`. A manual `main` run can set `dry_run=false`
-to propose a sync PR. Every run records the exact upstream commit; review remains manual.
-The stabilization and publication checks run before publishing. These checks are not
-native agent acceptance or permission to deploy Azure resources.
-
-Private governance baselines, project outputs, generated infrastructure, repository
-workflows, local logs and scratch remain preserved. AVM indexes, the module cache and deprecation
-data are seeded only when absent, then owned by consumer maintenance. The public governance
-fixture and shared track-level guidance continue to follow upstream via `SYNC_EXCEPTIONS`.
-
-### Consumer Automation
-
-The accelerator distributes governance, IaC and weekly maintenance workflows from APEX's
-`.github/consumer-workflows/` templates. Operational jobs are disabled in APEX, this accelerator
-and template repositories. Repositories created from this template run IaC checks and maintenance
-automatically when Actions is enabled. Governance additionally requires
-`GOVERNANCE_BASELINE_ENABLED=true`, a Management Group ID and configured Azure OIDC credentials.
-
-Preview template updates with `npm run sync:workflows -- --dry-run`, then apply a reviewed
-commit using `npm run sync:workflows -- --apply --ref <commit-sha>`.
-Modified workflows block the update; retired files are reported for review, never deleted automatically.
-The updater provenance is preserved by content sync. See
-[consumer workflow ownership](tools/scripts/consumer-workflows.md).
+Agent definitions live in `.github/agents/*.agent.md` and skills live in `.github/skills/*/SKILL.md`. If Upstream Sync remains active, add any custom agent or skill paths to `EXCLUDE_PATHS` in `.github/workflows/weekly-upstream-sync.yml` because the mirror step deletes upstream-absent files outside `EXCLUDE_PATHS`.
 
 ---
 
 ## IaC Tracks: Bicep and Terraform
 
-Both IaC tracks are fully supported. The Requirements agent (Step 1) captures your
-`iac_tool` preference, and the Orchestrator routes Steps 4-6 to the correct track.
+APEX supports both Bicep and Terraform tracks. `02-Requirements` records your `iac_tool` decision, and `01-Orchestrator` routes planning, code generation, and deployment to the matching track.
 
 | Factor          | Bicep                           | Terraform                                |
 | --------------- | ------------------------------- | ---------------------------------------- |
-| **Azure-only**  | Native DSL, first-class support | Multi-cloud via AzureRM provider         |
-| **State**       | No state file (ARM-managed)     | State file (Azure Storage backend)       |
+| **Provider**    | Native Azure DSL (ARM)          | AzureRM and AzAPI providers              |
+| **State**       | ARM-managed (no state file)     | State file (Azure Storage backend)       |
 | **AVM modules** | `br/public:avm/res/`            | `registry.terraform.io/Azure/avm-res-*/` |
 | **CI/CD**       | `az deployment group create`    | `terraform plan` + `terraform apply`     |
 
@@ -369,38 +356,41 @@ Both IaC tracks are fully supported. The Requirements agent (Step 1) captures yo
 
 ## Multi-Project Support
 
-The accelerator is designed for **one repo containing multiple projects**. Each project
-gets its own folders:
+One repository can host multiple projects in isolated subdirectories:
 
-- `agent-output/{project}/` — artifacts (requirements, architecture, plans, docs)
-- `infra/bicep/{project}/` or `infra/terraform/{project}/` — IaC templates
+- `agent-output/{project}/` for requirements, architecture, governance, plans, assessments, and as-built docs
+- `infra/bicep/{project}/` or `infra/terraform/{project}/` for IaC modules and entry points
 
-Agents, skills, instructions, and the dev container are shared across all projects.
-
-**One repo per project** is also valid when teams need separate governance or isolation.
-Each repo is created independently from the template.
-
-### Sharing customizations across repos or teams
-
-- **Edit the sync exclusion list** in each repo to protect `AGENTS.md`, then maintain a
-  standard overrides section that you copy into each repo
-- **VS Code user-profile instructions** — personal preferences that follow you across
-  repos without any per-repo setup
-- **Canonical overrides in a shared location** — maintain a standard overrides snippet
-  in a team wiki or internal repo and copy it when creating new instances
+All projects in the repository share the same agents, skills, instructions, and dev container. Create separate repositories from the template when teams need isolated access boundaries or independent Azure OIDC environments.
 
 ---
 
 ## Keeping Up to Date
 
-| What                                        | How                                          | Frequency      |
-| ------------------------------------------- | -------------------------------------------- | -------------- |
-| Agents, skills, instructions, docs, scripts | Automated weekly PR (upstream sync workflow) | Weekly         |
-| GitHub Actions workflows                    | `npm run sync:workflows` (manual)            | As needed      |
-| All validations                             | `npm run validate:all`                       | Before each PR |
+| Surface                                               | Update Mechanism                                                           | Cadence        |
+| ----------------------------------------------------- | -------------------------------------------------------------------------- | -------------- |
+| Agents, skills, instructions, tools, shared baselines | **Upstream Sync** workflow opens a manual-review PR (`automation/upstream-sync`) | Weekly (Sundays) |
+| Consumer GitHub Actions workflows                     | `npm run sync:workflows -- --dry-run`, then `--apply --ref <commit-sha>`   | As needed      |
+| AVM module index, Azure MCP check, deprecations       | **Weekly Maintenance** workflow opens refresh PRs                          | Weekly (Mondays) |
+| Tenant Azure Policy baseline (optional)               | **Governance Policy Baseline** workflow (`GOVERNANCE_BASELINE_ENABLED=true`) | Weekly (Mondays) |
+| Local code and documentation checks                   | `npm run validate:all`                                                     | Before each PR |
 
-The sync workflow opens a PR for human review — it never auto-merges. You can disable
-it entirely if you prefer to manage updates manually.
+### Upstream Content Sync
+
+Manual **Upstream Sync** dispatches default to `dry_run=true`, mirroring and running contract checks on the runner without pushing branches or opening pull requests. Set `upstream_ref` to preview an upstream branch; only `main` can publish a sync PR (`dry_run=false`).
+
+Upstream Sync preserves paths in `EXCLUDE_PATHS`, updates shared `SYNC_EXCEPTIONS` (`infra/bicep/AGENTS.md`, `infra/terraform/AGENTS.md`, `.github/data/alz-corp-policy-baseline.json.gz`, and `.github/data/governance-policy-baseline.fixture.json`), and seeds `SEED_PATHS` (AVM CSV/JSON indexes, module cache, and deprecation JSON) only when absent. Passing sync checks does not grant Azure deployment approval.
+
+### Consumer Workflow Updates
+
+Upstream Sync excludes `.github/workflows/` because `GITHUB_TOKEN` cannot push workflow changes by default. Preview and apply reviewed workflow template updates locally:
+
+```bash
+npm run sync:workflows -- --dry-run
+npm run sync:workflows -- --apply --ref <reviewed-commit-sha>
+```
+
+`.github/consumer-workflows-state.json` tracks installed template hashes. Modified local workflow files block the update, and the updater reports retired templates for manual review instead of deleting them. See [consumer workflow ownership](tools/scripts/consumer-workflows.md) and the [Updating APEX guide](https://apexops.pro/guides/updating-apex/).
 
 ---
 
@@ -422,16 +412,23 @@ terraform fmt -check -recursive infra/terraform/
 cd infra/terraform/{project} && terraform init -backend=false && terraform validate
 ```
 
+Full validator reference: [Validation Reference](https://apexops.pro/reference/validation-reference/).
+
 ---
 
 ## Resources
 
-- [APEX upstream project](https://github.com/jonathan-vella/apex)
 - [APEX documentation](https://apexops.pro/)
+- [Quickstart guide](https://apexops.pro/getting-started/quickstart/)
 - [Azure Setup guide](https://apexops.pro/getting-started/azure-setup/)
-- [MicroHack (hands-on exercises)](https://microhack.apexops.pro/)
-- [Prompt Guide](https://apexops.pro/guides/prompt-guide/)
+- [Workflow overview](https://apexops.pro/concepts/workflow/)
+- [Standalone WAF Assessment guide](https://apexops.pro/guides/waf-assessment/)
+- [Updating APEX guide](https://apexops.pro/guides/updating-apex/)
+- [Prompt guide](https://apexops.pro/guides/prompt-guide/)
+- [Validation reference](https://apexops.pro/reference/validation-reference/)
 - [FAQ](https://apexops.pro/reference/faq/)
+- [APEX MicroHack](https://microhack.apexops.pro/)
+- [APEX upstream repository](https://github.com/jonathan-vella/apex)
 
 ## License
 
