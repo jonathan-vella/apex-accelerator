@@ -74,6 +74,8 @@ Record the actual invocation outcome separately from successful publication usin
 
 - Write only governance artifacts/preview, authorized discovery caches and workspace-local scratch,
   decision sidecar, recorder-owned findings, README, handoff, recall and derived `sku_allowlist_snapshot`.
+  The approved managed private policy store is also allowed for identifying scope, snapshots and diagnostics;
+  resolve it through `apex-recall policy-source`, never through an invented user file format.
   No SKU services/revisions, requirements, architecture, IaC, Azure resources or Azure Policy mutations.
 - Policy authority comes only from `discover.py` or the eligible, explicitly selected
   `render_cached_governance.py` path. No improvised REST/CLI/inline-Python discovery or discovery delegation.
@@ -105,6 +107,16 @@ and bind it with recall checkpoint's `--policy-feasibility`. Do not start/comple
 ask for architecture findings dispositions or imply approval. Formal mode retains prerequisites
 below and reuses current full-coverage evidence/scope. Discovery includes Defender auto-assignments
 by default; explicit legacy exclusion is not equivalent full coverage.
+Apply the [policy-source contract](../skills/apex-azure-governance-discovery/references/policy-source.md)
+before requesting identifiers or reading Azure. Explicit shared Corp assumptions support Architecture
+without tenant scope, but do not constitute tenant discovery or verified implementation readiness.
+Capture actual missing scope through native inputs and the managed CLI; reuse current authorization.
+For private scope, verify the current tenant, collect into the owner-only external store and keep raw previews
+out of public artifacts. Resolve canonical private contracts through the shared project-path helpers.
+Use `discover.py --retain-rule-evidence` for private collection and
+`--validate-only --retain-rule-evidence` before target-backed semantic reconciliation.
+Summary-only COMPLETE caches lack full rule evidence and require a bounded authorized refresh,
+not inferred approval, new consent files, review restamping or an allowance reset.
 
 Recover state via `apex-recall show <project> --json`. Require approved `02-architecture-assessment.md`
 and current Step 2 completion evidence (no self-edit of upstream artifacts).
@@ -184,6 +196,12 @@ Checkpoint `phase_1_discovery`.
 
 ## Phase 2 — Artifacts and reconciliation
 
+Use the [complete-stage work package](../skills/apex-workflow-engine/references/practical-workflow.md#complete-stage-work-package).
+Assess actual applicability and phase: informational Audit observations normally become concrete planning/test
+requirements, not automatic Deny findings. Missing runtime proof for not-yet-deployed resources is Unverified,
+not itself a design violation. Material residency, security, cost or exception gaps still require owner evidence/decision.
+Batch genuine missing choices/read scope once; do not broaden discovery, infer a policy waiver or reprice unchanged scope.
+
 Load `.github/skills/apex-azure-artifacts/SKILL.md` and its
 `04-governance-constraints.template.md`.
 Use compact script `findings[]`/targeted JSON selectors, not raw definitions or whole large snapshots.
@@ -234,7 +252,9 @@ Finalize all review inputs before spending the pass.
 Required single `governance-reconciliation` pass, except the graph's genuine
 `constraints.count == 0` case (`blockers + auto_remediate + warnings == 0`).
 Discovery signature alone is not review freshness; reuse only validated unchanged review inputs.
-An exhausted one-pass allowance blocks a new review; changed filenames/sessions reset nothing.
+For practical projects, use the actual artifact/lens cycle and its granted initial/closure/extension allowance.
+For legacy projects, an exhausted one-pass allowance blocks a new review.
+Changed filenames/sessions reset nothing; missing additional authority returns once to the interactive parent.
 
 Load [one-shot review](../skills/apex-azure-defaults/references/one-shot-review.md) and the
 [review protocol](../skills/apex-azure-defaults/references/adversarial-review-protocol.md).

@@ -7,6 +7,9 @@ agent: 01-Orchestrator
 
 Coordinate a standalone existing-workload Well-Architected assessment, not an infrastructure delivery run.
 Load [standalone assessment](../skills/apex-workflow-engine/references/standalone-assessment.md).
+At `scope` intake, read only `standalone-assessment.md` and `tools/schemas/session-state.schema.json`
+(`assessmentRequest`) before initializing recall; defer worker scripts (`collect-assessment-*`,
+`render-assessment-*`) and subagent definitions to delegated phase owners.
 Select `workflow_mode=assessment` explicitly with an authorized upfront scope.
 Offer evidence-only (no business interview) or requirements-led discovery; source is IaC, Azure or combined.
 Do not require `01-requirements.md` or a numeric Step 1 approval for evidence-only work.
@@ -25,7 +28,12 @@ Do not require `ask_user` to return an SDK request ID. Recover already-captured 
 source-linked local receipt instead of inventing native IDs or repeating settled questions.
 Capture receipts do not replace independent reviews, human gates or Azure authorization.
 
-Deliver a WAF report, required architecture diagram and Cost Management report as one bundle.
+Deliver a WAF report, required architecture diagram and Cost Management report as one bundle, plus the
+[Assessment Action Register](../skills/apex-azure-artifacts/references/assessment-action-register.md)
+(`04-assessment-action-register.md` and `assets/04-assessment-action-register.xlsx`) for new Azure/combined runs
+or when `action_register: true` is requested for IaC-only runs, and quantitative WAF/cost charts
+(`visual_charts: true` -> `assets/02-waf-posture.{png,svg}`, `assets/03-cost-trends.{png,svg}`,
+`assets/03-cost-drivers.{png,svg}` embedded inline in the Markdown reports).
 For Azure report actual spend, trends and available forecast; for IaC report labelled estimates.
 Missing cost evidence is not zero. Keep a prioritized nonbinding roadmap and explicit coverage gaps.
 Run internal owner handoffs and both independent WAF/cost-quality reviews automatically within granted scope.
