@@ -21,11 +21,19 @@ The report contains:
 - Evidence-backed `opportunities[]`, shared/resource `exclusions[]`, `allocation_notes[]` and `gaps[]`.
 
 Coverage is `complete`, `partial` or `not_assessed`, independently of lifecycle completion and report acceptance.
+Successful billing/forecast query collection establishes assessment evidence **coverage**, never a passing
+Cost Optimization workload control in `_meta/waf-checks.json` or `_meta/waf-scores.json` (score workload controls
+such as rightsizing, idle/unattached cleanup, dev/test shutdown, AHB/commitments, budgets/anomaly alerts and
+storage/backup lifecycle). For live Azure collection, invoke `node tools/scripts/collect-assessment-cost.mjs --plan _meta/cost-plan.json --root agent-output/<project> [--include-amortized] [--include-rg-breakdown]` (uses `--only-show-errors` without `--debug` header dumps) rather than writing custom `_meta/scratch/` wrappers.
 Honest inaccessible cost evidence can be a valid final deliverable. Never substitute retail estimates for missing
 actual spend, invent a zero charge, or describe an API forecast as realized spend. No workload-wide combined total
 exists in this contract. Keep currencies, metrics, cost views, scopes and forecast/actual row statuses separate.
 For combined Azure/IaC evidence, correlate only evidenced resource identities; estimates are not duplicate charges,
 proven deployed drift, or savings against the actual bill.
+The [Assessment Action Register](../../apex-azure-artifacts/references/assessment-action-register.md)
+models proposed recurring additions, upgrade deltas and savings separately. Cost-report opportunities are
+referenced inputs to its contribution ledger, never an additional independent sum.
+Do not weaken this report's actual-baseline opportunity checks to accept a new-service retail fee.
 
 `source_kind: "actual"` identifies Cost Management API evidence, including separately labelled forecast rows.
 `source_kind: "estimate"` identifies retail pricing evidence. Neither label is runtime tool-provenance certification:
@@ -206,6 +214,10 @@ output contract; it does not invent meters, recalculate prices, or certify an ac
 The owner retains that invocation and its existing retail evidence checks. Candidate-only, empty, failed, stale or
 changed pricing output cannot support a numeric workload total. Unresolved expressions/modules/unpriced components
 stay in gaps. A failed estimate can be referenced with `monthly_total: null`, `status: "not_assessed"` and stated gaps.
+Retail provenance also retains the independently supplied `pricing_request: {path, sha256}` for the original
+owner request. Both paths are project-relative and hash-checked. The current retail validator reads that request,
+captured responses, immutable preflight binding and request ledger through the same controlled evidence reader.
+An output's recomputed self-hash is not original-request authority; rate-only quotes cannot support a monthly total.
 
 Do not implement speculative rightsizing. Qualitative opportunities and missing utilization evidence belong in the
 Markdown findings/gaps. Quantitative entries require a complete closed-month resource-attributed actual baseline,
@@ -299,7 +311,11 @@ A minimal **retail estimate entry** belongs only in `estimates[]`:
     "path": "_meta/cost/retail-output.json",
     "sha256": "<replace with exact 64-character raw-byte SHA-256>",
     "collected_at": "2026-03-15T12:30:00.000Z",
-    "source": "cost-estimate-subagent"
+    "source": "cost-estimate-subagent",
+    "pricing_request": {
+      "path": "_meta/cost/original-pricing-request.json",
+      "sha256": "<replace with exact original-request raw-byte SHA-256>"
+    }
   },
   "currency": "USD",
   "monthly_total": "12",

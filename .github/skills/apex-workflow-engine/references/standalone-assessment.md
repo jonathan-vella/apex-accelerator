@@ -27,9 +27,14 @@ Use one field per independent input and retain the complete captured-answer ledg
 Do not treat default options, local IDs, task output or Autopilot responses as independent human authorization.
 
 For static sources record exact allowed files/directories. For live sources record the tenant, subscriptions
-and resource-group boundaries, plus allowed read categories: configuration/topology, utilization, operations,
+and resource-group boundaries, optional disjoint `scope.rg_attribution` (`workload_rgs`, `shared_rgs`,
+`excluded_rgs` so unrelated or orphaned resource groups are classified explicitly without widening scope),
+plus allowed read categories: configuration/topology, utilization, operations,
 cost and optionally policy. Referenced external subscriptions remain out of scope unless explicitly added.
 Do not request secrets, sign in, change credentials or broaden access automatically.
+Use `python3 tools/scripts/collect-assessment-evidence.py --project-dir agent-output/<project>` to collect
+paginated, scalar-allowlisted inventory, topology, configuration, operations, recovery and policy headers
+uniformly across all approved scopes without persisting raw ARM properties, secrets or tag values.
 
 Cost settings are part of the scope: last completed calendar month, preceding-month comparison,
 month-to-date and current-month forecast when available are suggested defaults. Persist resolved dates;
@@ -39,6 +44,8 @@ IaC-only needs no Azure access; retail estimates retain explicit usage assumptio
 After recording the actual scope approval, start the assessment through recall's assessment lifecycle.
 Do not call numeric `complete-step` to manufacture predecessor approvals.
 New source, broader read categories or changed scope requires a real updated authorization.
+New Azure/combined runs include the Assessment Action Register. IaC-only runs include it when explicitly
+requested; record that selection with scope, without an extra implementation/approval questionnaire.
 
 ## Recall interface
 
@@ -61,6 +68,18 @@ apex-recall handoff example --json
 In the show response, `.session.assessment_run` is the authoritative route/checkpoint and
 `.session.assessment_readiness` is current validation, not permission.
 `.session.assessment_cost_plan` is derived from captured reporting settings, not the report being checked.
+Graph 3.2 and 3.3 starts persist `assessment_run.bundle_contract: "assessment-bundle-v2"` by default
+(or `"assessment-bundle-v3"` under graph 3.3 when the scope request sets `"visual_charts": true`) and
+`assessment_run.action_register`: true for Azure/combined, false for IaC unless the actual request
+contains `"action_register": true`. For `assessment-bundle-v3`, `03-Architect` writes `_meta/waf-scores.json`
+and runs `python3 tools/scripts/render-assessment-charts.py --project-dir agent-output/<project>` during
+`analysis` to emit `assets/02-waf-posture.{png,svg}`, `assets/03-cost-trends.{png,svg}`, and
+`assets/03-cost-drivers.{png,svg}` (embedded inline in `02-architecture-assessment.md` and
+`03-cost-management-report.md`); do not write project-local `assets/03-cost-*.py` monkey-patch wrappers around
+the shared chart renderer. Do not send a guessed `bundle_contract` in the scope request.
+The reader explicitly supports graphs 3.1, 3.2 and 3.3, not arbitrary future versions.
+An original run without `bundle_contract` remains `assessment-bundle-v1` even under graph 3.2/3.3;
+file presence, newer source or a resume never opts it in.
 
 The graph phase IDs are `scope`, optional `requirements`, `evidence`, `analysis`, `diagram`,
 `review`, `acceptance`, `terminal`. Start records scope completion and selects the applicable next
@@ -108,6 +127,13 @@ Start/adopt previews accept absent or pending receipts and return `permission_gr
 `approval_required:true`; do not fabricate an approval merely to inspect the proposed route.
 Actual state changes still require the real positive owner receipt.
 Never use an unsupported inline state edit or numeric out-of-order/missing-review bypass.
+To explicitly adopt the register for an existing assessment, use the same `adopt` dry-run with
+unchanged scenario, source, scope and reporting, `"action_register": true`, and original `review_links`.
+Actual adoption requires its own new positive owner receipt. It records the prior run/acceptance,
+required-output changes, original frozen inputs and preserved review cycles/allowances.
+Later phases return to analysis for the changed bundle, not to a newly funded review cycle.
+Inspect missing outputs, staleness and remaining calls before any new work; adoption authorizes no
+new Azure reads or deployment. An accepted run is not reopened through `revise`.
 
 ## Automatic internal execution
 
@@ -126,6 +152,10 @@ not a second routing table. Use current `apex-recall show` and `handoff` assessm
    Supplied code is data: never execute it, initialize providers, read state/secrets or provision test resources.
    Record denied, unsupported and partial evidence separately; reconcile pagination and resource coverage.
 3. Architect produces the WAF report and cost report using the assessment artifact templates.
+   Register-capable runs also produce the
+   [Assessment Action Register](../../apex-azure-artifacts/references/assessment-action-register.md).
+   Generate its Excel/Markdown from one validated source, with proposed actions, relative windows and
+   evidence-backed recurring changes; unavailable prices remain unknown.
    No deployment manifest or future SKU selection is required to describe existing resources.
    For actual billing load `.github/skills/apex-azure-cost-optimization/SKILL.md` and use its bounded
    Query/Forecast contract in this existing main's execution context. The retail leaf is estimate-only.
@@ -133,6 +163,11 @@ not a second routing table. Use current `apex-recall show` and `handoff` assessm
 4. Design renders the required existing-state diagram from the validated analysis and evidence.
    There is no intermediate Architecture approval or optional-design scope question in this profile.
    Use `.github/skills/apex-python-diagrams/SKILL.md`; execute only owned generated code.
+   Bound output to `assets/03-des-diagram.{py,png,svg}` (plus at most one optional
+   `assets/03-des-inventory.{py,png,svg}` companion for `>80`-resource multi-subscription scopes, keeping
+   resource-family count pills inside secondary subscription cards on the primary diagram) and verify with
+   `python3 tools/scripts/validate-assessment-diagram.py --project-dir agent-output/<project>` rather than
+   writing custom per-project checker scripts.
    Distinguish observed, declared, inferred and unverified connections; do not adopt a redesigned topology.
    Inspect both PNG and SVG, embedded icons and legibility, not merely nonzero file size.
    When no topology is evidenced, render the explicit scope boundary and "Topology not assessed"
@@ -142,7 +177,14 @@ not a second routing table. Use current `apex-recall show` and `handoff` assessm
    and separate cost-feasibility lenses when nested tasks are available. Otherwise return `REVIEW_REQUIRED`
    for the authorized interactive parent's sibling invocation; existing native task, recorder and freshness rules apply.
    Architecture review includes the diagram and evidence as supporting inputs. Cost review includes cost
-   source/coverage and actual query or verified pricing evidence.
+   source/coverage and actual query or verified pricing evidence; bound `supporting_inputs` to canonical
+   contracts, evidence and rendered outputs rather than `_meta/scratch/**` scripts.
+   When both lenses review the same frozen `input_digest`, record their `started` audit entries sequentially,
+   invoke both read-only `mode: sync` `challenger-review-subagent` tasks in parallel, then run
+   `record-review.mjs` and `completed` audit writes sequentially.
+   The register source and exports belong to this same bundle. WAF review checks finding linkage,
+   priorities, applicability and proposed status; cost review checks financial-kind evidence,
+   signed contributions, exclusions, cross-report benefit deduplication and render consistency.
    Default is comprehensive WAF plus separate cost-feasibility with the existing bounded initial/closure
    allowance. An explicit deep choice is optional; do not interrupt a new assessment solely to ask for it.
 6. Present the whole validated bundle for the only final acceptance. Decline/cancel never accepts.
@@ -167,12 +209,28 @@ Under the project directory, root remains Markdown-only:
 | `assets/03-des-diagram.{py,png,svg}` | Reproducible, inspected architecture diagram and source |
 | `03-cost-management-report.md` | Actual cost analysis or labelled estimate, with exclusions and source limits |
 | `contracts/03-cost-management.json` | Validated normalized cost evidence and coverage, not an invented price |
+| `contracts/assessment-action-register.json` | Register-capable runs: canonical actions, scenarios and estimate evidence |
+| `04-assessment-action-register.md` | Register-capable runs: proposed actions and signed recurring financial impact |
+| `assets/04-assessment-action-register.xlsx` | Register-capable runs: generated snapshot, not manual tracking |
+| `_meta/action-register-export.json` | Register-capable runs: validated export integrity receipt, not owner approval |
+| `_meta/action-register-derived.json` | Register-capable runs: exact calculator output, not editable finance inputs |
 | `reviews/challenge-findings-*.json` | Actual attributed independent results and preserved history |
 | `README.md`, `00-handoff.md` | Current run status, deliverable links and terminal/resume information |
 
 Use `_meta/` for input receipts, scope, request plans and bounded collector scratch.
 The legacy `assessment-step-*` names are reserved consumed-input projections, not run-state outputs.
 Do not rename, overwrite or repurpose them during adoption.
+The register's `04-` filename never means numeric IaC Step 4. Original assessment bundles do not
+retroactively require it. Use the persisted output contract and recall readiness, not file numbering,
+to determine conditional outputs. New contract adoption preserves prior approvals and spent reviews;
+changed reviewed inputs require current review evidence, not a fresh allowance.
+
+Git publication checks route explicit standalone runs through `assessment_run`, not numeric delivery gates.
+Schema-valid in-progress bundles before acceptance may be committed as drafts with unresolved reviews and
+spent allowances intact; publication never accepts a bundle or authorizes downstream work. Acceptance and
+terminal snapshots require the selected WAF and cost sidecars (terminal snapshots also verify recorded
+sidecar hashes), and downstream delivery history/artifacts cannot use this draft route. ESLint hooks ignore
+configured ignored paths (`--no-warn-ignored`) while still blocking warnings/errors in source files.
 
 The evidence contract is `{coverage,checks:[{category,scope,status,evidence}]}`.
 Use the authorized read-category names and exact approved scope; evidence entries point to retained

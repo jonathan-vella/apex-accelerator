@@ -1,13 +1,330 @@
 import assert from "node:assert/strict";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { loadValidator } from "../../scripts/_lib/ajv-validator.mjs";
+import { sha256File } from "../../scripts/_lib/json.mjs";
 
 const script = fileURLToPath(new URL("../../scripts/validate-challenger-presence.mjs", import.meta.url));
+
+function governanceCheckpoint(context) {
+  const root = mkdtempSync(path.join(tmpdir(), "apex-governance-checkpoint-"));
+  context.after(() => rmSync(root, { recursive: true, force: true }));
+  const project = path.join(root, "agent-output/demo");
+  mkdirSync(path.join(project, "_meta"), { recursive: true });
+  const statePath = path.join(project, "_meta/00-session-state.json");
+  const artifact = path.join(project, "04-governance-constraints.md");
+  const state = {
+    schema_version: "session-state-v3",
+    layout_version: 2,
+    project: "demo",
+    steps: { 2: { status: "complete" }, 3: { status: "complete" }, "3_5": { status: "pending" } },
+    decisions: {},
+  };
+  const badge = "![Status](https://img.shields.io/badge/Status-Owner_prepared_not_approved-orange?style=for-the-badge)";
+  const save = () => writeFileSync(statePath, JSON.stringify(state));
+  save();
+  writeFileSync(artifact, `# Governance owner draft\n\n${badge}\n\n## Discovery Source\n\nUnapproved draft.\n`);
+  return {
+    project,
+    statePath,
+    artifact,
+    state,
+    badge,
+    save,
+    run: (...args) => spawnSync(process.execPath, [script, ...args], { cwd: root, encoding: "utf8" }),
+  };
+}
+
+test("pending unapproved Governance draft is publishable only in checkpoint mode without mutation", (context) => {
+  const f = governanceCheckpoint(context);
+  const before = readFileSync(f.statePath);
+  const artifact = readFileSync(f.artifact);
+  assert.equal(f.run().status, 1);
+  const checkpoint = f.run("--publication-checkpoint");
+  assert.equal(checkpoint.status, 0, checkpoint.stdout + checkpoint.stderr);
+  assert.match(checkpoint.stdout, /checkpoint publication only/);
+  assert.match(checkpoint.stdout, /review remains required/);
+  assert.deepEqual(readFileSync(f.statePath), before);
+  assert.deepEqual(readFileSync(f.artifact), artifact);
+  assert.equal(f.run().status, 1);
+});
+
+for (const [label, mutate] of [
+  ["completed Governance", (f) => (f.state.steps["3_5"].status = "complete")],
+  ["stale Governance", (f) => (f.state.steps["3_5"].status = "stale")],
+  ["completion timestamp", (f) => (f.state.steps["3_5"].completed = "historical-completion")],
+  ["downstream plan started", (f) => (f.state.steps["4"] = { status: "in_progress" })],
+  ["downstream code completed", (f) => (f.state.steps["5"] = { status: "complete" })],
+  ["downstream deployment stale", (f) => (f.state.steps["6"] = { status: "stale" })],
+  ["prior Governance attempt", (f) => (f.state.review_attempts = [{ step: "3_5", outcome: "failed" }])],
+  ["legacy Governance review", (f) => (f.state.review_audit = { step_3_5: { passes_executed: 1 } })],
+  ["consumed Governance cycle", (f) => (f.state.decisions.review_cycles = { cycle: { step: "3_5", calls: 1 } })],
+  ["selected Governance review", (f) => (f.state.review_selections = { "3_5": { path: "review.json" } })],
+  [
+    "unreadable present review",
+    (f) => writeFileSync(path.join(f.project, "challenge-findings-governance-constraints-pass1.json"), "invalid"),
+  ],
+  ["missing unapproved status", (f) => writeFileSync(f.artifact, "# Governance\n\nDraft text.\n")],
+  ["fenced unapproved status", (f) => writeFileSync(f.artifact, `# Governance\n\n\`\`\`md\n${f.badge}\n\`\`\`\n`)],
+  ["commented unapproved status", (f) => writeFileSync(f.artifact, `# Governance\n\n<!--\n${f.badge}\n-->\n`)],
+  ["unclosed commented status", (f) => writeFileSync(f.artifact, `# Governance\n\n<!--\n${f.badge}\n`)],
+]) {
+  test(`checkpoint mode cannot excuse ${label}`, (context) => {
+    const f = governanceCheckpoint(context);
+    mutate(f);
+    f.save();
+    assert.equal(f.run("--publication-checkpoint").status, 1);
+  });
+}
+
+test("zero legacy review count does not invent an executed Governance review", (context) => {
+  const f = governanceCheckpoint(context);
+  f.state.review_audit = { step_3_5: { passes_executed: 0 } };
+  f.save();
+  assert.equal(f.run("--publication-checkpoint").status, 0);
+});
+
+for (const directory of ["", "reviews"]) {
+  for (const [filename, body] of [
+    ["challenge-findings-governance-constraints-pass3.json", "invalid"],
+    ["challenge-findings-governance-constraints-closure1.json", "invalid"],
+    ["challenge-findings-governance-constraints.json", '{"findings":[]}'],
+  ]) {
+    test(`live Governance evidence blocks the draft exception: ${directory || "legacy root"}/${filename}`, (context) => {
+      const f = governanceCheckpoint(context);
+      if (!directory) delete f.state.layout_version;
+      f.save();
+      const location = path.join(f.project, directory);
+      mkdirSync(location, { recursive: true });
+      writeFileSync(path.join(location, filename), body);
+      assert.equal(f.run("--publication-checkpoint").status, 1);
+    });
+  }
+}
+
+test("HTML comments cannot hide header boundaries before a visible draft badge", (context) => {
+  const f = governanceCheckpoint(context);
+  writeFileSync(f.artifact, `# Governance\n\n<!--\n## Not a rendered heading\n-->\n\n${f.badge}\n`);
+  assert.equal(f.run("--publication-checkpoint").status, 0);
+});
+
+test("non-live archived sidecars are not promoted into current review evidence", (context) => {
+  const f = governanceCheckpoint(context);
+  writeFileSync(path.join(f.project, "_meta/challenge-findings-governance-constraints-pass3.json"), "archived draft");
+  assert.equal(f.run("--publication-checkpoint").status, 0);
+});
+
+test("checkpoint mode does not waive other missing reviews", (context) => {
+  const f = governanceCheckpoint(context);
+  writeFileSync(path.join(f.project, "01-requirements.md"), "# Requirements\n");
+  const result = f.run("--publication-checkpoint");
+  assert.equal(result.status, 1);
+  assert.match(result.stdout + result.stderr, /Step 1 Requirements/);
+});
+
+function assessmentDraft(context) {
+  const f = governanceCheckpoint(context);
+  rmSync(f.artifact);
+  f.state.steps = { 1: { status: "pending" }, 2: { status: "pending" } };
+  f.state.decisions.workflow_mode = "assessment";
+  f.state.assessment_run = {
+    schema_version: "assessment-run-v1",
+    scenario: "requirements_led",
+    source: "iac",
+    scope: { categories: ["configuration"], iac_paths: ["infra/example"], azure_scopes: [] },
+    reporting: {
+      as_of: "2026-11-11T00:00:00Z",
+      currency: null,
+      periods: [{ id: "previous_month", from: "2026-10-01", to: "2026-10-31" }],
+    },
+    receipt: { owner: "Fixture", request_id: "scope-fixture", approved: true },
+    phase: "review",
+    status: "in_progress",
+    completed_phases: ["scope", "requirements", "evidence", "analysis", "diagram"],
+    scope_digest: "a".repeat(64),
+    frozen_inputs: { "02-architecture-assessment.md": "b".repeat(64) },
+    review_links: {},
+    coverage: "partial",
+    started_at: "2026-11-11T00:00:00Z",
+  };
+  writeFileSync(path.join(f.project, "01-requirements.md"), "# Assessment requirements\n");
+  writeFileSync(path.join(f.project, "02-architecture-assessment.md"), "# WAF draft\n");
+  f.save();
+  return f;
+}
+
+test("standalone review drafts publish without inventing delivery reviews or mutating state", (context) => {
+  const f = assessmentDraft(context);
+  const before = readFileSync(f.statePath);
+  for (const args of [[], ["--publication-checkpoint"]]) {
+    const result = f.run(...args);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /independent WAF and cost reviews remain required/);
+  }
+  assert.deepEqual(readFileSync(f.statePath), before);
+});
+
+for (const [label, mutate] of [
+  ["missing run", (f) => delete f.state.assessment_run],
+  ["missing explicit route", (f) => delete f.state.decisions.workflow_mode],
+  ["invalid receipt", (f) => (f.state.assessment_run.receipt.approved = false)],
+  ["invalid phase", (f) => (f.state.assessment_run.phase = "unknown")],
+  ["downstream delivery history", (f) => (f.state.steps[4] = { status: "complete" })],
+  ["delivery artifact", (f) => writeFileSync(path.join(f.project, "04-implementation-plan.md"), "# Plan\n")],
+  ["acceptance without reviews", (f) => (f.state.assessment_run.phase = "acceptance")],
+  ["terminal without acceptance", (f) => (f.state.assessment_run.phase = "terminal")],
+]) {
+  test(`standalone draft routing rejects ${label}`, (context) => {
+    const f = assessmentDraft(context);
+    mutate(f);
+    f.save();
+    assert.equal(f.run("--publication-checkpoint").status, 1);
+  });
+}
+
+test("accepted assessments require both recorded review files and unchanged hashes", (context) => {
+  const f = assessmentDraft(context);
+  const run = f.state.assessment_run;
+  f.state.steps[1].status = "complete";
+  f.state.steps[2].status = "complete";
+  f.state.steps[3] = { status: "complete" };
+  run.status = "accepted";
+  run.phase = "terminal";
+  run.acceptance = { owner: "Fixture", request_id: "accept-fixture", approved: true };
+  run.accepted_at = "2026-11-12T00:00:00Z";
+  run.completed_phases.push("review", "acceptance");
+  mkdirSync(path.join(f.project, "reviews"));
+  run.reviews = ["comprehensive", "cost-feasibility"].map((lens) => {
+    const relative = `reviews/challenge-findings-${lens}.json`;
+    const target = path.join(f.project, relative);
+    writeFileSync(target, JSON.stringify({ review_focus: lens }));
+    return { lens, cycle_id: "c".repeat(64), path: relative, sha256: sha256File(target) };
+  });
+  f.save();
+  assert.equal(f.run().status, 0);
+  const review = path.join(f.project, run.reviews[1].path);
+  writeFileSync(review, "{}");
+  assert.equal(f.run("--publication-checkpoint").status, 1);
+  rmSync(review);
+  assert.equal(f.run().status, 1);
+
+  // Path-traversal recorded.path and missing run.reviews on terminal/accepted runs must also fail.
+  const outside = path.join(f.project, "../outside-review.json");
+  writeFileSync(outside, JSON.stringify({ review_focus: "cost-feasibility" }));
+  run.reviews[1] = {
+    lens: "cost-feasibility",
+    cycle_id: "c".repeat(64),
+    path: "../outside-review.json",
+    sha256: sha256File(outside),
+  };
+  f.save();
+  assert.equal(f.run().status, 1);
+  delete run.reviews;
+  f.save();
+  assert.equal(f.run().status, 1);
+
+  // Symlinked intermediate directory (`reviews/` -> outside dir) must be rejected.
+  const externalDir = path.join(f.project, "../external-reviews");
+  mkdirSync(externalDir, { recursive: true });
+  const externalWaf = path.join(externalDir, "challenge-findings-comprehensive.json");
+  const externalCost = path.join(externalDir, "challenge-findings-cost-feasibility.json");
+  writeFileSync(externalWaf, JSON.stringify({ review_focus: "comprehensive" }));
+  writeFileSync(externalCost, JSON.stringify({ review_focus: "cost-feasibility" }));
+  rmSync(path.join(f.project, "reviews"), { recursive: true, force: true });
+  symlinkSync(externalDir, path.join(f.project, "reviews"), "dir");
+  run.reviews = [
+    {
+      lens: "comprehensive",
+      cycle_id: "c".repeat(64),
+      path: "reviews/challenge-findings-comprehensive.json",
+      sha256: sha256File(externalWaf),
+    },
+    {
+      lens: "cost-feasibility",
+      cycle_id: "d".repeat(64),
+      path: "reviews/challenge-findings-cost-feasibility.json",
+      sha256: sha256File(externalCost),
+    },
+  ];
+  f.save();
+  assert.equal(f.run().status, 1);
+});
+
+test("acceptance phase accepts explicitly linked canonical_path fallback and rejects unlinked missing current_path", (context) => {
+  const f = assessmentDraft(context);
+  const run = f.state.assessment_run;
+  run.phase = "acceptance";
+  run.completed_phases.push("review");
+  mkdirSync(path.join(f.project, "reviews"), { recursive: true });
+  writeFileSync(
+    path.join(f.project, "reviews/challenge-findings-architecture.json"),
+    JSON.stringify({ review_focus: "comprehensive" }),
+  );
+  writeFileSync(
+    path.join(f.project, "reviews/challenge-findings-cost-estimate.json"),
+    JSON.stringify({ review_focus: "cost-feasibility" }),
+  );
+  const wafId = "a".repeat(64);
+  const costId = "b".repeat(64);
+  f.state.decisions.review_cycles = {
+    [wafId]: {
+      step: "2",
+      artifact: "agent-output/demo/02-architecture-assessment.md",
+      lens: "comprehensive",
+      pass_number: 1,
+      canonical_path: "agent-output/demo/reviews/challenge-findings-architecture.json",
+      initial_id: "init-waf",
+      projection: "1".repeat(64),
+      calls: 1,
+      max_calls: 2,
+    },
+    [costId]: {
+      step: "2",
+      artifact: "agent-output/demo/03-cost-management-report.md",
+      lens: "cost-feasibility",
+      pass_number: 1,
+      canonical_path: "agent-output/demo/reviews/challenge-findings-cost-estimate.json",
+      initial_id: "init-cost",
+      projection: "1".repeat(64),
+      calls: 1,
+      max_calls: 2,
+    },
+  };
+  // Without explicit review_links, missing current_path is rejected.
+  f.save();
+  assert.equal(f.run().status, 1);
+
+  // With explicit review_links (adopted cycle), canonical_path basename fallback succeeds.
+  run.review_links = {
+    comprehensive: {
+      cycle_id: wafId,
+      artifact: "02-architecture-assessment.md",
+      original_artifact: "agent-output/demo/02-architecture-assessment.md",
+      original_projection: "1".repeat(64),
+      linked_at: "2026-11-11T00:00:00Z",
+    },
+    "cost-feasibility": {
+      cycle_id: costId,
+      artifact: "03-cost-management-report.md",
+      original_artifact: "agent-output/demo/03-cost-management-report.md",
+      original_projection: "1".repeat(64),
+      linked_at: "2026-11-11T00:00:00Z",
+    },
+  };
+  f.save();
+  assert.equal(f.run().status, 0);
+});
+
+test("unknown publication arguments fail explicitly", (context) => {
+  const f = governanceCheckpoint(context);
+  const result = f.run("--publication-checkpoint", "--allow-missing");
+  assert.equal(result.status, 1);
+  assert.match(result.stdout + result.stderr, /Unsupported argument: --allow-missing/);
+});
 
 test("native resume delegates recovery and routing without extra mode questions", () => {
   const native = readFileSync(new URL("../../../.github/skills/apex-workflow-start/SKILL.md", import.meta.url), "utf8");
